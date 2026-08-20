@@ -1,0 +1,15 @@
+.DS_Store
+**/.DS_Store
+**/node_modules/
+
+# secrets & machine-local pi state (never commit)
+pi/agent/auth.json
+pi/agent/mcp.json
+pi/agent/mcp-cache.json
+pi/agent/mcp-npx-cache.json
+pi/agent/models-store.json
+pi/agent/sessions/
+pi/agent/intercom/
+pi/agent/npm/
+pi/agent/bin/
+**/*.bak.*

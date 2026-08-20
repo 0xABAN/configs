@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "leetcode": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jinzcdev/leetcode-mcp-server",
+        "--site",
+        "global"
+      ],
+      "env": {
+        "LEETCODE_SITE": "global",
+        "LEETCODE_SESSION": "YOUR_LEETCODE_SESSION_HERE"
+      }
+    },
+    "github": {
+      "disabled": true
+    },
+    "slack": {
+      "disabled": true
+    },
+    "node_repl": {
+      "disabled": true
+    },
+    "firecrawl": {
+      "disabled": true
+    },
+    "humanizer": {
+      "disabled": true
+    },
+    "canvas": {
+      "disabled": true
+    },
+    "computer-use": {
+      "disabled": true
+    },
+    "runpod": {
+      "disabled": true
+    },
+    "chrome-devtools": {
+      "disabled": true
+    },
+    "pixellab": {
+      "disabled": true
+    }
+  },
+  "imports": [
+    "opencode"
+  ],
+  "settings": {
+    "hostConfigDiscovery": "off",
+    "mcpFooterStatus": "off"
+  }
+}
