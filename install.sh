@@ -55,4 +55,4 @@ fi
 
 echo
 echo "done. edit files under: $ROOT"
-echo "new laptop: git clone <repo> ~/dev/dotfiles && cd ~/dev/dotfiles && ./install.sh"
+echo "new laptop: git clone <repo> ~/dev/configs && cd ~/dev/configs && ./install.sh"

@@ -1,4 +1,4 @@
-# dotfiles
+# configs
 
 Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 
@@ -13,8 +13,8 @@ pi/agent/             → ~/.pi/agent/* (selected paths)
 ## Install
 
 ```bash
-git clone git@github.com:YOU/dotfiles.git ~/dev/dotfiles
-cd ~/dev/dotfiles
+git clone git@github.com:YOU/configs.git ~/dev/configs
+cd ~/dev/configs
 chmod +x install.sh
 ./install.sh
 ```
@@ -35,9 +35,9 @@ After install, set `LEETCODE_SESSION` (and any other keys) in `mcp.json`, or exp
 
 ```bash
 # on machine A after edits
-cd ~/dev/dotfiles && git add -A && git commit -m "..." && git push
+cd ~/dev/configs && git add -A && git commit -m "..." && git push
 
 # on machine B
-cd ~/dev/dotfiles && git pull
+cd ~/dev/configs && git pull
 # re-run ./install.sh only if new paths were added
 ```
