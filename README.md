@@ -5,7 +5,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 ## Layout
 
 ```
-nvim/                 → ~/.config/nvim
+nvim/                 → ~/.config/nvim  (AstroNvim v6 template + cream-red)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   mcp.json.example    → copy to mcp.json locally (secrets)
 ```

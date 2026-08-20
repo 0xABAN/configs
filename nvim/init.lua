@@ -1,62 +1,27 @@
--- Match Ghostty/cmux pane background (opacity + blur show through).
-vim.opt.termguicolors = true
-vim.opt.background = "dark"
-vim.opt.number = true
-vim.opt.clipboard = "unnamedplus" -- yank → macOS clipboard
+-- This file simply bootstraps the installation of Lazy.nvim and then calls other files for execution
+-- This file doesn't necessarily need to be touched, BE CAUTIOUS editing this file and proceed at your own risk.
+local lazypath = vim.env.LAZY or vim.fn.stdpath "data" .. "/lazy/lazy.nvim"
 
--- leader before plugins (Space)
-vim.g.mapleader = " "
-vim.g.maplocalleader = " "
-
--- leave insert mode without stretching for Esc
-vim.keymap.set("i", "jk", "<Esc>")
-
--- Mac-style word-delete (insert + command-line)
-local word_back = { "i", "c" }
-vim.keymap.set(word_back, "<M-BS>", "<C-w>") -- Option+Backspace
-vim.keymap.set(word_back, "<A-BS>", "<C-w>") -- Alt/Option alias
-vim.keymap.set(word_back, "<C-BS>", "<C-w>") -- Ctrl+Backspace
-
--- lazy.nvim bootstrap
-local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
-if not (vim.uv or vim.loop).fs_stat(lazypath) then
-  vim.fn.system({
-    "git",
-    "clone",
-    "--filter=blob:none",
-    "--branch=stable",
-    "https://github.com/folke/lazy.nvim.git",
-    lazypath,
-  })
-end
-vim.opt.rtp:prepend(lazypath)
-
-require("lazy").setup("plugins", {
-  change_detection = { notify = false },
-  install = { colorscheme = { "cream-red" } },
-})
-
-local function clear_bg()
-  for _, group in ipairs({
-    "Normal",
-    "NormalNC",
-    "NormalFloat",
-    "EndOfBuffer",
-    "SignColumn",
-    "LineNr",
-    "CursorLineNr",
-    "Folded",
-    "FoldColumn",
-    "StatusLine",
-    "StatusLineNC",
-    "WinSeparator",
-    "VertSplit",
-  }) do
-    vim.api.nvim_set_hl(0, group, { bg = "NONE" })
+if not (vim.env.LAZY or (vim.uv or vim.loop).fs_stat(lazypath)) then
+  -- stylua: ignore
+  local result = vim.fn.system({ "git", "clone", "--filter=blob:none", "https://github.com/folke/lazy.nvim.git", "--branch=stable", lazypath })
+  if vim.v.shell_error ~= 0 then
+    -- stylua: ignore
+    vim.api.nvim_echo({ { ("Error cloning lazy.nvim:\n%s\n"):format(result), "ErrorMsg" }, { "Press any key to exit...", "MoreMsg" } }, true, {})
+    vim.fn.getchar()
+    vim.cmd.quit()
   end
 end
 
--- Pi cream-red code palette (see colors/cream-red.lua)
-vim.cmd.colorscheme("cream-red")
-clear_bg()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = clear_bg })
+vim.opt.rtp:prepend(lazypath)
+
+-- validate that lazy is available
+if not pcall(require, "lazy") then
+  -- stylua: ignore
+  vim.api.nvim_echo({ { ("Unable to load lazy from: %s\n"):format(lazypath), "ErrorMsg" }, { "Press any key to exit...", "MoreMsg" } }, true, {})
+  vim.fn.getchar()
+  vim.cmd.quit()
+end
+
+require "lazy_setup"
+require "polish"
