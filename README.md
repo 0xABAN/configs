@@ -13,7 +13,7 @@ pi/agent/             → ~/.pi/agent/* (selected paths)
 ## Install
 
 ```bash
-git clone git@github.com:YOU/configs.git ~/dev/configs
+git clone git@github.com:0xABAN/configs.git ~/dev/configs
 cd ~/dev/configs
 chmod +x install.sh
 ./install.sh
