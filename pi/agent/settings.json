@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.84.1",
+  "lastChangelogVersion": "0.84.2",
   "theme": "cream-red",
   "defaultProvider": "xai",
   "defaultModel": "grok-4.6",
@@ -15,7 +15,7 @@
     },
     "https://github.com/ShpetimA/pi-fff",
     "npm:pi-intercom",
-    "https://github.com/nicobailon/pi-powerline-footer",
+    "https://github.com/nicobailon/pi-powerline-footer@8c9bda1",
     "npm:@dietrichgebert/ponytail",
     "https://github.com/nicobailon/pi-rewind-hook",
     "https://github.com/nicobailon/pi-skill-palette",
