@@ -21,6 +21,8 @@ return {
         TabLineFill = { bg = "NONE" },
         WinBar = { bg = "NONE" },
         WinBarNC = { bg = "NONE" },
+        -- untracked git files in neo-tree (was orange)
+        NeoTreeGitUntracked = { fg = "#7aad6f" },
       },
     },
   },
