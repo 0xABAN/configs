@@ -2,12 +2,7 @@
   "lastChangelogVersion": "0.84.1",
   "theme": "cream-red",
   "defaultProvider": "xai",
-  "defaultModel": "grok-4.5",
-  "skills": [
-    "~/.pi/agent/skills",
-    "~/.config/opencode/skills",
-    "~/.agents/skills"
-  ],
+  "defaultModel": "grok-4.6",
   "defaultThinkingLevel": "high",
   "packages": [
     "npm:pi-mcp-adapter",
@@ -21,7 +16,6 @@
     "https://github.com/ShpetimA/pi-fff",
     "npm:pi-intercom",
     "https://github.com/nicobailon/pi-powerline-footer",
-    "npm:pi-lens",
     "npm:@dietrichgebert/ponytail",
     "https://github.com/nicobailon/pi-rewind-hook",
     "https://github.com/nicobailon/pi-skill-palette",
