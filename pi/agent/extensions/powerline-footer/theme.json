@@ -1,4 +1,15 @@
 {
+  "thinkingGradient": [
+    "#ffd8c4",
+    "#ffe0d0",
+    "#f8c8bc",
+    "#f0a4ac",
+    "#e0707c",
+    "#d45660",
+    "#c44452",
+    "#aa3236",
+    "#9a3034"
+  ],
   "colors": {
     "model": "#b23a48",
     "shellMode": "#b23a48",
