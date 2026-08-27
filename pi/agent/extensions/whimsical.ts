@@ -2,6 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { Loader } from "@earendil-works/pi-tui";
 
 const messages = [
 	// Short
@@ -603,6 +604,29 @@ function sparkleFrames(message: string): string[] {
 		const ct = COLORS[(i + 1) % COLORS.length]!;
 		return `${paint(s1, c1)} ${paint(s2, c2)} ${paint(message, ct)} ${paint(s3, c3)}`;
 	});
+}
+
+// Compaction loaders ignore setWorkingIndicator. Wrap the compacting line in
+// frames so color + symbols apply to "Compacting... (escape to cancel)".
+// ponytail: Loader patch; drop when pi exposes compaction indicator options
+type LoaderMut = { message: string; setIndicator: Loader["setIndicator"] };
+const loaderProto = Loader.prototype as unknown as LoaderMut;
+const WHIMSICAL_PATCH = Symbol.for("whimsical.compactionLoader");
+if (!(WHIMSICAL_PATCH in loaderProto)) {
+	(loaderProto as unknown as Record<symbol, boolean>)[WHIMSICAL_PATCH] = true;
+	const setIndicator = loaderProto.setIndicator;
+	loaderProto.setIndicator = function (this: LoaderMut, indicator) {
+		if (/compacting/i.test(this.message)) {
+			const message = this.message;
+			this.message = "";
+			setIndicator.call(this, {
+				frames: sparkleFrames(message),
+				intervalMs: INTERVAL_MS,
+			});
+			return;
+		}
+		setIndicator.call(this, indicator);
+	};
 }
 
 export default function (pi: ExtensionAPI) {
