@@ -20,8 +20,7 @@
     "https://github.com/nicobailon/pi-rewind-hook",
     "https://github.com/nicobailon/pi-skill-palette",
     "https://github.com/nicobailon/pi-side-chat",
-    "npm:pi-web-access",
-    "npm:pi-plan"
+    "npm:pi-web-access"
   ],
   "powerline": {
     "preset": "default",
