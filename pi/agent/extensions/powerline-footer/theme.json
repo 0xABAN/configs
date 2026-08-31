@@ -1,17 +1,17 @@
 {
   "thinkingGradient": [
-    "#F2E8DC",
-    "#EADCCB",
-    "#E2D0BA",
-    "#DCC9B6",
-    "#D0BBA3",
-    "#C4AD91",
-    "#B89F7F",
-    "#A39171",
-    "#967F63",
-    "#896D55",
-    "#7C5C48",
-    "#6D4C3D"
+    "#E8F0E6",
+    "#D5E4D3",
+    "#C4D6C2",
+    "#B5CAB3",
+    "#ABC4AB",
+    "#9BB49C",
+    "#8BA48C",
+    "#7B9480",
+    "#727D71",
+    "#636E63",
+    "#555F55",
+    "#475047"
   ],
   "colors": {
     "model": "#ABC4AB",
@@ -19,17 +19,17 @@
     "path": "#ABC4AB",
     "gitDirty": "#A39171",
     "gitClean": "#ABC4AB",
-    "thinking": "#5A655A",
-    "thinkingMinimal": "#727D71",
-    "thinkingLow": "#A39171",
-    "thinkingMedium": "#C4AD91",
+    "thinking": "#555F55",
+    "thinkingMinimal": "#636E63",
+    "thinkingLow": "#8BA48C",
+    "thinkingMedium": "#ABC4AB",
     "context": "#727D71",
     "contextWarn": "#A39171",
     "contextError": "#6D4C3D",
-    "cost": "#5A655A",
-    "tokens": "#5A655A",
+    "cost": "#555F55",
+    "tokens": "#555F55",
     "queue": "#ABC4AB",
-    "separator": "#4A5248",
-    "border": "#4A5248"
+    "separator": "#3D453D",
+    "border": "#3D453D"
   }
 }
