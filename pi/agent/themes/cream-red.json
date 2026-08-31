@@ -13,12 +13,12 @@
     "redLight": "#c45a56",
     "redPale": "#d47874",
     "text": "#e8e0dc",
-    "selectedBg": "#242424",
-    "userMsgBg": "#1a1a1a",
-    "toolPendingBg": "#1a1a1a",
-    "toolSuccessBg": "#1a1a1a",
-    "toolErrorBg": "#1a1a1a",
-    "customMsgBg": "#161616",
+    "selectedBg": "#1f1a16",
+    "userMsgBg": "#16120f",
+    "toolPendingBg": "#16120f",
+    "toolSuccessBg": "#16120f",
+    "toolErrorBg": "#16120f",
+    "customMsgBg": "#120f0c",
     "midGray": "#9a9a9a",
     "paleOak": "#DCC9B6"
   },
@@ -78,8 +78,8 @@
     "bashMode": "red"
   },
   "export": {
-    "pageBg": "#0a0a0a",
-    "cardBg": "#141414",
-    "infoBg": "#1e1e1e"
+    "pageBg": "#0c0a08",
+    "cardBg": "#14110e",
+    "infoBg": "#1a1612"
   }
 }
