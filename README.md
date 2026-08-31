@@ -5,6 +5,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 ## Layout
 
 ```
+zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
 nvim/                 → ~/.config/nvim  (AstroNvim v6 template + cream-red)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   mcp.json.example    → copy to mcp.json locally (secrets)
@@ -25,6 +26,7 @@ Existing files are renamed `*.bak.<timestamp>` before linking.
 
 | File | Why |
 |------|-----|
+| `~/.zshrc.local` | API keys / machine exports |
 | `~/.pi/agent/mcp.json` | API sessions / tokens |
 | `~/.pi/agent/auth.json` | Provider auth |
 | `sessions/`, caches, `npm/` | Machine-local runtime |

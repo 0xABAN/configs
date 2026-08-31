@@ -26,6 +26,9 @@ link() {
   echo "link $dest -> $src"
 }
 
+echo "== zsh =="
+link "$ROOT/zsh/.zshrc" "$HOME/.zshrc"
+
 echo "== nvim =="
 mkdir -p "$HOME/.config"
 link "$ROOT/nvim" "$HOME/.config/nvim"
@@ -66,4 +69,5 @@ fi
 
 echo
 echo "done. edit files under: $ROOT"
+echo "secrets: put exports in ~/.zshrc.local (sourced if present)"
 echo "new laptop: git clone <repo> ~/dev/configs && cd ~/dev/configs && ./install.sh"
