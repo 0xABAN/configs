@@ -1,0 +1,14 @@
+{
+  "guidance": {
+    "promptSnippet": "Track multi-step work with the todo tool — create, update status, complete. Required for any task with 2+ steps.",
+    "promptGuidelines": [
+      "ALWAYS use the `todo` tool for work with 2+ steps, a user-provided list, or anything that will take more than one tool round. Create the list BEFORE other tools.",
+      "When open todos exist, your FIRST tool call this turn should be `todo` update: mark the current task in_progress (with activeForm) before any read/edit/bash. When that task is done, immediately `todo` update it to completed — never batch completions at the end.",
+      "Exactly one task may be in_progress at a time. Do not start the next task until the current one is completed or blocked.",
+      "Never mark a task completed if tests fail, the change is partial, or errors remain — keep it in_progress and add a blocker task if needed.",
+      "Task status is pending → in_progress → completed (deleted is a tombstone). Example: {\"action\":\"update\",\"id\":3,\"status\":\"completed\"} or {\"action\":\"update\",\"id\":3,\"status\":\"in_progress\",\"activeForm\":\"writing tests\"}.",
+      "Subject: short imperative. activeForm: present-continuous while in_progress. Prefer create+update over inventing a parallel checklist in prose.",
+      "Leaving the todo list stale is a failure. If you finish work without updating todos, fix that before your final reply."
+    ]
+  }
+}

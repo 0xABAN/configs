@@ -46,6 +46,10 @@ do
   link "$ROOT/pi/agent/$name" "$HOME/.pi/agent/$name"
 done
 
+echo "== rpiv-todo config =="
+mkdir -p "$HOME/.config/rpiv-todo"
+link "$ROOT/rpiv-todo/config.json" "$HOME/.config/rpiv-todo/config.json"
+
 # secrets stay machine-local
 if [[ ! -f "$HOME/.pi/agent/mcp.json" ]]; then
   cp "$ROOT/pi/agent/mcp.json.example" "$HOME/.pi/agent/mcp.json"

@@ -136,15 +136,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		return [...new Set(toolNames)];
 	}
 
+	function withTodo(toolNames: string[]): string[] {
+		// rpiv-todo must stay available in plan and build — never drop it on mode switch
+		return uniqueToolNames([...toolNames, "todo"]);
+	}
+
 	function getPlanModeTools(activeToolNames: string[]): string[] {
-		return uniqueToolNames([
+		return withTodo([
 			...activeToolNames.filter((name) => !PLAN_MODE_DISABLED_TOOLS.has(name)),
 			...PLAN_MODE_TOOLS,
 		]);
 	}
 
 	function getNormalModeTools(activeToolNames: string[]): string[] {
-		return uniqueToolNames([
+		return withTodo([
 			...NORMAL_MODE_TOOLS,
 			...activeToolNames.filter((name) => !PLAN_MANAGED_TOOLS.has(name)),
 		]);
@@ -158,7 +163,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	}
 
 	function restoreNormalModeTools(): void {
-		pi.setActiveTools(toolsBeforePlanMode ?? getNormalModeTools(pi.getActiveTools()));
+		pi.setActiveTools(withTodo(toolsBeforePlanMode ?? getNormalModeTools(pi.getActiveTools())));
 		toolsBeforePlanMode = undefined;
 	}
 

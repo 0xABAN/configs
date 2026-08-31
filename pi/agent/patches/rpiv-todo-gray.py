@@ -13,6 +13,8 @@ INDEX = ROOT / "index.ts"
 HERE = Path(__file__).resolve().parent
 CLEAR_BLOCK = (HERE / "todos-clear-block.ts.inc").read_text()
 CLEAR_MARKER = "/* configs:todos-clear */"
+NUDGE_BLOCK = (HERE / "todo-nudge-block.ts.inc").read_text()
+NUDGE_MARKER = "/* configs:todo-nudge */"
 
 
 def patch_format() -> None:
@@ -74,7 +76,15 @@ def patch_index_clear() -> None:
 
 	if CLEAR_MARKER in t:
 		t = re.sub(
-			r"\n\t/\* configs:todos-clear \*/.*?(?=\n\t// Collapse/expand hotkey)",
+			r"\n\t/\* configs:todos-clear \*/.*?(?=\n\t/\* configs:todo-nudge \*/|\n\t// Collapse/expand hotkey)",
+			"\n",
+			t,
+			count=1,
+			flags=re.S,
+		)
+	if NUDGE_MARKER in t:
+		t = re.sub(
+			r"\n\t/\* configs:todo-nudge \*/.*?(?=\n\t// Collapse/expand hotkey)",
 			"\n",
 			t,
 			count=1,
@@ -87,7 +97,7 @@ def patch_index_clear() -> None:
 		INDEX.write_text(t)
 		return
 
-	t = t.replace(needle, needle + "\n" + CLEAR_BLOCK + "\n", 1)
+	t = t.replace(needle, needle + "\n" + CLEAR_BLOCK + "\n" + NUDGE_BLOCK + "\n", 1)
 
 	# Bind chord when uiCtx is set
 	if "bindClearChord(ctx)" not in t:
@@ -107,7 +117,7 @@ def patch_index_clear() -> None:
 		t = t.replace(old_as, new_as)
 
 	INDEX.write_text(t)
-	print("patched", INDEX, "clear dd chord")
+	print("patched", INDEX, "clear dd chord + todo nudge")
 
 
 def main() -> None:

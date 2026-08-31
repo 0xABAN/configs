@@ -50,6 +50,15 @@ Gather evidence proportional to risk.
 
 Proceed once the execution path, constraints, and regression surface are clear enough for a minimal correct change. If not, ask or report the gap.
 
+## Todos (`todo` tool)
+
+Open todos are shown every turn. Treat them as required state, not optional chrome.
+
+- 2+ steps or a multi-part request → create todos with `todo` **before** other tools.
+- First tool call when a list exists: `todo` update current item to `in_progress` (with `activeForm`).
+- Finish a step → `todo` update to `completed` immediately. Never batch at the end.
+- Exactly one `in_progress`. Stale lists (done work still pending) are wrong — fix before the final reply.
+
 ## Workflow
 
 1. Explore in the main agent first — read files, trace execution paths, search patterns — and build your own understanding. Do not delegate before you have seen the data.
