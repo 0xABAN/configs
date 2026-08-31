@@ -60,7 +60,7 @@
     "toolDiffRemoved": "#ffd8c4",
     "toolDiffContext": "gray",
     "syntaxComment": "dimGray",
-    "syntaxKeyword": "redLight",
+    "syntaxKeyword": "#ABC4AB",
     "syntaxFunction": "cream",
     "syntaxVariable": "creamSoft",
     "syntaxString": "gray",

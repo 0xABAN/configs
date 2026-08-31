@@ -75,25 +75,25 @@ hi("Changed", { fg = c.gray })
 
 -- Legacy syntax ← pi syntax* tokens
 hi("Comment", { fg = c.dim, italic = true }) -- syntaxComment
-hi("Keyword", { fg = c.redLight }) -- syntaxKeyword
-hi("Statement", { fg = c.redLight })
-hi("Conditional", { fg = c.redLight })
-hi("Repeat", { fg = c.redLight })
-hi("Label", { fg = c.redLight })
-hi("Exception", { fg = c.redLight })
-hi("PreProc", { fg = c.redLight })
-hi("Include", { fg = c.redLight })
-hi("Define", { fg = c.redLight })
-hi("Macro", { fg = c.redLight })
+hi("Keyword", { fg = c.ash }) -- was redLight → ash
+hi("Statement", { fg = c.ash })
+hi("Conditional", { fg = c.ash })
+hi("Repeat", { fg = c.ash })
+hi("Label", { fg = c.ash })
+hi("Exception", { fg = c.ash })
+hi("PreProc", { fg = c.ash })
+hi("Include", { fg = c.ash })
+hi("Define", { fg = c.ash })
+hi("Macro", { fg = c.ash })
 hi("Function", { fg = c.cream }) -- syntaxFunction
 hi("Identifier", { fg = c.cream }) -- syntaxVariable
 hi("String", { fg = c.gray }) -- syntaxString
 hi("Character", { fg = c.gray })
 hi("Number", { fg = c.cream }) -- syntaxNumber
 hi("Float", { fg = c.cream })
-hi("Boolean", { fg = c.redLight })
+hi("Boolean", { fg = c.ash })
 hi("Type", { fg = c.cream }) -- syntaxType
-hi("StorageClass", { fg = c.redLight })
+hi("StorageClass", { fg = c.ash })
 hi("Structure", { fg = c.cream })
 hi("Typedef", { fg = c.cream })
 hi("Operator", { fg = c.gray }) -- syntaxOperator
@@ -101,7 +101,7 @@ hi("Delimiter", { fg = c.gray }) -- syntaxPunctuation
 hi("Special", { fg = c.gray })
 hi("SpecialChar", { fg = c.gray })
 hi("Constant", { fg = c.cream })
-hi("Todo", { fg = c.redLight, bold = true })
+hi("Todo", { fg = c.ash, bold = true })
 hi("Error", { fg = c.redLight })
 hi("Underlined", { fg = c.gray, underline = true })
 
