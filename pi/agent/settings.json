@@ -47,13 +47,20 @@
         "position": "left",
         "selfColorize": true,
         "hideWhenMissing": false
+      },
+      {
+        "id": "thinking",
+        "statusKey": "agent-thinking",
+        "position": "left",
+        "selfColorize": true,
+        "hideWhenMissing": false
       }
     ],
     "layout": {
       "left": [
         "custom:mode",
         "model",
-        "thinking",
+        "custom:thinking",
         "shell_mode",
         "path",
         "queue",

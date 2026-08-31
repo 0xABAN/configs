@@ -87,14 +87,49 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		return `${out}\x1b[0m`;
 	}
 
-	function updateStatus(ctx: ExtensionContext): void {
-		const mid: [number, number, number] = planModeEnabled
+	function modeMid(): [number, number, number] {
+		return planModeEnabled
 			? [196, 160, 230] // pastel purple (plan)
 			: [175, 225, 235]; // pastel blue-cyan (build)
+	}
+
+	function thinkingLabel(level: string): string {
+		const labels: Record<string, string> = {
+			off: "off",
+			minimal: "min",
+			low: "low",
+			medium: "med",
+			high: "high",
+			xhigh: "xhigh",
+			max: "max",
+		};
+		return `think:${labels[level] ?? level}`;
+	}
+
+	/** Same white→mid→peach ramp as mode chip; high+ get full shine. */
+	function thinkingStatus(level: string, mid: [number, number, number]): string {
+		const text = thinkingLabel(level);
+		if (level === "high" || level === "xhigh" || level === "max") {
+			return shine(text, mid);
+		}
+		// lower levels: sample the mode ramp (white / mid / peach)
+		const solid: Record<string, [number, number, number]> = {
+			off: [90, 100, 100],
+			minimal: [140, 160, 165],
+			low: mid,
+			medium: [255, 216, 196],
+		};
+		const [r, g, b] = solid[level] ?? mid;
+		return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
+	}
+
+	function updateStatus(ctx: ExtensionContext): void {
+		const mid = modeMid();
 		ctx.ui.setStatus(
 			"agent-mode",
 			shine(planModeEnabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
 		);
+		ctx.ui.setStatus("agent-thinking", thinkingStatus(ctx.thinkingLevel || "off", mid));
 
 		// Widget showing todo list during execution
 		if (executionMode && todoItems.length > 0) {
@@ -350,6 +385,11 @@ After completing a step, include a [DONE:n] tag in your response.`;
 				pi.sendUserMessage(refinement.trim(), { deliverAs: "followUp" });
 			}
 		}
+	});
+
+	// Keep think: chip in sync with mode gradient when level changes
+	pi.on("thinking_level_select", async (_event, ctx) => {
+		if (ctx.hasUI) updateStatus(ctx);
 	});
 
 	// Restore state on session start/resume
