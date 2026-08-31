@@ -1,12 +1,12 @@
--- Pi "cream-red" syntax palette → nvim highlights.
--- Source: pi/agent/themes/cream-red.json (+ powerline ash/cream diffs)
+-- Pi "woody" syntax palette → nvim highlights.
+-- Source: pi/agent/themes/woody.json (+ powerline ash/cream diffs)
 
 vim.cmd("highlight clear")
 if vim.fn.exists("syntax_on") == 1 then
   vim.cmd("syntax reset")
 end
 
-vim.g.colors_name = "cream-red"
+vim.g.colors_name = "woody"
 vim.o.termguicolors = true
 vim.o.background = "dark"
 

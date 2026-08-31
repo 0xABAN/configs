@@ -6,7 +6,7 @@ return {
   "AstroNvim/astroui",
   ---@type AstroUIOpts
   opts = {
-    colorscheme = "cream-red",
+    colorscheme = "woody",
     highlights = {
       -- force transparent panes so Ghostty/cmux opacity shows through
       init = {

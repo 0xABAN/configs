@@ -14,7 +14,7 @@ require("lazy").setup({
   { import = "community" },
   { import = "plugins" },
 } --[[@as LazySpec]], {
-  install = { colorscheme = { "cream-red", "astrotheme", "habamax" } },
+  install = { colorscheme = { "woody", "astrotheme", "habamax" } },
   ui = { backdrop = 100 },
   performance = {
     rtp = {

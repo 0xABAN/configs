@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
-  "name": "cream-red",
+  "name": "woody",
   "vars": {
     "cream": "#ffffff",
     "creamSoft": "#ffffff",
@@ -31,7 +31,7 @@
     "error": "red",
     "warning": "creamSoft",
     "muted": "gray",
-    "dim": "paleOak",
+    "dim": "darkGray",
     "text": "text",
     "thinkingText": "darkGray",
     "selectedBg": "selectedBg",

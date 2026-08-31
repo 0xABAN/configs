@@ -6,7 +6,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 
 ```
 zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
-nvim/                 → ~/.config/nvim  (AstroNvim v6 template + cream-red)
+nvim/                 → ~/.config/nvim  (AstroNvim v6 template + woody)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   mcp.json.example    → copy to mcp.json locally (secrets)
 ```
