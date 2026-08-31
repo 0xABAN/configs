@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Re-apply rpiv-todo local tweaks after npm package install."""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+ROOT = Path(os.environ.get("HOME", "")) / ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo"
+FMT = ROOT / "view/format.ts"
+OV = ROOT / "todo-overlay.ts"
+INDEX = ROOT / "index.ts"
+HERE = Path(__file__).resolve().parent
+CLEAR_BLOCK = (HERE / "todos-clear-block.ts.inc").read_text()
+CLEAR_MARKER = "/* configs:todos-clear */"
+
+
+def patch_format() -> None:
+	if not FMT.exists():
+		return
+	t = FMT.read_text()
+	t2 = t
+	t2 = t2.replace(
+		't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "muted" : "text";',
+		't.status === "in_progress" ? "muted" : t.status === "completed" || t.status === "deleted" ? "dim" : "muted";',
+	)
+	t2 = t2.replace('return theme.fg("dim", "○");', 'return theme.fg("accent", "○");')
+	t2 = t2.replace('return theme.fg("warning", "◐");', 'return theme.fg("muted", "◐");')
+	t2 = t2.replace('return theme.fg("success", "✓");', 'return theme.fg("dim", "✓");')
+	t2 = t2.replace('return theme.fg("error", "✗");', 'return theme.fg("dim", "✗");')
+	if t2 != t:
+		FMT.write_text(t2)
+		print("patched", FMT)
+
+
+def patch_overlay() -> None:
+	if not OV.exists():
+		return
+	o = OV.read_text()
+	o2 = re.sub(r"const headingColor = [^;]+;", 'const headingColor = "accent";', o, count=1)
+	if o2 != o:
+		OV.write_text(o2)
+		print("patched", OV)
+
+
+def patch_index_clear() -> None:
+	if not INDEX.exists():
+		return
+	t = INDEX.read_text()
+
+	if "applyTaskMutation" not in t:
+		t = t.replace(
+			'import { replayFromBranch } from "./state/replay.js";\n',
+			'import { replayFromBranch } from "./state/replay.js";\n'
+			'import { applyTaskMutation } from "./state/state-reducer.js";\n'
+			'import { buildToolResult } from "./tool/response-envelope.js";\n',
+		)
+	if "commitState" not in t:
+		t = t.replace("\treplaceState,\n", "\tcommitState,\n\tgetState,\n\treplaceState,\n")
+	t = t.replace(
+		'import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";',
+		'import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";',
+	)
+	# matchesKey for dd chord (Kitty protocol)
+	if "matchesKey" not in t:
+		t = t.replace(
+			'import type { KeyId } from "@earendil-works/pi-tui";',
+			'import { isKeyRelease, isKeyRepeat, matchesKey, type KeyId } from "@earendil-works/pi-tui";',
+		)
+	t = t.replace(
+		'import type { KeyId } from "@earendil-works/pi-tui";',
+		'import { isKeyRelease, isKeyRepeat, matchesKey, type KeyId } from "@earendil-works/pi-tui";',
+	)
+
+	if CLEAR_MARKER in t:
+		t = re.sub(
+			r"\n\t/\* configs:todos-clear \*/.*?(?=\n\t// Collapse/expand hotkey)",
+			"\n",
+			t,
+			count=1,
+			flags=re.S,
+		)
+
+	needle = "\tregisterTodosCommand(pi);\n"
+	if needle not in t:
+		print("skip clear inject: anchor missing")
+		INDEX.write_text(t)
+		return
+
+	t = t.replace(needle, needle + "\n" + CLEAR_BLOCK + "\n", 1)
+
+	# Bind chord when uiCtx is set
+	if "bindClearChord(ctx)" not in t:
+		t = t.replace(
+			"\t\tuiCtx = ctx.ui;\n\t\tawait updateTodoOverlay(true, generation);\n",
+			"\t\tuiCtx = ctx.ui;\n\t\tbindClearChord(ctx);\n\t\tawait updateTodoOverlay(true, generation);\n",
+		)
+
+	old_as = "\tpi.on(\"agent_start\", async () => {\n\t\ttodoOverlay?.hideCompletedTasksFromPreviousTurn();\n\t});"
+	new_as = (
+		"\tpi.on(\"agent_start\", async (_event, ctx) => {\n"
+		"\t\tif (ctx.hasUI) bindClearChord(ctx);\n"
+		"\t\ttodoOverlay?.hideCompletedTasksFromPreviousTurn();\n"
+		"\t});"
+	)
+	if old_as in t:
+		t = t.replace(old_as, new_as)
+
+	INDEX.write_text(t)
+	print("patched", INDEX, "clear dd chord")
+
+
+def main() -> None:
+	if not ROOT.exists():
+		raise SystemExit(0)
+	patch_format()
+	patch_overlay()
+	patch_index_clear()
+
+
+if __name__ == "__main__":
+	main()

@@ -18,7 +18,8 @@
     "toolPendingBg": "#1a1a1a",
     "toolSuccessBg": "#1a1a1a",
     "toolErrorBg": "#1a1a1a",
-    "customMsgBg": "#161616"
+    "customMsgBg": "#161616",
+    "midGray": "#9a9a9a"
   },
   "colors": {
     "accent": "cream",
@@ -29,10 +30,9 @@
     "error": "red",
     "warning": "creamSoft",
     "muted": "gray",
-    "dim": "dimGray",
+    "dim": "midGray",
     "text": "text",
     "thinkingText": "darkGray",
-
     "selectedBg": "selectedBg",
     "scrollbarThumb": "selectedBg",
     "userMessageBg": "userMsgBg",
@@ -45,7 +45,6 @@
     "toolErrorBg": "toolErrorBg",
     "toolTitle": "creamSoft",
     "toolOutput": "gray",
-
     "mdHeading": "#ffffff",
     "mdLink": "creamSoft",
     "mdLinkUrl": "dimGray",
@@ -56,11 +55,9 @@
     "mdQuoteBorder": "dimGray",
     "mdHr": "dimGray",
     "mdListBullet": "cream",
-
     "toolDiffAdded": "#a8a8a8",
     "toolDiffRemoved": "#a22c29",
     "toolDiffContext": "gray",
-
     "syntaxComment": "dimGray",
     "syntaxKeyword": "redLight",
     "syntaxFunction": "cream",
@@ -70,7 +67,6 @@
     "syntaxType": "cream",
     "syntaxOperator": "gray",
     "syntaxPunctuation": "gray",
-
     "thinkingOff": "darkGray",
     "thinkingMinimal": "dimGray",
     "thinkingLow": "cream",
@@ -78,7 +74,6 @@
     "thinkingHigh": "red",
     "thinkingXhigh": "redDark",
     "thinkingMax": "#5c1915",
-
     "bashMode": "red"
   },
   "export": {
