@@ -21,8 +21,14 @@ return {
         TabLineFill = { bg = "NONE" },
         WinBar = { bg = "NONE" },
         WinBarNC = { bg = "NONE" },
-        -- untracked git files in neo-tree (was orange)
-        NeoTreeGitUntracked = { fg = "#7aad6f" },
+        -- match pi ash / cream peach diffs
+        NeoTreeGitUntracked = { fg = "#ABC4AB" },
+        NeoTreeGitAdded = { fg = "#ABC4AB" },
+        NeoTreeGitModified = { fg = "#DCC9B6" },
+        NeoTreeGitDeleted = { fg = "#ffd8c4" },
+        GitSignsAdd = { fg = "#ABC4AB" },
+        GitSignsChange = { fg = "#DCC9B6" },
+        GitSignsDelete = { fg = "#ffd8c4" },
       },
     },
   },

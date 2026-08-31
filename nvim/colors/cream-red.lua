@@ -1,6 +1,5 @@
 -- Pi "cream-red" syntax palette → nvim highlights.
--- Source: ~/.pi/agent/themes/cream-red.json
--- Background left NONE so Ghostty/cmux opacity shows through.
+-- Source: pi/agent/themes/cream-red.json (+ powerline ash/cream diffs)
 
 vim.cmd("highlight clear")
 if vim.fn.exists("syntax_on") == 1 then
@@ -14,26 +13,32 @@ vim.o.background = "dark"
 local c = {
   cream = "#ffffff",
   gray = "#a8a8a8",
+  midGray = "#9a9a9a",
   dim = "#6e6e6e",
   dark = "#4a4a4a",
   red = "#a22c29",
   redLight = "#c45a56",
   text = "#e8e0dc",
-  select = "#242424",
+  paleOak = "#DCC9B6",
+  ash = "#ABC4AB",
+  creamPeach = "#ffd8c4",
+  -- very dark brown blocks (pi selectedBg / userMsgBg)
+  select = "#14110e",
+  block = "#0e0c0a",
 }
 
 local function hi(group, opts)
   vim.api.nvim_set_hl(0, group, opts)
 end
 
--- UI
+-- UI (bg NONE so Ghostty/cmux opacity shows through)
 hi("Normal", { fg = c.text, bg = "NONE" })
 hi("NormalNC", { fg = c.text, bg = "NONE" })
 hi("NormalFloat", { fg = c.text, bg = "NONE" })
 hi("FloatBorder", { fg = c.dim, bg = "NONE" })
 hi("EndOfBuffer", { fg = c.dark, bg = "NONE" })
 hi("LineNr", { fg = c.dark, bg = "NONE" })
-hi("CursorLineNr", { fg = c.gray, bg = "NONE", bold = true })
+hi("CursorLineNr", { fg = c.paleOak, bg = "NONE", bold = true })
 hi("SignColumn", { bg = "NONE" })
 hi("VertSplit", { fg = c.dark, bg = "NONE" })
 hi("WinSeparator", { fg = c.dark, bg = "NONE" })
@@ -47,10 +52,10 @@ hi("IncSearch", { fg = c.cream, bg = c.redLight })
 hi("MatchParen", { fg = c.cream, bold = true })
 hi("NonText", { fg = c.dark })
 hi("Whitespace", { fg = c.dark })
-hi("Directory", { fg = c.gray })
+hi("Directory", { fg = c.ash })
 hi("Title", { fg = c.cream, bold = true })
 hi("ErrorMsg", { fg = c.redLight })
-hi("WarningMsg", { fg = c.gray })
+hi("WarningMsg", { fg = c.paleOak })
 hi("Question", { fg = c.gray })
 hi("ModeMsg", { fg = c.gray })
 hi("MoreMsg", { fg = c.gray })
@@ -59,11 +64,14 @@ hi("ColorColumn", { bg = c.select })
 hi("Folded", { fg = c.dim, bg = "NONE" })
 hi("FoldColumn", { fg = c.dark, bg = "NONE" })
 
--- Diff (pi toolDiff*)
-hi("DiffAdd", { fg = c.gray })
-hi("DiffDelete", { fg = c.red })
+-- Diff ← pi toolDiffAdded / toolDiffRemoved
+hi("DiffAdd", { fg = c.ash })
+hi("DiffDelete", { fg = c.creamPeach })
 hi("DiffChange", { fg = c.gray })
 hi("DiffText", { fg = c.cream, bold = true })
+hi("Added", { fg = c.ash })
+hi("Removed", { fg = c.creamPeach })
+hi("Changed", { fg = c.gray })
 
 -- Legacy syntax ← pi syntax* tokens
 hi("Comment", { fg = c.dim, italic = true }) -- syntaxComment
@@ -97,7 +105,7 @@ hi("Todo", { fg = c.redLight, bold = true })
 hi("Error", { fg = c.redLight })
 hi("Underlined", { fg = c.gray, underline = true })
 
--- Treesitter (if enabled later)
+-- Treesitter
 hi("@comment", { link = "Comment" })
 hi("@keyword", { link = "Keyword" })
 hi("@keyword.function", { link = "Keyword" })
@@ -126,3 +134,12 @@ hi("@namespace", { fg = c.cream })
 hi("@module", { fg = c.cream })
 hi("@include", { link = "Include" })
 hi("@preproc", { link = "PreProc" })
+
+-- Git / neo-tree (match pi ash + cream peach)
+hi("NeoTreeGitAdded", { fg = c.ash })
+hi("NeoTreeGitModified", { fg = c.paleOak })
+hi("NeoTreeGitDeleted", { fg = c.creamPeach })
+hi("NeoTreeGitUntracked", { fg = c.ash })
+hi("GitSignsAdd", { fg = c.ash })
+hi("GitSignsChange", { fg = c.paleOak })
+hi("GitSignsDelete", { fg = c.creamPeach })
