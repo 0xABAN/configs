@@ -2,8 +2,8 @@
   "lastChangelogVersion": "0.84.2",
   "theme": "cream-red",
   "defaultProvider": "xai",
-  "defaultModel": "grok-4.6",
-  "defaultThinkingLevel": "high",
+  "defaultModel": "grok-4.5",
+  "defaultThinkingLevel": "xhigh",
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:@tintinweb/pi-subagents",
@@ -20,7 +20,8 @@
     "https://github.com/nicobailon/pi-rewind-hook",
     "https://github.com/nicobailon/pi-skill-palette",
     "https://github.com/nicobailon/pi-side-chat",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:@juicesharp/rpiv-todo"
   ],
   "powerline": {
     "preset": "default",
@@ -38,6 +39,27 @@
       "showStaged": false,
       "showUnstaged": false,
       "showUntracked": false
+    },
+    "customItems": [
+      {
+        "id": "mode",
+        "statusKey": "agent-mode",
+        "position": "left",
+        "selfColorize": true,
+        "hideWhenMissing": false
+      }
+    ],
+    "layout": {
+      "left": [
+        "custom:mode",
+        "model",
+        "thinking",
+        "shell_mode",
+        "path",
+        "queue",
+        "context_pct",
+        "cost"
+      ]
     }
   }
 }

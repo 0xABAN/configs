@@ -34,6 +34,7 @@ echo "== pi agent =="
 mkdir -p "$HOME/.pi/agent"
 for name in \
   settings.json \
+  keybindings.json \
   AGENTS.md \
   subagents.json \
   agent-tool-description.md \
@@ -51,6 +52,12 @@ if [[ ! -f "$HOME/.pi/agent/mcp.json" ]]; then
   echo "created ~/.pi/agent/mcp.json from example — fill LEETCODE_SESSION (etc.)"
 else
   echo "left existing ~/.pi/agent/mcp.json in place (not symlinked; secrets)"
+fi
+
+
+# Re-apply local tints on installed pi packages
+if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true
 fi
 
 echo

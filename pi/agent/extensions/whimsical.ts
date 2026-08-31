@@ -629,19 +629,56 @@ if (!(WHIMSICAL_PATCH in loaderProto)) {
 	};
 }
 
+const WIDGET_KEY = "whimsical-working";
+
 export default function (pi: ExtensionAPI) {
-	const apply = (ctx: ExtensionContext) => {
-		ctx.ui.setWorkingMessage(""); // keep line color under our control
-		ctx.ui.setWorkingIndicator({
-			frames: sparkleFrames(pickRandom(messages)),
-			intervalMs: INTERVAL_MS,
+	// Built-in working line sits in statusContainer *above* extension widgets.
+	// Hide it; render sparkles as aboveEditor widget so stack is:
+	//   rpiv-todo → whimsical spinner → editor
+	// clear+set bumps this key to the end of the widget Map (just above the editor).
+	let frames = sparkleFrames(pickRandom(messages));
+	let active = false;
+
+	const show = (ctx: ExtensionContext, reshuffle: boolean) => {
+		if (!ctx.hasUI) return;
+		if (reshuffle) frames = sparkleFrames(pickRandom(messages));
+		ctx.ui.setWorkingVisible(false);
+		ctx.ui.setWorkingMessage("");
+		ctx.ui.setWidget(WIDGET_KEY, undefined);
+		ctx.ui.setWidget(WIDGET_KEY, (tui) => {
+			// Loader.render() prefixes a blank row (meant for statusContainer).
+			// Drop it so we don't stack empty lines under the todo panel.
+			const loader = new Loader(
+				tui,
+				(s) => s,
+				(t) => t,
+				"",
+				{ frames, intervalMs: INTERVAL_MS },
+			);
+			const baseRender = loader.render.bind(loader);
+			loader.render = (width: number) => {
+				const lines = baseRender(width);
+				return lines[0] === "" ? lines.slice(1) : lines;
+			};
+			return Object.assign(loader, { dispose: () => loader.stop() });
 		});
+		active = true;
 	};
 
-	// Extensions run before UI listeners. Set on agent_start so the first paint
-	// already has sparkles (UI creates the indicator on agent_start).
-	// Never reset on turn_end — that flashes default "Working..." while the
-	// indicator is still visible until agent_end clears it.
-	pi.on("agent_start", async (_event, ctx) => apply(ctx));
-	pi.on("turn_start", async (_event, ctx) => apply(ctx));
+	const hide = (ctx: ExtensionContext) => {
+		if (!ctx.hasUI) return;
+		ctx.ui.setWidget(WIDGET_KEY, undefined);
+		ctx.ui.setWorkingVisible(true);
+		active = false;
+	};
+
+	pi.on("agent_start", async (_event, ctx) => show(ctx, true));
+	pi.on("turn_start", async (_event, ctx) => show(ctx, true));
+	// After todo overlay updates, re-append spinner so it stays under the list.
+	pi.on("tool_result", async (event, ctx) => {
+		if (!active) return;
+		if (event.toolName !== "todo") return;
+		show(ctx, false);
+	});
+	pi.on("agent_end", async (_event, ctx) => hide(ctx));
 }
