@@ -1,4 +1,5 @@
 {
+  "maxWidgetLines": 14,
   "guidance": {
     "promptSnippet": "Track multi-step work with the todo tool — create, update status, complete. Required for any task with 2+ steps.",
     "promptGuidelines": [

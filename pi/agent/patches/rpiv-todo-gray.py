@@ -22,14 +22,37 @@ def patch_format() -> None:
 		return
 	t = FMT.read_text()
 	t2 = t
-	t2 = t2.replace(
-		't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "muted" : "text";',
-		't.status === "in_progress" ? "muted" : t.status === "completed" || t.status === "deleted" ? "dim" : "muted";',
-	)
-	t2 = t2.replace('return theme.fg("dim", "○");', 'return theme.fg("accent", "○");')
-	t2 = t2.replace('return theme.fg("warning", "◐");', 'return theme.fg("muted", "◐");')
-	t2 = t2.replace('return theme.fg("success", "✓");', 'return theme.fg("dim", "✓");')
-	t2 = t2.replace('return theme.fg("error", "✗");', 'return theme.fg("dim", "✗");')
+	# pending → dark gray; in_progress → white (accent); done → dim
+	# in_progress glyph is ○ (same as pending), not ◐
+	t2 = t2.replace('in_progress: "◐",', 'in_progress: "○",')
+	for old, new in (
+		(
+			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "muted" : "text";',
+			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
+		),
+		(
+			't.status === "in_progress" ? "muted" : t.status === "completed" || t.status === "deleted" ? "dim" : "muted";',
+			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
+		),
+		(
+			't.status === "completed" || t.status === "deleted" ? "dim" : "syntaxString";',
+			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
+		),
+		(
+			't.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
+			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
+		),
+		('return theme.fg("dim", "○");', 'return theme.fg("thinkingText", "○");'),
+		('return theme.fg("accent", "○");', 'return theme.fg("thinkingText", "○");'),
+		('return theme.fg("syntaxString", "○");', 'return theme.fg("thinkingText", "○");'),
+		('return theme.fg("warning", "◐");', 'return theme.fg("accent", "○");'),
+		('return theme.fg("muted", "◐");', 'return theme.fg("accent", "○");'),
+		('return theme.fg("syntaxString", "◐");', 'return theme.fg("accent", "○");'),
+		('return theme.fg("thinkingText", "◐");', 'return theme.fg("accent", "○");'),
+		('return theme.fg("success", "✓");', 'return theme.fg("dim", "✓");'),
+		('return theme.fg("error", "✗");', 'return theme.fg("dim", "✗");'),
+	):
+		t2 = t2.replace(old, new)
 	if t2 != t:
 		FMT.write_text(t2)
 		print("patched", FMT)
@@ -40,6 +63,25 @@ def patch_overlay() -> None:
 		return
 	o = OV.read_text()
 	o2 = re.sub(r"const headingColor = [^;]+;", 'const headingColor = "accent";', o, count=1)
+	# Bottom padding: empty "" can be stripped by the host; use two space rows.
+	old_spacer = (
+		"\tprivate withTrailingSpacer(lines: string[]): string[] {\n"
+		"\t\tif (lines.length === 0) return lines;\n"
+		"\t\tlines.push(\"\");\n"
+		"\t\treturn lines;\n"
+		"\t}"
+	)
+	new_spacer = (
+		"\tprivate withTrailingSpacer(lines: string[]): string[] {\n"
+		"\t\tif (lines.length === 0) return lines;\n"
+		"\t\tlines.push(\" \", \" \");\n"
+		"\t\treturn lines;\n"
+		"\t}"
+	)
+	if old_spacer in o2:
+		o2 = o2.replace(old_spacer, new_spacer, 1)
+	elif 'lines.push(" ", " ");' not in o2 and 'lines.push("");' in o2:
+		o2 = o2.replace('lines.push("");', 'lines.push(" ", " ");', 1)
 	if o2 != o:
 		OV.write_text(o2)
 		print("patched", OV)
