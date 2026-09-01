@@ -7,12 +7,9 @@
  * Features:
  * - /plan command or Shift+Tab to toggle
  * - Bash restricted to allowlisted read-only commands
- * - On execute: require an rpiv-todo list (no plan-mode list UI)
+ * - On execute: remind to seed an rpiv-todo list (no hard gate)
  */
 
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -30,18 +27,6 @@ function getTextContent(message: AssistantMessage): string {
 		.join("\n");
 }
 
-/** Open (pending/in_progress) count from rpiv-todo; null if package unavailable. */
-async function openRpivTodoCount(ctx: ExtensionContext): Promise<number | null> {
-	try {
-		const todoPath = join(homedir(), ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo/todo.ts");
-		const mod = await import(pathToFileURL(todoPath).href);
-		const tasks = mod.getTodos(mod.sid(ctx)) as Array<{ status: string }>;
-		return tasks.filter((t) => t.status === "pending" || t.status === "in_progress").length;
-	} catch {
-		return null;
-	}
-}
-
 // Tools
 const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire"];
 const NORMAL_MODE_TOOLS = ["read", "bash", "edit", "write"];
@@ -56,9 +41,6 @@ interface PlanModeState {
 export default function planModeExtension(pi: ExtensionAPI): void {
 	let planModeEnabled = false;
 	let toolsBeforePlanMode: string[] | undefined;
-	/** After Execute: block non-todo tools until rpiv-todo has open tasks. */
-	let requireRpivTodos = false;
-	let pendingPlanSteps: string[] = [];
 
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (read-only exploration)",
@@ -185,10 +167,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	function togglePlanMode(ctx: ExtensionContext): void {
 		planModeEnabled = !planModeEnabled;
-		if (planModeEnabled) {
-			requireRpivTodos = false;
-			pendingPlanSteps = [];
-		}
 
 		if (planModeEnabled) {
 			enablePlanModeTools();
@@ -215,8 +193,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		handler: async (ctx) => togglePlanMode(ctx),
 	});
 
-	// Block destructive bash in plan mode; after Execute, require rpiv-todo list first
-	pi.on("tool_call", async (event, ctx) => {
+	// Block destructive bash in plan mode
+	pi.on("tool_call", async (event, _ctx) => {
 		if (planModeEnabled && event.toolName === "bash") {
 			const command = event.input.command as string;
 			if (!isSafeCommand(command)) {
@@ -225,30 +203,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					reason: `Plan mode: command blocked (not allowlisted). Use /plan to disable plan mode first.\nCommand: ${command}`,
 				};
 			}
-			return;
-		}
-
-		if (!requireRpivTodos || event.toolName === "todo") return;
-
-		const open = await openRpivTodoCount(ctx);
-		if (open === null) return; // can't verify — prompt still requires creates
-		if (open > 0) {
-			requireRpivTodos = false;
-			return;
-		}
-		const list = pendingPlanSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
-		return {
-			block: true,
-			reason: `Execute requires an rpiv-todo list first. Call the todo tool to create these steps (one create per step), then continue:\n${list}`,
-		};
-	});
-
-	// Drop the gate once the model has seeded open todos
-	pi.on("tool_execution_end", async (event, ctx) => {
-		if (!requireRpivTodos || event.toolName !== "todo" || event.isError) return;
-		const open = await openRpivTodoCount(ctx);
-		if (open !== null && open > 0) {
-			requireRpivTodos = false;
 		}
 	});
 
@@ -258,7 +212,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			messages: event.messages.filter((m) => {
 				const msg = m as AgentMessage & { customType?: string };
 				if (!planModeEnabled && msg.customType === "plan-mode-context") return false;
-				if (!requireRpivTodos && msg.customType === "plan-mode-execute-context") return false;
 				if (planModeEnabled) return true;
 				if (msg.role !== "user") return true;
 
@@ -276,31 +229,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		};
 	});
 
-	pi.on("before_agent_start", async (_event, ctx) => {
-		if (planModeEnabled) {
-			return {
-				message: {
-					customType: "plan-mode-context",
-					content:
-						'Plan mode: read-only. Explore, ask questions, then output a numbered plan under a "Plan:" header. Do not modify files.',
-					display: false,
-				},
-			};
-		}
-
-		if (!requireRpivTodos || pendingPlanSteps.length === 0) return;
-
-		const open = await openRpivTodoCount(ctx);
-		if (open !== null && open > 0) {
-			requireRpivTodos = false;
-			return;
-		}
-
-		const list = pendingPlanSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+	pi.on("before_agent_start", async (_event, _ctx) => {
+		if (!planModeEnabled) return;
 		return {
 			message: {
-				customType: "plan-mode-execute-context",
-				content: `Executing plan — REQUIRED first action: create these with the todo tool (one create per step). No other tools until the list exists.\n\n${list}\n\nThen mark #1 in_progress and execute in order.`,
+				customType: "plan-mode-context",
+				content:
+					'Plan mode: read-only. Explore, ask questions, then output a numbered plan under a "Plan:" header. Do not modify files.',
 				display: false,
 			},
 		};
@@ -317,15 +252,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (steps.length === 0) return;
 
 		const choice = await ctx.ui.select("Plan mode - what next?", [
-			"Execute the plan (rpiv-todo required)",
+			"Execute the plan",
 			"Stay in plan mode",
 			"Refine the plan",
 		]);
 
 		if (choice?.startsWith("Execute")) {
 			planModeEnabled = false;
-			requireRpivTodos = true;
-			pendingPlanSteps = steps;
 			restoreNormalModeTools();
 			updateStatus(ctx);
 			persistState();
@@ -336,11 +269,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					customType: "plan-mode-execute",
 					content: `Execute the plan.
 
-REQUIRED first: create these steps with the todo tool (one create per step). Other tools are blocked until the list exists.
+Reminder: seed these as todos first (one create per step), then work them in order.
 
-${list}
-
-Then mark the first todo in_progress and execute in order. Mark each completed when done.`,
+${list}`,
 					display: true,
 				},
 				{ triggerTurn: true, deliverAs: "followUp" },
