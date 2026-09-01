@@ -318,14 +318,7 @@ After completing a step, include a [DONE:n] tag in your response and mark the ma
 		if (todoItems.length === 0) return;
 		persistState();
 
-		// Show plan steps and prompt for next action
-		const todoListText = todoItems.map((t, i) => `${i + 1}. ☐ ${t.text}`).join("\n");
-		const planTodoListMessage = {
-			customType: "plan-todo-list",
-			content: `**Plan Steps (${todoItems.length}):**\n\n${todoListText}`,
-			display: true,
-		};
-
+		// rpiv-todo owns the list UI — no plan-todo-list message
 		const choice = await ctx.ui.select("Plan mode - what next?", [
 			"Execute the plan (track progress)",
 			"Stay in plan mode",
@@ -351,7 +344,6 @@ ${remainingList}
 First, create these steps with the todo tool (one create per step). Then execute in order.
 Start with: ${firstTodoItem.text}
 After completing a step, include a [DONE:n] tag and mark that todo completed.`;
-			pi.sendMessage(planTodoListMessage, { deliverAs: "followUp" });
 			pi.sendMessage(
 				{ customType: "plan-mode-execute", content: execMessage, display: true },
 				{ triggerTurn: true, deliverAs: "followUp" },
@@ -359,7 +351,6 @@ After completing a step, include a [DONE:n] tag and mark that todo completed.`;
 		} else if (choice === "Refine the plan") {
 			const refinement = await ctx.ui.editor("Refine the plan:", "");
 			if (refinement?.trim()) {
-				pi.sendMessage(planTodoListMessage, { deliverAs: "followUp" });
 				pi.sendUserMessage(refinement.trim(), { deliverAs: "followUp" });
 			}
 		}
