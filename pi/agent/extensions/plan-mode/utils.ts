@@ -1,6 +1,5 @@
 /**
  * Pure utility functions for plan mode.
- * Extracted for testability.
  */
 
 // Destructive commands blocked in plan mode
@@ -100,69 +99,27 @@ export function isSafeCommand(command: string): boolean {
 	return !isDestructive && isSafe;
 }
 
-export interface TodoItem {
-	step: number;
-	text: string;
-	completed: boolean;
-}
-
-export function cleanStepText(text: string): string {
-	let cleaned = text
-		.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1") // Remove bold/italic
-		.replace(/`([^`]+)`/g, "$1") // Remove code
-		.replace(
-			/^(Use|Run|Execute|Create|Write|Read|Check|Verify|Update|Modify|Add|Remove|Delete|Install)\s+(the\s+)?/i,
-			"",
-		)
-		.replace(/\s+/g, " ")
-		.trim();
-
-	if (cleaned.length > 0) {
-		cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-	}
-	if (cleaned.length > 50) {
-		cleaned = `${cleaned.slice(0, 47)}...`;
-	}
-	return cleaned;
-}
-
-export function extractTodoItems(message: string): TodoItem[] {
-	const items: TodoItem[] = [];
+/** Numbered steps under a "Plan:" header — handed to rpiv-todo on execute. */
+export function extractPlanSteps(message: string): string[] {
 	const headerMatch = message.match(/\*{0,2}Plan:\*{0,2}\s*\n/i);
-	if (!headerMatch) return items;
+	if (!headerMatch) return [];
 
 	const planSection = message.slice(message.indexOf(headerMatch[0]) + headerMatch[0].length);
+	const steps: string[] = [];
 	const numberedPattern = /^\s*(\d+)[.)]\s+\*{0,2}([^*\n]+)/gm;
 
 	for (const match of planSection.matchAll(numberedPattern)) {
-		const text = match[2]
+		let text = match[2]
 			.trim()
 			.replace(/\*{1,2}$/, "")
+			.trim()
+			.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+			.replace(/`([^`]+)`/g, "$1")
+			.replace(/\s+/g, " ")
 			.trim();
 		if (text.length > 5 && !text.startsWith("`") && !text.startsWith("/") && !text.startsWith("-")) {
-			const cleaned = cleanStepText(text);
-			if (cleaned.length > 3) {
-				items.push({ step: items.length + 1, text: cleaned, completed: false });
-			}
+			steps.push(text.charAt(0).toUpperCase() + text.slice(1));
 		}
 	}
-	return items;
-}
-
-export function extractDoneSteps(message: string): number[] {
-	const steps: number[] = [];
-	for (const match of message.matchAll(/\[DONE:(\d+)\]/gi)) {
-		const step = Number(match[1]);
-		if (Number.isFinite(step)) steps.push(step);
-	}
 	return steps;
-}
-
-export function markCompletedSteps(text: string, items: TodoItem[]): number {
-	const doneSteps = extractDoneSteps(text);
-	for (const step of doneSteps) {
-		const item = items.find((t) => t.step === step);
-		if (item) item.completed = true;
-	}
-	return doneSteps.length;
 }

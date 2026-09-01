@@ -6,15 +6,12 @@ Read-only exploration mode for safe code analysis.
 
 - **Built-in write tools disabled**: Disables edit/write while preserving other active tools
 - **Bash allowlist**: Only read-only bash commands are allowed
-- **Plan extraction**: Extracts numbered steps from `Plan:` sections
-- **Progress tracking**: Widget shows completion status during execution
-- **[DONE:n] markers**: Explicit step completion tracking
-- **Session persistence**: State survives session resume
+- **Execute → rpiv-todo**: Choosing Execute requires a todo list via the `todo` tool (rpiv-todo). No plan-mode list UI.
+- **Session persistence**: Plan on/off survives session resume
 
 ## Commands
 
 - `/plan` - Toggle plan mode
-- `/todos` - Show current plan progress
 - `Shift+Tab` - Toggle plan mode (Claude Code style)
 - `Ctrl+Alt+P` - Toggle plan mode (backup)
 
@@ -33,23 +30,20 @@ Plan:
 3. Third step description
 ```
 
-4. Choose "Execute the plan" when prompted
-5. During execution, the agent marks steps complete with `[DONE:n]` tags
-6. Progress widget shows completion status
+4. Choose "Execute the plan (rpiv-todo required)" when prompted
+5. Agent must create those steps with the `todo` tool first (other tools blocked until the list exists), then execute
 
 ## How It Works
 
 ### Plan Mode (Read-Only)
 - Built-in edit/write tools disabled
-- Other active tools remain available
+- Other active tools remain available (including `todo` from rpiv-todo)
 - Bash commands filtered through allowlist
-- Agent creates a plan without making changes
 
-### Execution Mode
+### Execute
 - Full tool access restored
-- Agent executes steps in order
-- `[DONE:n]` markers track completion
-- Widget shows progress
+- Steps extracted once and handed to the agent as required `todo` creates
+- Non-`todo` tools blocked until rpiv-todo has open tasks
 
 ### Command Allowlist
 

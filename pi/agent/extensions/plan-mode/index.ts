@@ -7,15 +7,40 @@
  * Features:
  * - /plan command or Shift+Tab to toggle
  * - Bash restricted to allowlisted read-only commands
- * - Extracts numbered plan steps from "Plan:" sections (ephemeral; rpiv-todo owns the list UI)
- * - [DONE:n] markers to complete steps during execution
+ * - On execute: require an rpiv-todo list (no plan-mode list UI)
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
-import { extractTodoItems, isSafeCommand, markCompletedSteps, type TodoItem } from "./utils.ts";
+import { extractPlanSteps, isSafeCommand } from "./utils.ts";
+
+function isAssistantMessage(m: AgentMessage): m is AssistantMessage {
+	return m.role === "assistant" && Array.isArray(m.content);
+}
+
+function getTextContent(message: AssistantMessage): string {
+	return message.content
+		.filter((block): block is TextContent => block.type === "text")
+		.map((block) => block.text)
+		.join("\n");
+}
+
+/** Open (pending/in_progress) count from rpiv-todo; null if package unavailable. */
+async function openRpivTodoCount(ctx: ExtensionContext): Promise<number | null> {
+	try {
+		const todoPath = join(homedir(), ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo/todo.ts");
+		const mod = await import(pathToFileURL(todoPath).href);
+		const tasks = mod.getTodos(mod.sid(ctx)) as Array<{ status: string }>;
+		return tasks.filter((t) => t.status === "pending" || t.status === "in_progress").length;
+	} catch {
+		return null;
+	}
+}
 
 // Tools
 const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire"];
@@ -25,28 +50,15 @@ const PLAN_MANAGED_TOOLS = new Set<string>([...PLAN_MODE_TOOLS, ...NORMAL_MODE_T
 
 interface PlanModeState {
 	enabled: boolean;
-	executing?: boolean;
 	toolsBeforePlanMode?: string[];
-}
-
-// Type guard for assistant messages
-function isAssistantMessage(m: AgentMessage): m is AssistantMessage {
-	return m.role === "assistant" && Array.isArray(m.content);
-}
-
-// Extract text content from an assistant message
-function getTextContent(message: AssistantMessage): string {
-	return message.content
-		.filter((block): block is TextContent => block.type === "text")
-		.map((block) => block.text)
-		.join("\n");
 }
 
 export default function planModeExtension(pi: ExtensionAPI): void {
 	let planModeEnabled = false;
-	let executionMode = false;
-	let todoItems: TodoItem[] = [];
 	let toolsBeforePlanMode: string[] | undefined;
+	/** After Execute: block non-todo tools until rpiv-todo has open tasks. */
+	let requireRpivTodos = false;
+	let pendingPlanSteps: string[] = [];
 
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (read-only exploration)",
@@ -110,7 +122,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (level === "high" || level === "xhigh" || level === "max") {
 			return shine(text, mid);
 		}
-		// lower levels: sample the mode ramp (white / mid / peach)
 		const solid: Record<string, [number, number, number]> = {
 			off: [90, 100, 100],
 			minimal: [140, 160, 165],
@@ -128,8 +139,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			shine(planModeEnabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
 		);
 		ctx.ui.setStatus("agent-thinking", thinkingStatus(ctx.thinkingLevel || "off", mid));
-		// todos UI lives in rpiv-todo only
-		ctx.ui.setWidget("plan-todos", undefined);
 	}
 
 	function uniqueToolNames(toolNames: string[]): string[] {
@@ -137,7 +146,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	}
 
 	function withTodo(toolNames: string[]): string[] {
-		// rpiv-todo must stay available in plan and build — never drop it on mode switch
+		// keep rpiv-todo's tool available across mode switches
 		return uniqueToolNames([...toolNames, "todo"]);
 	}
 
@@ -170,15 +179,16 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function persistState(): void {
 		pi.appendEntry("plan-mode", {
 			enabled: planModeEnabled,
-			executing: executionMode,
 			toolsBeforePlanMode,
 		});
 	}
 
 	function togglePlanMode(ctx: ExtensionContext): void {
 		planModeEnabled = !planModeEnabled;
-		executionMode = false;
-		todoItems = [];
+		if (planModeEnabled) {
+			requireRpivTodos = false;
+			pendingPlanSteps = [];
+		}
 
 		if (planModeEnabled) {
 			enablePlanModeTools();
@@ -205,27 +215,51 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		handler: async (ctx) => togglePlanMode(ctx),
 	});
 
-	// Block destructive bash commands in plan mode
-	pi.on("tool_call", async (event) => {
-		if (!planModeEnabled || event.toolName !== "bash") return;
+	// Block destructive bash in plan mode; after Execute, require rpiv-todo list first
+	pi.on("tool_call", async (event, ctx) => {
+		if (planModeEnabled && event.toolName === "bash") {
+			const command = event.input.command as string;
+			if (!isSafeCommand(command)) {
+				return {
+					block: true,
+					reason: `Plan mode: command blocked (not allowlisted). Use /plan to disable plan mode first.\nCommand: ${command}`,
+				};
+			}
+			return;
+		}
 
-		const command = event.input.command as string;
-		if (!isSafeCommand(command)) {
-			return {
-				block: true,
-				reason: `Plan mode: command blocked (not allowlisted). Use /plan to disable plan mode first.\nCommand: ${command}`,
-			};
+		if (!requireRpivTodos || event.toolName === "todo") return;
+
+		const open = await openRpivTodoCount(ctx);
+		if (open === null) return; // can't verify — prompt still requires creates
+		if (open > 0) {
+			requireRpivTodos = false;
+			return;
+		}
+		const list = pendingPlanSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+		return {
+			block: true,
+			reason: `Execute requires an rpiv-todo list first. Call the todo tool to create these steps (one create per step), then continue:\n${list}`,
+		};
+	});
+
+	// Drop the gate once the model has seeded open todos
+	pi.on("tool_execution_end", async (event, ctx) => {
+		if (!requireRpivTodos || event.toolName !== "todo" || event.isError) return;
+		const open = await openRpivTodoCount(ctx);
+		if (open !== null && open > 0) {
+			requireRpivTodos = false;
 		}
 	});
 
 	// Filter out stale plan mode context when not in plan mode
 	pi.on("context", async (event) => {
-		if (planModeEnabled) return;
-
 		return {
 			messages: event.messages.filter((m) => {
 				const msg = m as AgentMessage & { customType?: string };
-				if (msg.customType === "plan-mode-context") return false;
+				if (!planModeEnabled && msg.customType === "plan-mode-context") return false;
+				if (!requireRpivTodos && msg.customType === "plan-mode-execute-context") return false;
+				if (planModeEnabled) return true;
 				if (msg.role !== "user") return true;
 
 				const content = msg.content;
@@ -242,8 +276,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		};
 	});
 
-	// Inject plan/execution context before agent starts
-	pi.on("before_agent_start", async () => {
+	pi.on("before_agent_start", async (_event, ctx) => {
 		if (planModeEnabled) {
 			return {
 				message: {
@@ -255,97 +288,61 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			};
 		}
 
-		if (executionMode && todoItems.length > 0) {
-			const remaining = todoItems.filter((t) => !t.completed);
-			const todoList = remaining.map((t) => `${t.step}. ${t.text}`).join("\n");
-			return {
-				message: {
-					customType: "plan-execution-context",
-					content: `[EXECUTING PLAN - Full tool access enabled]
+		if (!requireRpivTodos || pendingPlanSteps.length === 0) return;
 
-Remaining steps:
-${todoList}
-
-Track these with the todo tool (rpiv-todo). Execute each step in order.
-After completing a step, include a [DONE:n] tag in your response and mark the matching todo completed.`,
-					display: false,
-				},
-			};
-		}
-	});
-
-	// Track progress after each turn
-	pi.on("turn_end", async (event, ctx) => {
-		if (!executionMode || todoItems.length === 0) return;
-		if (!isAssistantMessage(event.message)) return;
-
-		const text = getTextContent(event.message);
-		if (markCompletedSteps(text, todoItems) > 0) {
-			updateStatus(ctx);
-		}
-		persistState();
-	});
-
-	// Handle plan completion and plan mode UI
-	pi.on("agent_end", async (event, ctx) => {
-		// Check if execution is complete
-		if (executionMode && todoItems.length > 0) {
-			if (todoItems.every((t) => t.completed)) {
-				const completedList = todoItems.map((t) => `~~${t.text}~~`).join("\n");
-				pi.sendMessage(
-					{ customType: "plan-complete", content: `**Plan Complete!** ✓\n\n${completedList}`, display: true },
-					{ triggerTurn: false },
-				);
-				executionMode = false;
-				todoItems = [];
-				updateStatus(ctx);
-				persistState(); // Save cleared state so resume doesn't restore old execution mode
-			}
+		const open = await openRpivTodoCount(ctx);
+		if (open !== null && open > 0) {
+			requireRpivTodos = false;
 			return;
 		}
 
+		const list = pendingPlanSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+		return {
+			message: {
+				customType: "plan-mode-execute-context",
+				content: `Executing plan — REQUIRED first action: create these with the todo tool (one create per step). No other tools until the list exists.\n\n${list}\n\nThen mark #1 in_progress and execute in order.`,
+				display: false,
+			},
+		};
+	});
+
+	// After a Plan: section, offer execute / stay / refine
+	pi.on("agent_end", async (event, ctx) => {
 		if (!planModeEnabled || !ctx.hasUI) return;
 
-		// Extract todos from last assistant message
 		const lastAssistant = [...event.messages].reverse().find(isAssistantMessage);
-		if (lastAssistant) {
-			const extracted = extractTodoItems(getTextContent(lastAssistant));
-			if (extracted.length > 0) {
-				todoItems = extracted;
-			}
-		}
+		if (!lastAssistant) return;
 
-		if (todoItems.length === 0) return;
-		persistState();
+		const steps = extractPlanSteps(getTextContent(lastAssistant));
+		if (steps.length === 0) return;
 
-		// rpiv-todo owns the list UI — no plan-todo-list message
 		const choice = await ctx.ui.select("Plan mode - what next?", [
-			"Execute the plan (track progress)",
+			"Execute the plan (rpiv-todo required)",
 			"Stay in plan mode",
 			"Refine the plan",
 		]);
 
 		if (choice?.startsWith("Execute")) {
-			const firstTodoItem = todoItems[0];
-			if (!firstTodoItem) return;
-
 			planModeEnabled = false;
-			executionMode = true;
+			requireRpivTodos = true;
+			pendingPlanSteps = steps;
 			restoreNormalModeTools();
 			updateStatus(ctx);
 			persistState();
 
-			const remainingList = todoItems.map((t) => `${t.step}. ${t.text}`).join("\n");
-			const execMessage = `Execute the plan.
-
-Remaining steps:
-${remainingList}
-
-First, create these steps with the todo tool (one create per step). Then execute in order.
-Start with: ${firstTodoItem.text}
-After completing a step, include a [DONE:n] tag and mark that todo completed.`;
+			const list = steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
 			pi.sendMessage(
-				{ customType: "plan-mode-execute", content: execMessage, display: true },
+				{
+					customType: "plan-mode-execute",
+					content: `Execute the plan.
+
+REQUIRED first: create these steps with the todo tool (one create per step). Other tools are blocked until the list exists.
+
+${list}
+
+Then mark the first todo in_progress and execute in order. Mark each completed when done.`,
+					display: true,
+				},
 				{ triggerTurn: true, deliverAs: "followUp" },
 			);
 		} else if (choice === "Refine the plan") {
@@ -356,33 +353,23 @@ After completing a step, include a [DONE:n] tag and mark that todo completed.`;
 		}
 	});
 
-	// Keep think: chip in sync with mode gradient when level changes
 	pi.on("thinking_level_select", async (_event, ctx) => {
 		if (ctx.hasUI) updateStatus(ctx);
 	});
 
-	// Restore state on session start/resume
 	pi.on("session_start", async (_event, ctx) => {
 		if (pi.getFlag("plan") === true) {
 			planModeEnabled = true;
 		}
 
 		const entries = ctx.sessionManager.getEntries();
-
-		// Restore persisted state
 		const planModeEntry = entries
 			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "plan-mode")
 			.pop() as { data?: PlanModeState } | undefined;
 
 		if (planModeEntry?.data) {
 			planModeEnabled = planModeEntry.data.enabled ?? planModeEnabled;
-			// todos are owned by rpiv-todo — do not restore a second list here
-			executionMode = planModeEntry.data.executing ?? executionMode;
 			toolsBeforePlanMode = planModeEntry.data.toolsBeforePlanMode ?? toolsBeforePlanMode;
-		}
-		// Without a plan-mode todo list, execution tracking is session-ephemeral only
-		if (executionMode && todoItems.length === 0) {
-			executionMode = false;
 		}
 
 		if (planModeEnabled) {
