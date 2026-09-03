@@ -15,11 +15,6 @@ If rules conflict, lower-numbered priority wins:
 5. Consistency
 6. Performance
 
-## Long-running processes
-
-- Use the `process` tool (pi-processes) for dev servers, watchers, long builds/tests, and log tails — do not block on foreground `bash` for work that should keep running.
-- Start with a clear name, inspect logs/status as needed, and stop processes you started when done.
-
 ## Boundaries
 
 - NEVER fabricate paths, commits, APIs, config keys, env vars, test results, or capabilities. State gaps explicitly.
