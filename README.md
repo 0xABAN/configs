@@ -8,6 +8,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
 nvim/                 → ~/.config/nvim  (AstroNvim v6 template + woody)
 pi/agent/             → ~/.pi/agent/* (selected paths)
+  AGENTS.md           → ~/.pi/agent/AGENTS.md + ~/.codex/AGENTS.md
   mcp.json.example    → copy to mcp.json locally (secrets)
 ```
 
@@ -20,7 +21,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Existing files are renamed `*.bak.<timestamp>` before linking.
+Existing files are renamed `*.bak.<timestamp>` before linking. The installer also removes `~/AGENTS.md` (backing up a regular file first) so Pi loads only the shared global file and repository instructions.
 
 ## Secrets (never committed)
 

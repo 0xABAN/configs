@@ -38,7 +38,6 @@ mkdir -p "$HOME/.pi/agent"
 for name in \
   settings.json \
   keybindings.json \
-  AGENTS.md \
   subagents.json \
   agent-tool-description.md \
   themes \
@@ -48,6 +47,11 @@ for name in \
 do
   link "$ROOT/pi/agent/$name" "$HOME/.pi/agent/$name"
 done
+
+echo "== shared agent instructions =="
+backup "$HOME/AGENTS.md"
+link "$ROOT/pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
+link "$ROOT/pi/agent/AGENTS.md" "$HOME/.codex/AGENTS.md"
 
 echo "== rpiv-todo config =="
 mkdir -p "$HOME/.config/rpiv-todo"
