@@ -105,15 +105,9 @@ def patch_index_clear() -> None:
 		'import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";',
 		'import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";',
 	)
-	# matchesKey for dd chord (Kitty protocol)
-	if "matchesKey" not in t:
-		t = t.replace(
-			'import type { KeyId } from "@earendil-works/pi-tui";',
-			'import { isKeyRelease, isKeyRepeat, matchesKey, type KeyId } from "@earendil-works/pi-tui";',
-		)
 	t = t.replace(
-		'import type { KeyId } from "@earendil-works/pi-tui";',
 		'import { isKeyRelease, isKeyRepeat, matchesKey, type KeyId } from "@earendil-works/pi-tui";',
+		'import type { KeyId } from "@earendil-works/pi-tui";',
 	)
 
 	if CLEAR_MARKER in t:
@@ -141,25 +135,20 @@ def patch_index_clear() -> None:
 
 	t = t.replace(needle, needle + "\n" + CLEAR_BLOCK + "\n" + NUDGE_BLOCK + "\n", 1)
 
-	# Bind chord when uiCtx is set
-	if "bindClearChord(ctx)" not in t:
-		t = t.replace(
-			"\t\tuiCtx = ctx.ui;\n\t\tawait updateTodoOverlay(true, generation);\n",
-			"\t\tuiCtx = ctx.ui;\n\t\tbindClearChord(ctx);\n\t\tawait updateTodoOverlay(true, generation);\n",
-		)
-
-	old_as = "\tpi.on(\"agent_start\", async () => {\n\t\ttodoOverlay?.hideCompletedTasksFromPreviousTurn();\n\t});"
-	new_as = (
+	# Remove the old dd binding from installations patched by earlier versions.
+	t = t.replace("\t\tbindClearChord(ctx);\n", "")
+	t = t.replace(
 		"\tpi.on(\"agent_start\", async (_event, ctx) => {\n"
 		"\t\tif (ctx.hasUI) bindClearChord(ctx);\n"
 		"\t\ttodoOverlay?.hideCompletedTasksFromPreviousTurn();\n"
-		"\t});"
+		"\t});",
+		"\tpi.on(\"agent_start\", async () => {\n"
+		"\t\ttodoOverlay?.hideCompletedTasksFromPreviousTurn();\n"
+		"\t});",
 	)
-	if old_as in t:
-		t = t.replace(old_as, new_as)
 
 	INDEX.write_text(t)
-	print("patched", INDEX, "clear dd chord + todo nudge")
+	print("patched", INDEX, "clear command + todo nudge")
 
 
 def main() -> None:
