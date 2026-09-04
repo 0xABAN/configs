@@ -7,6 +7,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(os.environ.get("HOME", "")) / ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo"
+TYPES = ROOT / "tool/types.ts"
+TODO = ROOT / "todo.ts"
+SELECTORS = ROOT / "state/selectors.ts"
 FMT = ROOT / "view/format.ts"
 OV = ROOT / "todo-overlay.ts"
 INDEX = ROOT / "index.ts"
@@ -15,6 +18,59 @@ CLEAR_BLOCK = (HERE / "todos-clear-block.ts.inc").read_text()
 CLEAR_MARKER = "/* configs:todos-clear */"
 NUDGE_BLOCK = (HERE / "todo-nudge-block.ts.inc").read_text()
 NUDGE_MARKER = "/* configs:todo-nudge */"
+
+
+def patch_dependencies() -> None:
+	if not all(path.exists() for path in (TYPES, TODO, SELECTORS, FMT)):
+		return
+
+	t = TYPES.read_text()
+	t2 = re.sub(
+		r"\n\t(?:blockedBy|addBlockedBy|removeBlockedBy): Type\.Optional\(\n\t\tType\.Array\(Type\.Number\(\), \{\n\t\t\tdescription: \"[^\"]+\",\n\t\t\}\),\n\t\),",
+		"",
+		t,
+	)
+	if t2 != t:
+		TYPES.write_text(t2)
+		print("patched", TYPES, "remove dependency schema")
+
+	t = TODO.read_text()
+	t2 = t.replace("change status/fields/dependencies", "change status/fields")
+	t2 = t2.replace(
+		'\t"Use blockedBy to express dependencies (A is blocked by B). On create, pass blockedBy as the initial set. On update, use addBlockedBy / removeBlockedBy (additive merge — do not resend the full array). Cycles are rejected.",\n',
+		"",
+	)
+	old_execute = """\t\tasync execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+\t\t\tconst result = applyTaskMutation(getState(sid(ctx)), params.action, params as TaskMutationParams);
+\t\t\tcommitState(sid(ctx), result.state);
+\t\t\treturn buildToolResult(params.action, params as TaskMutationParams, result.state, result.op);
+\t\t},"""
+	new_execute = """\t\tasync execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+\t\t\tconst input = { ...params } as TaskMutationParams;
+\t\t\tdelete input.blockedBy;
+\t\t\tdelete input.addBlockedBy;
+\t\t\tdelete input.removeBlockedBy;
+\t\t\tconst result = applyTaskMutation(getState(sid(ctx)), params.action, input);
+\t\t\tcommitState(sid(ctx), result.state);
+\t\t\treturn buildToolResult(params.action, input, result.state, result.op);
+\t\t},"""
+	t2 = t2.replace(old_execute, new_execute)
+	if t2 != t:
+		TODO.write_text(t2)
+		print("patched", TODO, "disable dependencies")
+
+	t = SELECTORS.read_text()
+	t2 = re.sub(
+		r"/\*\*\n \* Whether any visible task carries a `blockedBy` reference\..*?export function selectShowTaskIds\(state: TaskState\): boolean \{\n\treturn .*?;\n\}",
+		"/** Dependencies are disabled locally, so task ids have no overlay anchor. */\n"
+		"export function selectShowTaskIds(_state: TaskState): boolean {\n\treturn false;\n}",
+		t,
+		count=1,
+		flags=re.S,
+	)
+	if t2 != t:
+		SELECTORS.write_text(t2)
+		print("patched", SELECTORS, "hide dependency ids")
 
 
 def patch_format() -> None:
@@ -26,6 +82,17 @@ def patch_format() -> None:
 	# in_progress glyph is ○ (same as pending), not ◐
 	t2 = t2.replace('in_progress: "◐",', 'in_progress: "○",')
 	for old, new in (
+		(
+			'\tif (t.blockedBy && t.blockedBy.length > 0) {\n'
+			'\t\tline += ` ${theme.fg("muted", `⛓ ${t.blockedBy.map((id) => `#${id}`).join(",")}`)}`;\n'
+			'\t}\n',
+			"",
+		),
+		(
+			'\tconst block = t.blockedBy?.length ? `    ⛓ ${t.blockedBy.map((id) => `#${id}`).join(",")}` : "";\n'
+			'\treturn `  ${glyph} #${t.id} ${sanitizeTerminalText(t.subject)}${form}${block}`;',
+			'\treturn `  ${glyph} #${t.id} ${sanitizeTerminalText(t.subject)}${form}`;',
+		),
 		(
 			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "muted" : "text";',
 			't.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "dim" : "thinkingText";',
@@ -154,6 +221,7 @@ def patch_index_clear() -> None:
 def main() -> None:
 	if not ROOT.exists():
 		raise SystemExit(0)
+	patch_dependencies()
 	patch_format()
 	patch_overlay()
 	patch_index_clear()

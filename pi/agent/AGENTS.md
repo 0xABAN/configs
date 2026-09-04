@@ -51,7 +51,6 @@ Open todos are shown every turn. Treat them as required state, not optional chro
 
 - Create todos only when explicitly requested or when work has several substantial phases or independent deliverables that need coordination across many turns.
 - Do not create todos for questions, short investigations, or routine inspect-edit-test-commit work. Tool calls and file count alone are not triggers.
-- Use `blockedBy` only for a real blocker that prevents work from starting, never to encode ordinary execution order.
 - First tool call when a list exists: `todo` update current item to `in_progress` (with `activeForm`).
 - Finish a step → `todo` update to `completed` immediately. Never batch at the end.
 - Exactly one `in_progress`. Stale lists (done work still pending) are wrong — fix before the final reply.
