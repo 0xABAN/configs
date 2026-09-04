@@ -15,7 +15,7 @@ Read-only exploration mode for safe code analysis.
 - `Shift+Tab` - Toggle plan mode (Claude Code style)
 - `Ctrl+Alt+P` - Toggle plan mode (backup)
 
-Thinking cycle moved to `Ctrl+Shift+Tab` via `~/.pi/agent/keybindings.json`.
+Use `/effort` to select the thinking level.
 
 ## Usage
 
