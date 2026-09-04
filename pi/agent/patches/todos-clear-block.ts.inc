@@ -46,11 +46,4 @@
 			await clearAllTodos(ctx);
 		},
 	});
-	pi.registerCommand("clear-todos", {
-		description: "Clear all todos and hide the overlay",
-		handler: async (_args, ctx) => {
-			lastUiCtx = ctx;
-			await clearAllTodos(ctx);
-		},
-	});
 
