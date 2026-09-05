@@ -98,20 +98,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		return `think:${labels[level] ?? level}`;
 	}
 
-	/** Same white→mid→peach ramp as mode chip; high+ get full shine. */
+	/** Use the same white→mid→peach gradient for every thinking level. */
 	function thinkingStatus(level: string, mid: [number, number, number]): string {
-		const text = thinkingLabel(level);
-		if (level === "high" || level === "xhigh" || level === "max") {
-			return shine(text, mid);
-		}
-		const solid: Record<string, [number, number, number]> = {
-			off: [90, 100, 100],
-			minimal: [140, 160, 165],
-			low: mid,
-			medium: [255, 216, 196],
-		};
-		const [r, g, b] = solid[level] ?? mid;
-		return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
+		return shine(thinkingLabel(level), mid);
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
