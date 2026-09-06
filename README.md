@@ -10,6 +10,7 @@ nvim/                 → ~/.config/nvim  (AstroNvim v6 template + woody)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   AGENTS.md           → ~/.pi/agent/AGENTS.md + ~/.codex/AGENTS.md
   mcp.json.example    → copy to mcp.json locally (secrets)
+pi/rpiv-todo/config.json → ~/.config/rpiv-todo/config.json
 ```
 
 ## Install

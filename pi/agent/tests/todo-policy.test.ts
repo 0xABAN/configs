@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const config = JSON.parse(readFileSync(new URL("../../../rpiv-todo/config.json", import.meta.url), "utf8"));
+const config = JSON.parse(readFileSync(new URL("../../rpiv-todo/config.json", import.meta.url), "utf8"));
 const agents = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
 const guidance = [config.guidance.promptSnippet, ...config.guidance.promptGuidelines, agents].join("\n");
 

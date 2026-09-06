@@ -55,7 +55,7 @@ link "$ROOT/pi/agent/AGENTS.md" "$HOME/.codex/AGENTS.md"
 
 echo "== rpiv-todo config =="
 mkdir -p "$HOME/.config/rpiv-todo"
-link "$ROOT/rpiv-todo/config.json" "$HOME/.config/rpiv-todo/config.json"
+link "$ROOT/pi/rpiv-todo/config.json" "$HOME/.config/rpiv-todo/config.json"
 
 # secrets stay machine-local
 if [[ ! -f "$HOME/.pi/agent/mcp.json" ]]; then
