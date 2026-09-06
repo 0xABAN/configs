@@ -8,7 +8,7 @@ return {
         once = true,
         callback = function()
           if #vim.api.nvim_list_uis() == 0 or vim.o.diff then return end
-          vim.schedule(function() vim.cmd "Neotree show filesystem left" end)
+          vim.schedule(function() vim.cmd "Neotree focus filesystem left" end)
         end,
       })
     end,

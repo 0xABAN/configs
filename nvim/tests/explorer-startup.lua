@@ -2,7 +2,7 @@
 local spec = dofile("nvim/lua/plugins/neo-tree.lua")[1]
 local opens = 0
 vim.api.nvim_create_user_command("Neotree", function(args)
-  assert(args.args == "show filesystem left")
+  assert(args.args == "focus filesystem left", "startup must focus the explorer")
   opens = opens + 1
 end, { nargs = "*" })
 
