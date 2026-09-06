@@ -16,12 +16,7 @@
 
 ## Human readability
 
-- Write code with human readability in mind. A maintainer should be able to follow its intent, data flow, and failure paths without mentally decoding it. Code that works but is largely unreadable is unacceptable.
-- Use names that explain purpose and domain meaning. Avoid cryptic abbreviations, misleading names, and generic names that hide what a value represents.
-- Prefer straightforward control flow over nested conditionals, dense expressions, and clever tricks. Use intermediate variables when they make a calculation or condition easier to understand; do not compress logic merely to save lines.
-- Keep functions focused on a coherent responsibility and at a consistent level of detail. Extract helpers when they clarify intent or isolate complexity, not simply to make functions shorter. Avoid needless indirection that forces readers to jump between files.
-- Make dependencies, side effects, and error handling explicit. Keep related logic together so readers can understand a behavior without reconstructing scattered state changes.
-- Comment on non-obvious decisions, constraints, and trade-offs rather than narrating syntax. Rewrite confusing code instead of relying on comments to decipher it.
+- Write code for humans to understand and maintain. Working but unreadable code is unacceptable.
 - Before finishing, reread the change from an unfamiliar maintainer's perspective. Simplify anything that requires unnecessary mental bookkeeping; never sacrifice correctness or necessary performance for cosmetic simplicity.
 
 ## Verification
