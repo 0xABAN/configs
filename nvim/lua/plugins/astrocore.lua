@@ -96,6 +96,10 @@ return {
         ["<M-S-Up>"] = { "v{", desc = "Select paragraph up" },
         ["<M-S-Down>"] = { "v}", desc = "Select paragraph down" },
       },
+      x = {
+        J = { ":m '>+1<CR>gv=gv", desc = "Move selected lines down" },
+        K = { ":m '<-2<CR>gv=gv", desc = "Move selected lines up" },
+      },
       v = {
         ["<M-Left>"] = { "<Esc>b", desc = "Word left" },
         ["<M-Right>"] = { "<Esc>w", desc = "Word right" },
