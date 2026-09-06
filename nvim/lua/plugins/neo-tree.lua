@@ -2,6 +2,16 @@
 return {
   {
     "nvim-neo-tree/neo-tree.nvim",
+    init = function()
+      vim.api.nvim_create_autocmd("VimEnter", {
+        group = vim.api.nvim_create_augroup("UserExplorerStartup", { clear = true }),
+        once = true,
+        callback = function()
+          if #vim.api.nvim_list_uis() == 0 or vim.o.diff then return end
+          vim.schedule(function() vim.cmd "Neotree show filesystem left" end)
+        end,
+      })
+    end,
     opts = {
       filesystem = {
         filtered_items = {
