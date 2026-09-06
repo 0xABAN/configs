@@ -7,11 +7,9 @@ require("lazy").setup({
       mapleader = " ",
       maplocalleader = ",",
       icons_enabled = true,
-      pin_plugins = nil,
       update_notifications = true,
     },
   },
-  { import = "community" },
   { import = "plugins" },
 } --[[@as LazySpec]], {
   install = { colorscheme = { "woody", "astrotheme", "habamax" } },

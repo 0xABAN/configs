@@ -13,7 +13,6 @@ vim.o.background = "dark"
 local c = {
   cream = "#ffffff",
   gray = "#a8a8a8",
-  midGray = "#9a9a9a",
   dim = "#6e6e6e",
   dark = "#4a4a4a",
   red = "#a22c29",
