@@ -9,10 +9,6 @@
 - Propose architecture that supports the repository's intended growth in features, contributors, and workload. Explain which concrete requirement justifies each significant boundary.
 - For an application expected to grow in complexity, organize around cohesive features or domains with explicit interfaces. Do not default to a flat collection of files merely because today's implementation is small.
 - Keep small utilities small. Avoid speculative services, empty layers, generic frameworks, and abstractions without a demonstrated need.
-- Prefer designs that let a likely next feature fit within a module without changing unrelated modules. Separate concerns where they change independently; follow framework conventions unless they conflict with the mission.
-- Reuse existing code, platform capabilities, and installed dependencies before adding custom machinery. Discuss new dependencies and substantial restructuring before implementation.
-- Make the smallest coherent change that solves the underlying problem. Fix shared causes rather than patching individual callers. Preserve unrelated behavior.
-- Preserve validation, authorization, accessibility, and error handling. Never trade these away to reduce code.
 
 ## Human readability
 
