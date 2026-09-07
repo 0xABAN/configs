@@ -84,6 +84,11 @@ else
 fi
 
 
+# Keep DJ above powerline's own last-prompt row. Fail visibly if upstream anchors changed.
+if [[ -f "$ROOT/pi/agent/patches/powerline-dj.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/powerline-dj.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true
