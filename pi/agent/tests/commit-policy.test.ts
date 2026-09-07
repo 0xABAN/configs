@@ -29,7 +29,7 @@ test("injects the Angular commit policy once per active session", async () => {
 	expect(message.display).toBe(false);
 	expect(message.content).toContain("do not wait for the user to ask");
 	expect(message.content).toContain("<type>(<optional scope>): <summary>");
-	expect(message.content).toContain("build, ci, docs, feat, fix, perf, refactor, test");
+	expect(message.content).toContain("build, chore, ci, docs, feat, fix, perf, refactor, test");
 	expect(message.content).toContain("imperative, present tense");
 	expect(message.content).toContain("feat(auth): add passkey sign-in");
 	expect(message.content).toContain("fix(router): preserve query params on redirect");

@@ -7,7 +7,7 @@ const POLICY = `Git commit policy:
 - Stage only explicit task-owned paths or hunks; never use \`git add .\`, \`git add -A\`, or \`git commit -a\`.
 - Before committing, inspect \`git status --short\`, \`git diff --cached --stat\`, and \`git diff --cached\`. Abort if the staged diff contains unrelated changes.
 - Use Angular commit format: \`<type>(<optional scope>): <summary>\`.
-- Allowed types: build, ci, docs, feat, fix, perf, refactor, test. Use \`revert\` only when reverting a commit.
+- Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, test. Use \`revert\` only when reverting a commit.
 - Use an optional stable project area or package name for scope.
 - Write the summary in lowercase, imperative, present tense; keep it concise (about 50 characters) and omit the final period.
 - Except for docs commits, add a body of at least 20 characters after a blank line. Explain the motivation and relevant behavior change, wrapping around 72 characters.
