@@ -13,6 +13,5 @@ test("disables the selected standalone and package skills", () => {
 	]));
 
 	const packages = settings.packages.filter((entry: unknown) => typeof entry === "object" && entry !== null);
-	expect(packages.find((entry: { source: string }) => entry.source === "npm:@aliou/pi-processes")?.skills).toEqual([]);
 	expect(packages.find((entry: { source: string }) => entry.source === "npm:@dietrichgebert/ponytail")?.skills).toEqual(["ponytail"]);
 });

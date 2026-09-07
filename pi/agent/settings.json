@@ -9,10 +9,6 @@
     "npm:@tintinweb/pi-subagents",
     "npm:@juicesharp/rpiv-ask-user-question",
     {
-      "source": "npm:@aliou/pi-processes",
-      "skills": []
-    },
-    {
       "source": "npm:pi-goal",
       "skills": []
     },
