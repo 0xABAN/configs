@@ -28,7 +28,8 @@
     "https://github.com/nicobailon/pi-rewind-hook",
     "https://github.com/nicobailon/pi-skill-palette",
     "npm:pi-web-access",
-    "npm:@juicesharp/rpiv-todo"
+    "npm:@juicesharp/rpiv-todo",
+    "../../dev/pi-extensions/packages/inline-skills"
   ],
   "powerline": {
     "preset": "default",
