@@ -48,12 +48,12 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		default: false,
 	});
 
-	/** White → mid → think:high start. Build mid = blue-cyan; plan mid = purple. */
+	/** White → mid → light beige. Build mid = blue-cyan; plan mid = purple. */
 	function shine(text: string, mid: [number, number, number]): string {
 		const stops: [number, number, number][] = [
 			[255, 255, 255], // white
 			mid,
-			[255, 216, 196], // think:high first (#ffd8c4)
+			[243, 238, 223], // light beige (#f3eedf)
 		];
 		const chars = [...text];
 		const paint = chars.filter((c) => c !== " ");
@@ -98,7 +98,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		return `think:${labels[level] ?? level}`;
 	}
 
-	/** Use the same white→mid→peach gradient for every thinking level. */
+	/** Use the same white→mid→beige gradient for every thinking level. */
 	function thinkingStatus(level: string, mid: [number, number, number]): string {
 		return shine(thinkingLabel(level), mid);
 	}
