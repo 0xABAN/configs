@@ -23,12 +23,21 @@ set -eu
 [ "$2" = https://github.com/0xABAN/pi-extensions.git ]
 [ "$3" = "$HOME/dev/pi-extensions" ]
 echo clone >> "$HOME/clone.log"
-mkdir -p "$3/inline-skills"
+mkdir -p "$3/inline-skills" "$3/dj"
 echo '{}' > "$3/inline-skills/package.json"
+echo '{}' > "$3/dj/package.json"
 `);
   chmodSync(join(bin, "git"), 0o755);
-  const run = () => Bun.spawnSync(["bash", "install.sh"], {
-    cwd, env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  writeFileSync(join(bin, "bun"), `#!/bin/sh
+set -eu
+[ "$PWD" = "$HOME/dev/pi-extensions" ]
+[ "$*" = 'install --frozen-lockfile --ignore-scripts' ]
+echo install >> "$HOME/dependencies.log"
+exit "\${FAIL_DEPENDENCIES:-0}"
+`);
+  chmodSync(join(bin, "bun"), 0o755);
+  const run = (env: Record<string, string> = {}) => Bun.spawnSync(["bash", "install.sh"], {
+    cwd, env: { ...process.env, ...env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
   });
   return { home, run };
 }
@@ -38,10 +47,38 @@ test("installer provisions missing extensions and never reclones an existing che
   expect(run().exitCode).toBe(0);
   const checkout = join(home, "dev/pi-extensions");
   expect(existsSync(join(checkout, "inline-skills/package.json"))).toBe(true);
+  expect(existsSync(join(checkout, "dj/package.json"))).toBe(true);
   writeFileSync(join(checkout, "local-work.txt"), "keep my edits");
   expect(run().exitCode).toBe(0);
   expect(readFileSync(join(home, "clone.log"), "utf8")).toBe("clone\n");
+  expect(readFileSync(join(home, "dependencies.log"), "utf8")).toBe("install\ninstall\n");
   expect(readFileSync(join(checkout, "local-work.txt"), "utf8")).toBe("keep my edits");
+});
+
+test("installer requires DJ even when inline-skills is already present", () => {
+  const { home, run } = sandbox("missing-dj");
+  const checkout = join(home, "dev/pi-extensions");
+  mkdirSync(join(checkout, "inline-skills"), { recursive: true });
+  writeFileSync(join(checkout, "inline-skills/package.json"), "{}");
+  writeFileSync(join(home, ".zshrc"), "original");
+  const result = run();
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr.toString()).toContain("dj/package.json");
+  expect(readFileSync(join(home, ".zshrc"), "utf8")).toBe("original");
+  expect(existsSync(join(home, "dependencies.log"))).toBe(false);
+});
+
+test("dependency installation failure leaves existing config links untouched", () => {
+  const { home, run } = sandbox("failed-dependencies");
+  writeFileSync(join(home, ".zshrc"), "original");
+  expect(run({ FAIL_DEPENDENCIES: "1" }).exitCode).toBe(1);
+  expect(readFileSync(join(home, ".zshrc"), "utf8")).toBe("original");
+});
+
+test("DJ has a single source and its legacy auto-discovered copy is removed", () => {
+  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
+  expect(settings.packages.filter((entry: unknown) => entry === "../../dev/pi-extensions/dj")).toHaveLength(1);
+  expect(existsSync(new URL("../extensions/agent-dj.ts", import.meta.url))).toBe(false);
 });
 
 test("installer rejects an outdated checkout before changing existing configs", () => {

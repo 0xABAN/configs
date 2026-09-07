@@ -11,10 +11,17 @@ if [[ ! -e "$EXTENSIONS" && ! -L "$EXTENSIONS" ]]; then
   mkdir -p "$(dirname "$EXTENSIONS")"
   git clone https://github.com/0xABAN/pi-extensions.git "$EXTENSIONS"
 fi
-if [[ ! -f "$EXTENSIONS/inline-skills/package.json" ]]; then
-  echo "missing $EXTENSIONS/inline-skills/package.json — update the checkout before installing" >&2
+for extension in inline-skills dj; do
+  if [[ ! -f "$EXTENSIONS/$extension/package.json" ]]; then
+    echo "missing $EXTENSIONS/$extension/package.json — update the checkout before installing" >&2
+    exit 1
+  fi
+done
+if ! command -v bun >/dev/null 2>&1; then
+  echo "Bun is required to install Pi extension dependencies: https://bun.sh" >&2
   exit 1
 fi
+(cd "$EXTENSIONS" && bun install --frozen-lockfile --ignore-scripts)
 
 backup() {
   local path="$1"

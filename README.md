@@ -15,6 +15,8 @@ pi/rpiv-todo/config.json → ~/.config/rpiv-todo/config.json
 
 ## Install
 
+Requires Git and [Bun](https://bun.sh) for the Pi extension dependencies.
+
 ```bash
 git clone git@github.com:0xABAN/configs.git ~/dev/configs
 cd ~/dev/configs
@@ -37,9 +39,11 @@ After install, set `LEETCODE_SESSION` (and any other keys) in `mcp.json`, or exp
 
 ## Pi extensions
 
-Extension code lives in [pi-extensions](https://github.com/0xABAN/pi-extensions), not in a second copy here. Each extension has its own top-level folder there; Pi settings here reference `~/dev/pi-extensions/inline-skills`.
+Extension code lives in [pi-extensions](https://github.com/0xABAN/pi-extensions), not in a second copy here. Pi settings reference its top-level `inline-skills/` and `dj/` packages under `~/dev/pi-extensions`.
 
-`./install.sh` clones that repository when missing and leaves existing checkouts untouched. Edit extensions in `~/dev/pi-extensions`, then run `/reload` in Pi. Existing extensions still under `pi/agent/extensions` have not been migrated.
+`./install.sh` clones that repository when missing, validates both packages, and installs dependencies from its lockfile without running package scripts. It never pulls over existing work; missing packages or failed dependency installation stop before changing config links. Edit extensions in that checkout, then `/reload` in Pi. Other existing extensions remain under `pi/agent/extensions`.
+
+DJ replaces the old `agent-dj.ts` copy. Use `/dj theme`, `/dj layout`, and `/dj placement`; `/dj` toggles visibility. Existing Spotify credentials and placement are imported once into `~/.pi/agent/dj/` (machine-local, never committed). If reconnection is needed, use `/dj auth`, not the legacy Python install command, which can recreate the old Pi extension. See the [DJ guide](https://github.com/0xABAN/pi-extensions/tree/main/dj).
 
 ## Sync workflow
 
@@ -52,6 +56,6 @@ cd ~/dev/configs && git add -A && git commit -m "..." && git push
 # on machine B
 cd ~/dev/configs && git pull --ff-only
 cd ~/dev/pi-extensions && git pull --ff-only
-# re-run ~/dev/configs/install.sh if new paths were added
+# re-run ~/dev/configs/install.sh if paths or extension dependencies changed
 # then run /reload in Pi
 ```
