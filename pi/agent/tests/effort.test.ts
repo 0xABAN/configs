@@ -1,4 +1,10 @@
 import { expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
+
+test("disables keyboard effort cycling so Shift+Tab remains available for plan mode", () => {
+	const bindings = JSON.parse(readFileSync(new URL("../keybindings.json", import.meta.url), "utf8"));
+	expect(bindings["app.thinking.cycle"]).toEqual([]);
+});
 
 mock.module("@earendil-works/pi-ai", () => ({
 	getSupportedThinkingLevels: () => ["off", "high", "xhigh"],
