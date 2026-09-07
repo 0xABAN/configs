@@ -5,6 +5,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 TS="$(date +%Y%m%d%H%M%S)"
 
+echo "== pi extensions checkout =="
+EXTENSIONS="$HOME/dev/pi-extensions"
+if [[ ! -e "$EXTENSIONS" && ! -L "$EXTENSIONS" ]]; then
+  mkdir -p "$(dirname "$EXTENSIONS")"
+  git clone https://github.com/0xABAN/pi-extensions.git "$EXTENSIONS"
+fi
+if [[ ! -f "$EXTENSIONS/inline-skills/package.json" ]]; then
+  echo "missing $EXTENSIONS/inline-skills/package.json — update the checkout before installing" >&2
+  exit 1
+fi
+
 backup() {
   local path="$1"
   if [[ -e "$path" || -L "$path" ]]; then

@@ -35,13 +35,23 @@ Existing files are renamed `*.bak.<timestamp>` before linking. The installer als
 
 After install, set `LEETCODE_SESSION` (and any other keys) in `mcp.json`, or export them in your shell and point env there.
 
+## Pi extensions
+
+Extension code lives in [pi-extensions](https://github.com/0xABAN/pi-extensions), not in a second copy here. Each extension has its own top-level folder there; Pi settings here reference `~/dev/pi-extensions/inline-skills`.
+
+`./install.sh` clones that repository when missing and leaves existing checkouts untouched. Edit extensions in `~/dev/pi-extensions`, then run `/reload` in Pi. Existing extensions still under `pi/agent/extensions` have not been migrated.
+
 ## Sync workflow
+
+Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `configs` update so new installs can find the referenced paths.
 
 ```bash
 # on machine A after edits
 cd ~/dev/configs && git add -A && git commit -m "..." && git push
 
 # on machine B
-cd ~/dev/configs && git pull
-# re-run ./install.sh only if new paths were added
+cd ~/dev/configs && git pull --ff-only
+cd ~/dev/pi-extensions && git pull --ff-only
+# re-run ~/dev/configs/install.sh if new paths were added
+# then run /reload in Pi
 ```
