@@ -34,6 +34,9 @@ then open a new shell. `cd` uses zoxide to learn frequently visited directories;
 zoxide's directory ranking. Pressing Enter on a partial directory name still
 jumps to zoxide's best match. History is saved in `~/.zsh_history`.
 
+Tab accepts a visible inline suggestion when the cursor is at the end of the
+line; otherwise it performs normal completion. Enter still runs the command.
+
 ## Secrets (never committed)
 
 | File | Why |

@@ -77,5 +77,17 @@ source <(fzf --zsh)
 eval "$(zoxide init zsh --cmd cd)"
 source "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
+# The leading underscore keeps autosuggestions from wrapping this widget and
+# clearing POSTDISPLAY before we can check whether a suggestion is visible.
+_autosuggest-or-complete() {
+  if [[ -n $POSTDISPLAY ]] && (( CURSOR == ${#BUFFER} )); then
+    zle autosuggest-accept
+  else
+    zle expand-or-complete
+  fi
+}
+zle -N _autosuggest-or-complete
+bindkey '^I' _autosuggest-or-complete
+
 # machine-local secrets / overrides (not tracked)
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
