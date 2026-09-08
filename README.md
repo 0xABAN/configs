@@ -26,6 +26,14 @@ chmod +x install.sh
 
 Existing files are renamed `*.bak.<timestamp>` before linking. The installer also removes `~/AGENTS.md` (backing up a regular file first) so Pi loads only the shared global file and repository instructions.
 
+## Shell navigation
+
+Install the shell dependencies with `brew install fzf zoxide zsh-autosuggestions`,
+then open a new shell. `cd` uses zoxide to learn frequently visited directories;
+`cdi` opens its fuzzy picker. Inline suggestions come from command history, not
+zoxide's directory ranking. Pressing Enter on a partial directory name still
+jumps to zoxide's best match. History is saved in `~/.zsh_history`.
+
 ## Secrets (never committed)
 
 | File | Why |

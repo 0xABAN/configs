@@ -64,8 +64,18 @@ tmlkill() {
 export DOTNET_ROOT="$HOME/.dotnet"
 export PATH="$DOTNET_ROOT:$PATH"
 
+# Keep history across sessions for inline command suggestions.
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt APPEND_HISTORY
+
 # fzf
 source <(fzf --zsh)
+
+# Smart directory jumps and history-based inline suggestions.
+eval "$(zoxide init zsh --cmd cd)"
+source "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
 # machine-local secrets / overrides (not tracked)
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
