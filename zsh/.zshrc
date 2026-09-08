@@ -71,6 +71,7 @@ SAVEHIST=10000
 setopt APPEND_HISTORY
 
 # fzf
+alias ff="fzf"
 source <(fzf --zsh)
 
 # Smart directory jumps and history-based inline suggestions.
