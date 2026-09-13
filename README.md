@@ -57,7 +57,7 @@ activate it in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.78
+background-opacity = 0.95
 background-blur = 30
 background-opacity-cells = true
 ```
@@ -85,9 +85,9 @@ outline stays disabled, and split dividers keep their default color:
 }
 ```
 
-Opacity 0.78 lets backdrop colors show through; blur 30 softens their detail
-for a frosted-glass background. The result depends on the wallpaper and windows
-behind cmux; a flat dark backdrop will still look dark.
+Opacity 0.95 limits bright backdrops to preserve text contrast; blur 30 keeps
+visible detail soft. The glass effect is subtle and depends on the wallpaper
+and windows behind cmux; a flat dark backdrop will still look dark.
 Base surfaces inherit one translucent background consistently across the shell,
 Pi, and Neovim. Adjust opacity and blur here, not separately per app.
 Use opacity 1 for an opaque background. The previous 0.96/20 settings are backed
