@@ -18,6 +18,15 @@ COMPACT_WIDGET = read_payload('subagents/compact-widget.ts.inc') + '\n'
 COMPACT_MARKER = '// configs:subagents-compact-widget-v1'
 MARKER = "// configs:subagents-ui-v1"
 
+# Keep output transcripts useful while an agent is still running. The source is
+# guarded separately because it is upstream-owned and does not carry our UI
+# marker/helper.
+STREAM_FILE = "src/output-file.ts"
+STREAM_EDIT = (
+    "if (event.type === \"turn_end\") flush();",
+    "if (event.type === \"message_end\" || event.type === \"turn_end\") flush();",
+)
+
 # (original, replacement, expected occurrences). Counts are deliberate guards,
 # including repeated renderer-owned glyphs; never transform rendered task text.
 EDITS = {
@@ -348,8 +357,21 @@ def transform(name: str, source: str, reverse: bool = False) -> str:
     )
 
 
+def patch_stream_source(source: str) -> str:
+    """Flush complete messages before the parent agent turn settles."""
+    old, new = STREAM_EDIT
+    old_lines = [line for line in source.splitlines() if line.strip() == old]
+    new_lines = [line for line in source.splitlines() if line.strip() == new]
+    if len(new_lines) == 1 and not old_lines:
+        return source
+    if len(old_lines) != 1 or new_lines:
+        raise ValueError(f"{STREAM_FILE}: changed/duplicate output stream anchor")
+    return source.replace(old, new, 1)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the complete installation before returning any changed source."""
+    stream = patch_stream_source(sources[STREAM_FILE])
     states = [source.count(MARKER) for name, source in sources.items() if name in EDITS]
     if any(count not in (0, 1) for count in states) or len(set(states)) != 1:
         raise ValueError("partial or duplicated subagents UI patch")
@@ -380,11 +402,12 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
                 raise ValueError(f"{name}: inconsistent subagents UI patch")
             result[name] = MARKER + "\n" + transform(name, original)
         # Upgrade sources/helper only after validating the complete installation.
-        return {**result, MODULE: MODULE_SOURCE}
+        return {**result, MODULE: MODULE_SOURCE, STREAM_FILE: stream}
     if MODULE in sources:
         raise ValueError("unexpected subagents UI helper alongside original sources")
     result = {name: MARKER + "\n" + transform(name, sources[name]) for name in EDITS}
     result[MODULE] = MODULE_SOURCE
+    result[STREAM_FILE] = stream
     return result
 
 
@@ -399,6 +422,7 @@ def main() -> None:
     sources = {name: (root / name).read_text() for name in EDITS}
     if (root / MODULE).exists():
         sources[MODULE] = (root / MODULE).read_text()
+    sources[STREAM_FILE] = (root / STREAM_FILE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
         backup = backup_sources(root, sources, "subagents-ui-", added_files=sorted(set(patched) - set(sources)))

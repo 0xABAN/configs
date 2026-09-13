@@ -14,8 +14,13 @@ const sdk = join(temp, "sdk");
 const { child, unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdkSource && existsSync(pkg));
 // Some replacements introduce later anchors. Build minimal counted seams in
 // patch order, then reverse them; guard fixtures need no installed package.
-const { sources, module: modulePath } = describePatch<{ sources: Record<string, string>; module: string }>(
-  patcher, "{'sources':sources,'module':m['MODULE']}", `
+const { sources, module: modulePath, streamFile, streamEdit } = describePatch<{
+  sources: Record<string, string>;
+  module: string;
+  streamFile: string;
+  streamEdit: [string, string];
+}>(
+  patcher, "{'sources':sources,'module':m['MODULE'],'streamFile':m['STREAM_FILE'],'streamEdit':m['STREAM_EDIT']}", `
 sources = {}
 for name, edits in m['EDITS'].items():
     source = ''
@@ -27,7 +32,9 @@ for name, edits in m['EDITS'].items():
     sources[name] = m['transform'](name, source, True)
     assert m['transform'](name, sources[name]) == source
 `);
+sources[streamFile] = streamEdit[0] + "\n";
 const files = Object.keys(sources);
+const allSourceFiles = [...files, modulePath];
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SUBAGENTS_ROOT: root, HOME: root } });
 function sandbox(name: string, native = false) {
   const root = join(temp, name);
@@ -47,6 +54,7 @@ function sandbox(name: string, native = false) {
 root=pathlib.Path(sys.argv[2])
 s={n:(root/n).read_text() for n in m['EDITS']}
 if (root/m['MODULE']).exists(): s[m['MODULE']]=(root/m['MODULE']).read_text()
+s[m['STREAM_FILE']] = (root/m['STREAM_FILE']).read_text()
 m['patch_sources'](s)
 if all(v.startswith(m['MARKER']) for n,v in s.items() if n in m['EDITS']):
  for n in m['EDITS']: (root/n).write_text(m['transform'](n,s[n].removeprefix(m['MARKER']+'\\n'),True))
@@ -104,7 +112,7 @@ previous=m['replace_counted'](original,m['LEGACY_WIDGET_EDITS'],'previous widget
     expect(contents(root)["src/ui/agent-widget.ts"]).toContain("configs:subagents-compact-widget-v1");
     const added = readdirSync(backups).filter(name => !previousBackups.includes(name));
     expect(added).toHaveLength(1);
-    for (const file of files.concat(modulePath)) {
+    for (const file of allSourceFiles) {
       expect(readFileSync(join(backups, added[0], file), "utf8")).toBe(before[file]!);
     }
     expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
@@ -141,7 +149,7 @@ for name,edits in m['PANEL_EDITS'].items():
   expect(contents(root)).toEqual(current);
   const added = readdirSync(backups).filter(name => !before.includes(name));
   expect(added).toHaveLength(1);
-  for (const file of files.concat(modulePath)) {
+  for (const file of allSourceFiles) {
     expect(readFileSync(join(backups, added[0], file), "utf8")).toBe(previous[file]!);
   }
   check(run(root));
@@ -179,6 +187,23 @@ test("validate all sources before writes; exact backups, unrelated edits and rep
   check(run(root));
   expect(contents(root)).toEqual(after);
   expect(readdirSync(join(root, ".config/theme-backups"))).toEqual(backups);
+});
+
+test("output stream patch rejects changed or duplicated anchors", () => {
+  const root = sandbox("stream-anchor");
+  check(run(root));
+  const current = contents(root);
+  const stream = join(root, streamFile);
+  const changed = current[streamFile]!.replace(streamEdit[1], `${streamEdit[1]} // local edit`);
+  writeFileSync(stream, changed);
+  const before = contents(root);
+  expect(run(root).exitCode).not.toBe(0);
+  expect(contents(root)).toEqual(before);
+
+  writeFileSync(stream, current[streamFile]!.replace(streamEdit[1], `${streamEdit[1]}\n${streamEdit[1]}`));
+  const duplicate = contents(root);
+  expect(run(root).exitCode).not.toBe(0);
+  expect(contents(root)).toEqual(duplicate);
 });
 
 test("unknown versions, changed/duplicate anchors and partial installations refuse before writes", () => {
@@ -231,6 +256,35 @@ function real() {
   })();
 }
 const plain = (m: any, lines: string[]) => lines.map(m.tui.stripTerminalSequences).join("\n");
+
+realTest("output transcripts flush completed messages before the agent turn settles", async () => {
+  const m = await real();
+  const { streamToOutputFile, writeInitialEntry } = await m.load("output-file.ts");
+  const output = join(temp, "live.output");
+  writeInitialEntry(output, "agent", "inspect the change", temp);
+
+  const messages = [{ role: "user", content: [{ type: "text", text: "inspect the change" }] }];
+  let emit: ((event: unknown) => void) | undefined;
+  const session = {
+    messages,
+    subscribe(listener: (event: unknown) => void) {
+      emit = listener;
+      return () => { emit = undefined; };
+    },
+  };
+  const cleanup = streamToOutputFile(session, output, "agent", temp);
+  const assistant = { role: "assistant", content: [{ type: "text", text: "I am inspecting it." }] };
+  messages.push(assistant);
+  emit?.({ type: "message_end", message: assistant });
+  expect(readFileSync(output, "utf8")).toContain(JSON.stringify(assistant));
+
+  // No turn_end has fired: a tool result should still become visible now.
+  const toolResult = { role: "toolResult", toolCallId: "call", toolName: "read", content: [{ type: "text", text: "done" }] };
+  messages.push(toolResult);
+  emit?.({ type: "message_end", message: toolResult });
+  expect(readFileSync(output, "utf8")).toContain(JSON.stringify(toolResult));
+  cleanup();
+});
 function within(m: any, lines: string[], width: number) {
   for (const line of lines) expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
 }
