@@ -29,6 +29,29 @@ function contents(root: string) {
     existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null]));
 }
 
+test("complete previous helper migrates with an exact backup; modified helpers still refuse", () => {
+  const root = sandbox("previous-helper");
+  expect(run(root).exitCode).toBe(0);
+  const current = readFileSync(join(root, modulePath), "utf8");
+  const legacy = readFileSync(new URL("../patches/payloads/host/legacy/extension-dialogs.js.inc", import.meta.url), "utf8");
+  const backups = join(root, ".config/theme-backups");
+  const before = readdirSync(backups);
+  writeFileSync(join(root, modulePath), legacy);
+  expect(run(root).exitCode).toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(current);
+  const added = readdirSync(backups).filter(name => !before.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backups, added[0], modulePath), "utf8")).toBe(legacy);
+  expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  expect(run(root).exitCode).toBe(0);
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+
+  writeFileSync(join(root, modulePath), legacy + "\n// local helper edit");
+  expect(run(root).exitCode).not.toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(legacy + "\n// local helper edit");
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+});
+
 test("native dialog patch validates every source, backs up exact originals and repeats without writing", () => {
   const root = sandbox("valid");
   const before = contents(root);
@@ -148,12 +171,16 @@ realTest("selector/confirm chrome is inset and width-safe while original options
   expect(plain(m, lines)).toContain("   ◆ First ◆ literal 界");
   expect(plain(m, lines)).toContain("   ◇ Second");
   expect(plain(m, lines)).not.toContain("→ ");
-  selector.handleInput("j"); selector.handleInput("\n");
+  selector.handleInput("j");
+  selector.handleInput("\n");
   expect(selected).toEqual(["Second"]);
-  selector.handleInput("k"); selector.handleInput("\n");
+  selector.handleInput("k");
+  selector.handleInput("\n");
   expect(selected.at(-1)).toBe(options[0]);
-  selector.handleInput("\x0f"); expect(expanded).toBe(1);
-  selector.handleInput("\x1b"); expect(cancelled).toBe(1);
+  selector.handleInput("\x0f");
+  expect(expanded).toBe(1);
+  selector.handleInput("\x1b");
+  expect(cancelled).toBe(1);
   preview.push("Native selector", ...lines);
   // The host's actual confirm adapter delegates to this selector and maps Yes/No.
   let offered: string[] | undefined;
@@ -177,8 +204,10 @@ realTest("single-line input keeps editing, focus, paste and IME markers through 
   for (const width of widths) bounded(m, input, width, true);
   expect(input.input.getValue()).toBe(value);
   input.invalidate();
-  input.handleInput("\n"); expect(submitted).toBe(value);
-  input.handleInput("\x1b"); expect(cancelled).toBe(1);
+  input.handleInput("\n");
+  expect(submitted).toBe(value);
+  input.handleInput("\x1b");
+  expect(cancelled).toBe(1);
   input.focused = false;
   expect(input.render(80).join("\n")).not.toContain(m.tui.CURSOR_MARKER);
   preview.push("Native input", ...input.render(80));
@@ -206,7 +235,8 @@ realTest("multiline editor preserves wrapping, text, focus and external-editor c
   expect(editor.editor.getText()).toContain("added");
   editor.editor.onSubmit(editor.editor.getText());
   expect(submitted).toContain("added");
-  editor.handleInput("\x1b"); expect(cancelled).toBe(1);
+  editor.handleInput("\x1b");
+  expect(cancelled).toBe(1);
   const beforeExternal = editor.editor.getText();
   await editor.handleOpenExternalEditor();
   expect(externalCalls.at(-1)).toEqual({ command: "test-editor", content: beforeExternal });
@@ -221,7 +251,8 @@ realTest("multiline editor preserves wrapping, text, focus and external-editor c
   externalResult = { status: "complete", content: "edited outside" };
   let externalKey = false;
   editor.handleOpenExternalEditor = async () => { externalKey = true; };
-  editor.handleInput("external"); expect(externalKey).toBe(true);
+  editor.handleInput("external");
+  expect(externalKey).toBe(true);
 });
 
 realTest("live theme refresh recolors titles/options/hints without resetting selection, input or countdown", async () => {
@@ -240,12 +271,15 @@ realTest("live theme refresh recolors titles/options/hints without resetting sel
   const timers = [selector.countdown, input.countdown];
   const value = input.input.getValue();
   m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/woody.json", import.meta.url)), "truecolor"));
-  selector.invalidate(); input.invalidate(); editor.invalidate();
+  selector.invalidate();
+  input.invalidate();
+  editor.invalidate();
   const after = [selector.render(80), input.render(80), editor.render(80)];
   expect(editor.editor.getText()).toBe("kept 界");
   expect(selector.selectedIndex).toBe(1);
   expect(input.input.getValue()).toBe(value);
-  expect(selector.countdown).toBe(timers[0]); expect(input.countdown).toBe(timers[1]);
+  expect(selector.countdown).toBe(timers[0]);
+  expect(input.countdown).toBe(timers[1]);
   expect(plain(m, after[0])).toContain("Choose (17s)");
   expect(plain(m, after[1])).toContain("Type (13s)");
   for (let i = 0; i < 3; i++) {
@@ -253,8 +287,29 @@ realTest("live theme refresh recolors titles/options/hints without resetting sel
     expect(before[i].join("\n")).not.toBe(after[i].join("\n"));
     expect(after[i].join("\n")).not.toContain("\x1b[38;2;67;145;135m");
   }
-  selector.countdown.onExpire(); input.countdown.onExpire();
+  selector.countdown.onExpire();
+  input.countdown.onExpire();
   expect(cancelled).toBe(2);
-  selector.dispose(); input.dispose();
+  selector.dispose();
+  input.dispose();
   m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
+});
+
+realTest("dialog text reuses its native wrapper without changing previous rendered bytes", async () => {
+  const m = await real();
+  const current = await import(pathToFileURL(join(fixture, modulePath)).href);
+  const previousPath = join(fixture, "dist/modes/interactive/components/extension-dialogs-previous.js");
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/extension-dialogs.js.inc", import.meta.url), "utf8"));
+  const previous = await import(pathToFileURL(previousPath).href);
+  let label = "First 界 title";
+  const display = () => m.colors.theme.fg("accent", label);
+  const text = new current.DialogText(display);
+  const oldText = new previous.DialogText(display);
+  const content = text.content;
+  for (const value of ["First 界 title", "Updated é label with wrapping"]) {
+    label = value;
+    for (const width of [1, 2, 4, 8, 20, 80]) expect(text.render(width)).toEqual(oldText.render(width));
+    text.invalidate();
+    expect(text.content).toBe(content);
+  }
 });

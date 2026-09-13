@@ -20,7 +20,6 @@ export function agentBodyWidth(width: number, padding = 3): { pad: number; inner
 export function renderAgentBody(width: number, render: (inner: number) => string[], padding = 3): string[] {
   const { pad, inner } = agentBodyWidth(width, padding);
   if (inner === 0) return [];
-  const gutter = " ".repeat(pad);
   return render(inner).map(line => {
     // Pi's image detector is not public. Do not slice either supported payload.
     const image = line.includes("\x1b_G") || line.includes("\x1b]1337;File=");
@@ -28,7 +27,7 @@ export function renderAgentBody(width: number, render: (inner: number) => string
     let clipped = image ? line : truncateToWidth(line, inner, cursor ? "" : "…");
     // If resizing clipped the cursor itself, retain it at the visible edge.
     if (cursor && !clipped.includes(CURSOR_MARKER)) clipped += CURSOR_MARKER;
-    return gutter + clipped;
+    return " ".repeat(pad) + clipped;
   });
 }
 
@@ -40,18 +39,9 @@ export function agentRenderer(build: () => Component, padding = 3): Component {
   };
 }
 
-/** Reuse the native wrapper, but resolve text and theme on every render. */
+/** Lazy text avoids retaining theme ANSI between watcher invalidations. */
 export function agentText(text: () => string, padding = 3): Component {
-  const content = new Text("", 0, 0);
-  return {
-    render(width) {
-      return renderAgentBody(width, inner => {
-        content.setText(text());
-        return content.render(inner);
-      }, padding);
-    },
-    invalidate: () => content.invalidate(),
-  };
+  return agentRenderer(() => new Text(text(), 0, 0), padding);
 }
 
 /** State alone controls this mark; task-authored text is never interpreted. */

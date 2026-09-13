@@ -61,6 +61,29 @@ function contents(root: string) {
     existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null]));
 }
 
+test("complete previous helper migrates with an exact backup; modified helpers still refuse", () => {
+  const root = sandbox("previous-helper");
+  expect(run(root).exitCode).toBe(0);
+  const current = readFileSync(join(root, modulePath), "utf8");
+  const legacy = readFileSync(new URL("../patches/payloads/subagents/legacy/subagents-ui.ts.inc", import.meta.url), "utf8");
+  const backups = join(root, ".config/theme-backups");
+  const before = readdirSync(backups);
+  writeFileSync(join(root, modulePath), legacy);
+  expect(run(root).exitCode).toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(current);
+  const added = readdirSync(backups).filter(name => !before.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backups, added[0], modulePath), "utf8")).toBe(legacy);
+  expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  expect(run(root).exitCode).toBe(0);
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+
+  writeFileSync(join(root, modulePath), legacy + "\n// local helper edit");
+  expect(run(root).exitCode).not.toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(legacy + "\n// local helper edit");
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+});
+
 test("absent installation is skipped without creating it", () => {
   const root = join(temp, "absent");
   check(run(root));
@@ -245,14 +268,19 @@ realTest("conversation viewer preserves Pi/You identity, literal user glyphs, ma
   viewer.handleInput("\r");
   lines = viewer.render(100);
   expect(lines.join("\n")).toContain("\x1b_pi:c\x07");
-  viewer.handleInput("hello"); viewer.handleInput("\r");
+  viewer.handleInput("hello");
+  viewer.handleInput("\r");
   expect(steered).toBe("hello");
-  viewer.handleInput("x"); expect(stopped).toBe(0);
-  viewer.handleInput("x"); expect(stopped).toBe(1);
+  viewer.handleInput("x");
+  expect(stopped).toBe(0);
+  viewer.handleInput("x");
+  expect(stopped).toBe(1);
   expect(viewer.markdownCache.has(messages[1])).toBe(true);
-  viewer.handleInput("m"); viewer.invalidate();
+  viewer.handleInput("m");
+  viewer.invalidate();
   expect(viewer.markdownCache.has(messages[1])).toBe(false);
-  viewer.handleInput("\x1b"); expect(closed).toBe(1);
+  viewer.handleInput("\x1b");
+  expect(closed).toBe(1);
   viewer.dispose();
 });
 
@@ -283,7 +311,9 @@ realTest("workflow card/dialog keep geometric trees, all display states, narrow 
   const states = ["done", "failed", "skipped", "blocked", "queued", "interrupted", "running"];
   expect(states.map(state => m.dialogRowGlyph(state, m.UNICODE_DIALOG_GLYPHS).color)).toEqual(
     ["muted", "error", "dim", "warning", "dim", "dim", "accent"]);
-  dialog.handleInput("p"); dialog.handleInput("x"); dialog.handleInput("\x1b");
+  dialog.handleInput("p");
+  dialog.handleInput("x");
+  dialog.handleInput("\x1b");
   expect(actions).toEqual(["pause", "kill", "close"]);
   preview.push("Workflow card", ...standalone.render(110), "Workflow dialog", ...dialog.render(110));
   dialog.dispose();
@@ -424,4 +454,32 @@ realTest("Agent call/results/streaming/notifications and workflow registrations 
   m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
   // Do not run tools, session_start, or their persistence callbacks in UI tests.
   for (const callback of handlers.get("session_shutdown") ?? []) await callback({}, {});
+});
+
+realTest("agent text reuses native Text while retaining previous gutter and render behavior", async () => {
+  const m = await real();
+  const previousPath = join(m.root, "src/ui/agent-chrome-previous.ts");
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/subagents/legacy/subagents-ui.ts.inc", import.meta.url), "utf8"));
+  const previous = await import(pathToFileURL(previousPath).href);
+  let label = "First 界 label";
+  const display = () => m.colors.theme.fg("accent", label);
+  const text = m.agentText(display);
+  const oldText = previous.agentText(display);
+  const instances = new Set();
+  const render = m.tui.Text.prototype.render;
+  try {
+    m.tui.Text.prototype.render = function (width: number) {
+      instances.add(this);
+      return render.call(this, width);
+    };
+    for (const value of ["First 界 label", "Updated é label with wrapping"]) {
+      label = value;
+      for (const width of [0, 1, 2, 4, 8, 20, 80]) text.render(width);
+      text.invalidate();
+    }
+    expect(instances.size).toBe(1);
+  } finally {
+    m.tui.Text.prototype.render = render;
+  }
+  for (const width of [0, 1, 2, 4, 8, 20, 80]) expect(text.render(width)).toEqual(oldText.render(width));
 });

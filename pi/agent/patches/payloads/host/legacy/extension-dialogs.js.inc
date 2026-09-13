@@ -22,7 +22,6 @@ export class ExtensionDialogContainer extends Container {
         if (width <= 0) return [];
         const padding = Math.min(3, Math.max(0, Math.floor((width - 2) / 2)));
         const inner = width - padding * 2;
-        const gutter = " ".repeat(padding);
         // Input needs three columns for its IME marker. Editor's native wrapper
         // recurses on a two-column grapheme when its content width is only one.
         // At these tiny widths, render a safe viewport then crop around the caret;
@@ -32,7 +31,7 @@ export class ExtensionDialogContainer extends Container {
                 : child instanceof Input ? 3 : 1;
             return child.render(Math.max(minimum, inner));
         });
-        return lines.map(line => gutter + fitDialogLine(line, inner));
+        return lines.map(line => " ".repeat(padding) + fitDialogLine(line, inner));
     }
 }
 
@@ -40,15 +39,11 @@ export class ExtensionDialogContainer extends Container {
 export class DialogText {
     constructor(display) {
         this.display = display;
-        this.content = new Text("", 0, 0);
     }
     render(width) {
-        this.content.setText(this.display());
-        return this.content.render(width);
+        return new Text(this.display(), 0, 0).render(width);
     }
-    invalidate() {
-        this.content.invalidate();
-    }
+    invalidate() {}
 }
 
 export function dialogHeading(text) {

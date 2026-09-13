@@ -12,6 +12,7 @@ from patch_support import read_payload, backup_sources, write_sources, replace_c
 
 MODULE = "src/ui/agent-chrome.ts"
 MODULE_SOURCE = read_payload('subagents/subagents-ui.ts.inc')
+LEGACY_MODULE_SOURCE = read_payload('subagents/legacy/subagents-ui.ts.inc')
 MARKER = "// configs:subagents-ui-v1"
 
 # (original, replacement, expected occurrences). Counts are deliberate guards,
@@ -254,14 +255,15 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if states[0] == 1:
         if not all(sources[name].startswith(MARKER + "\n") for name in EDITS):
             raise ValueError("subagents UI source marker moved")
-        if sources.get(MODULE) != MODULE_SOURCE:
+        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
             raise ValueError("subagents UI helper changed or missing; inspect before reapplying")
         for name in EDITS:
             source = sources[name].removeprefix(MARKER + "\n")
             original = transform(name, source, reverse=True)
             if transform(name, original) != source:
                 raise ValueError(f"{name}: inconsistent subagents UI patch")
-        return sources
+        # Only a fully validated installation may upgrade its exact older helper.
+        return {**sources, MODULE: MODULE_SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected subagents UI helper alongside original sources")
     result = {name: MARKER + "\n" + transform(name, sources[name]) for name in EDITS}
@@ -282,7 +284,7 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup = backup_sources(root, sources, "subagents-ui-", added_files=[MODULE])
+        backup = backup_sources(root, sources, "subagents-ui-", added_files=sorted(set(patched) - set(sources)))
         print(f"Subagents UI backup: {backup}")
         write_sources(root, patched)
     print("Subagents UI ready; reload Pi to apply")

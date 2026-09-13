@@ -18,6 +18,7 @@ from patch_support import (
 BASE = "dist/modes/interactive/components/"
 MODULE = BASE + "extension-dialogs.js"
 MODULE_SOURCE = read_payload('host/extension-dialogs.js.inc')
+LEGACY_MODULE_SOURCE = read_payload('host/legacy/extension-dialogs.js.inc')
 MARKER = "// configs:pi-extension-dialogs-v1"
 COMMON = [
     ('import { DynamicBorder } from "./dynamic-border.js";',
@@ -79,7 +80,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if any(count not in (0, 1) for count in states) or len(set(states)) != 1:
         raise ValueError("partial or duplicated native dialog patch")
     if states[0] == 1:
-        if sources.get(MODULE) != MODULE_SOURCE:
+        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
             raise ValueError("native dialog helper changed or missing")
         for name in EDITS:
             if not sources[name].startswith(MARKER + "\n"):
@@ -88,7 +89,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             original = transform(name, source, reverse=True)
             if transform(name, original) != source:
                 raise ValueError(f"{name}: inconsistent native dialog patch")
-        return sources
+        # Only a fully validated installation may upgrade its exact older helper.
+        return {**sources, MODULE: MODULE_SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected native dialog helper alongside original sources")
     result = {name: MARKER + "\n" + transform(name, sources[name]) for name in EDITS}
@@ -109,7 +111,7 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup = backup_sources(root, sources, "pi-extension-dialogs-", added_files=[MODULE])
+        backup = backup_sources(root, sources, "pi-extension-dialogs-", added_files=sorted(set(patched) - set(sources)))
         print(f"Pi native dialog backup: {backup}")
         write_sources(root, patched)
     print("Pi native dialog UI ready; restart Pi to apply")
