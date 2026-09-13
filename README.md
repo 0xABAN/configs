@@ -230,17 +230,41 @@ background rather than using a filled box. The existing input/footer are unchang
 Native tools and the installed pi-pretty formatters use compact rows, with error
 summaries kept visible. The existing tool-output expansion action restores their
 original detailed renderers. Other extensions' custom renderers and image output
-keep their native presentation. There are no per-row click controls or inferred
-durations. This first pass preserves Pi's component order; it does not yet split
-mixed text/tool/text blocks inside one assistant message.
+keep their native presentation. There are no per-row click controls. Component
+order is preserved; mixed text/tool/text blocks inside one assistant message
+are not split.
 
-The patch changes presentation only, never session records or tool execution.
-The installer applies it with version/anchor checks and complete backups. To replay:
+Completed compact rows reserve their right edge for result counts and elapsed
+call time, for example `152 lines · 1.2s`. Narrow rows use `152L 1.2s` or
+`2ed 1.2s`, truncating the path first; when necessary, counts yield to timing.
+At widths too small for both a status and timing, the status takes precedence.
+This uses each row's available width after existing gutters, not terminal width.
+Errors retain their separate summary row.
+
+Read reports source lines returned, excluding continuation notices; Write reports
+lines written; Edit reports replacement blocks applied, not diff line counts.
+An empty string has zero lines; a final newline does not add an extra line.
+These counts come from native result metadata, not parsed output banners.
+Other tools get timing only. Missing metadata on older results is left blank.
+Tool execution, model-visible result text, expansion, and images are unchanged.
+
+Elapsed time runs from the observed tool-start event to tool-end, including
+preparation, queues, and hooks; it is not subprocess CPU time. Each new timing
+is stored in `configsToolTiming` on the existing tool-result **session entry**,
+not its message body, and recovered from the active branch on resume/rebuild.
+It shares the canonical result write: no extra history node, disk write, or
+model-context message. Parallel calls are tracked by tool-call ID. Old calls
+and calls cancelled before starting have no inferred duration. Native result
+persistence and its error behavior are unchanged. The count metadata is stored
+in native tool-result `details`.
+
+The installer applies the patch with version/anchor checks and complete backups.
+To replay:
 
 ```sh
 python3 pi/agent/patches/pi-transcript.py
 PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
-  bun test pi/agent/tests/pi-transcript-patch.test.ts
+  bun test pi/agent/tests/pi-transcript-patch.test.ts pi/agent/tests/pi-tool-metrics.test.ts
 ```
 
 Restart Pi to apply host changes; `/reload` alone is not enough.

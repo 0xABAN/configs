@@ -1,6 +1,6 @@
 // configs:pi-transcript-v1
 // Display only: native components still own execution, expansion, images and state.
-import { Container, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, stripTerminalSequences, truncateToWidth } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.js";
 
 const ACTIONS = {
@@ -12,42 +12,6 @@ const ACTIONS = {
     find: ["⊙", "Find"],
     ls: ["▧", "List"],
 };
-
-export const TOOL_TIMING_FIELD = "configsToolTiming";
-
-/** Observe call latency, including preparation/hooks; never time argument streaming. */
-export function startToolTiming(component, now = performance.now()) {
-    if (Number.isFinite(now) && component.transcriptStartedAt === undefined
-        && component.transcriptDurationMs === undefined) {
-        component.transcriptStartedAt = now;
-    }
-}
-
-/** Settle once. Replay and calls cancelled before execution have no start time. */
-export function finishToolTiming(component, now = performance.now()) {
-    const durationMs = now - component.transcriptStartedAt;
-    if (component.transcriptDurationMs !== undefined || !Number.isFinite(durationMs) || durationMs < 0) return;
-    component.transcriptDurationMs = durationMs;
-    return { toolCallId: component.toolCallId, toolName: component.toolName, durationMs };
-}
-
-/** Read the active branch: message-only UI rebuilds omit entry-wrapper metadata. */
-export function collectToolTimings(entries) {
-    const timings = new Map();
-    for (const entry of entries) {
-        const data = entry?.[TOOL_TIMING_FIELD];
-        const message = entry?.message;
-        if (entry?.type !== "message" || message?.role !== "toolResult"
-            || typeof data?.toolCallId !== "string" || !data.toolCallId
-            || typeof data.toolName !== "string" || !data.toolName
-            || data.toolCallId !== message.toolCallId || data.toolName !== message.toolName
-            || !Number.isFinite(data.durationMs) || data.durationMs < 0) continue;
-        timings.set(data.toolCallId, {
-            toolCallId: data.toolCallId, toolName: data.toolName, durationMs: data.durationMs,
-        });
-    }
-    return timings;
-}
 
 /** Tool arguments/output are untrusted terminal text, not pre-styled UI. */
 function plain(value) {
@@ -99,42 +63,6 @@ function targetFor(component) {
     }
 }
 
-/** Only native producer metadata supplies counts: no banner/filename/diff heuristics. */
-function metricVariants(component) {
-    if (!component.result || component.isPartial) return [];
-    const duration = component.transcriptDurationMs;
-    const elapsed = Number.isFinite(duration) && duration >= 0
-        ? duration < 100 ? "<0.1s" : `${(duration / 1000).toFixed(1)}s`
-        : "";
-    const stats = component.result.isError ? undefined : component.result.details?.configsTranscript;
-    const unit = component.toolName === "edit" ? "edits"
-        : ["read", "write"].includes(component.toolName) ? "lines" : undefined;
-    const count = unit && stats?.[unit];
-    const knownCount = Number.isSafeInteger(count) && count >= 0;
-    const fullCount = knownCount ? `${count} ${count === 1 ? unit.slice(0, -1) : unit}` : "";
-    const shortCount = knownCount ? `${count}${unit === "lines" ? "L" : "ed"}` : "";
-    return [
-        [fullCount, elapsed].filter(Boolean).join(" · "),
-        [shortCount, elapsed].filter(Boolean).join(" "),
-        elapsed,
-    ].filter(Boolean);
-}
-
-/** Reserve the right edge first; paths yield before metrics, then counts before time. */
-function actionTitle(title, heading, component, width) {
-    const variants = metricVariants(component);
-    const minimumTitle = Math.min(visibleWidth(heading), width < 20 ? 3 : 12);
-    const candidates = width < 60 ? variants.slice(1) : variants;
-    let metrics = candidates.find(value => visibleWidth(value) + 1 + minimumTitle <= width);
-    // On tiny rows, even the tool glyph/label yields to status plus the last metric.
-    const smallest = candidates.at(-1);
-    if (!metrics && smallest && visibleWidth(smallest) + 2 <= width) metrics = smallest;
-    if (!metrics) return truncateToWidth(title, width, width < 4 ? "" : "...");
-    const leftWidth = width - visibleWidth(metrics) - 1;
-    const left = truncateToWidth(title, leftWidth, leftWidth < 4 ? "" : "…");
-    return left + " ".repeat(width - visibleWidth(left) - visibleWidth(metrics)) + theme.fg("muted", metrics);
-}
-
 /** Return compact text only; expanded bodies always come from the native renderer. */
 export function actionLines(component, width) {
     const [glyph, label] = ACTIONS[component.toolName] ?? ["⧉", plain(component.toolName) || "Tool"];
@@ -144,10 +72,9 @@ export function actionLines(component, width) {
     const color = failed ? "error" : complete ? "muted" : "accent";
     const target = targetFor(component) || (component.argsComplete ? "" : "…");
     const shownLabel = width < 60 ? label : label.padEnd(6);
-    const heading = theme.fg(color, status) + " " + theme.fg("accent", glyph)
-        + " " + theme.fg("muted", shownLabel);
-    const title = heading + " " + theme.fg("text", target);
-    const lines = [actionTitle(title, heading, component, width)];
+    const title = theme.fg(color, status) + " " + theme.fg("accent", glyph)
+        + " " + theme.fg("muted", shownLabel) + " " + theme.fg("text", target);
+    const lines = [truncateToWidth(title, width)];
 
     if (failed) {
         const text = component.result.content?.find(part => part.type === "text" && part.text?.trim())?.text;
