@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/earendil-works/pi/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
   "name": "osaka-jade",
   "vars": {
-    "bg": "#121319",
+    "bg": "",
     "panel": "#181a20",
     "selection": "#282c30",
     "muted": "#85877e",

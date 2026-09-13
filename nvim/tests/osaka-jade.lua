@@ -7,8 +7,16 @@ local function color(group, key, expected)
   assert(hl[key] == tonumber(expected, 16), group .. "." .. key .. " differs from the palette")
 end
 
+local function terminal_backgrounds()
+  for _, group in ipairs({ "Normal", "NormalNC", "SignColumn", "StatusLine", "StatusLineNC",
+    "TabLine", "TabLineFill", "WinBar", "WinBarNC" }) do
+    local hl = vim.api.nvim_get_hl(0, { name = group, link = false })
+    assert(hl.bg == nil, group .. " must inherit the terminal background")
+  end
+end
+
 assert(vim.g.colors_name == "osaka-jade")
-color("Normal", "bg", "121319")
+terminal_backgrounds()
 color("Normal", "fg", "D8DAD8")
 color("String", "fg", "dedec5")
 color("Number", "fg", "dedec5")
@@ -38,9 +46,12 @@ color("TabLineSel", "bg", "181a20")
 color("PmenuSel", "bg", "439187")
 color("Search", "bg", "282c30")
 color("Comment", "fg", "62656a")
-color("StatusLine", "bg", "121319")
+color("NormalFloat", "bg", "181a20")
+color("CursorLine", "bg", "181a20")
+color("Cursor", "fg", "121319")
 
 local terminal = table.concat(vim.fn.readfile("ghostty/themes/osaka-jade"), "\n")
+assert(terminal:find("background = #121319", 1, true))
 assert(terminal:find("selection-background = #439187", 1, true))
 assert(terminal:find("selection-foreground = #ffffff", 1, true))
 assert(terminal:find("palette = 6=#439187", 1, true))
@@ -70,7 +81,7 @@ assert(pi_color("syntaxString") == "#dedec5")
 assert(pi_color("syntaxNumber") == "#dedec5")
 assert(pi_color("thinkingMedium") == "#439187")
 for _, token in ipairs({ "toolPendingBg", "toolSuccessBg", "toolErrorBg", "customMessageBg" }) do
-  assert(pi_color(token) == "#121319", token .. " must stay charcoal")
+  assert(pi_color(token) == "", token .. " must inherit the terminal background")
 end
 assert(pi_color("userMessageBg") == "#181a20")
 
@@ -79,5 +90,5 @@ vim.cmd.colorscheme("woody")
 assert(vim.g.colors_name == "woody")
 color("Normal", "fg", "e8e0dc")
 vim.cmd.colorscheme("osaka-jade")
-color("Normal", "bg", "121319")
-print("osaka-jade highlights and theme switching: ok")
+terminal_backgrounds()
+print("osaka-jade highlights, shared terminal background and theme switching: ok")

@@ -34,7 +34,10 @@ the shared teal accent across Neovim, Pi, and cmux/Ghostty. Its darker
 companion, **`#326d65`**, is for subtle borders, dividers, and cmux workspace
 selection—not syntax or primary text.
 
-Dark surfaces dominate. Panels (`#181a20`) stay neutral. Terminal text
+The terminal owns the charcoal base background and its opacity. Neovim's
+base highlights use `NONE`; Pi's base background variable uses `""` (terminal
+default). Neither paints another charcoal layer over the terminal. Panels
+(`#181a20`) and colored selections retain their explicit backgrounds. Terminal text
 selections (including Pi), Neovim Visual mode, and completion selections
 use the core teal (`#439187`) with white text (`#ffffff`). Search/diff backgrounds
 remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
@@ -54,7 +57,7 @@ activate it in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.95
+background-opacity = 0.9975
 background-blur = 10
 background-opacity-cells = true
 ```
@@ -82,8 +85,11 @@ outline stays disabled, and split dividers keep their default color:
 }
 ```
 
-Opacity 0.95 lets a little backdrop show through, including colored terminal
-cells; blur keeps it soft. Use opacity 1 for unblended palette colors.
+Opacity 0.9975 preserves the darker appearance Neovim previously got from
+stacking a 95%-opaque cell over cmux's 95%-opaque background (about 99.75%
+combined). Base surfaces now inherit one translucent background consistently
+across the shell, Pi, and Neovim. Adjust opacity here, not separately per app;
+blur stays at 10. Use opacity 1 for an opaque background.
 Reload cmux's configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
 
