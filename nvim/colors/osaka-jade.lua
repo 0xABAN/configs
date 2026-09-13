@@ -1,5 +1,5 @@
--- Screenshot-led Osaka Jade: charcoal surfaces, white prose, jade structure.
--- Background/green/accent are sampled; whites and neutrals are chosen for clarity.
+-- Osaka Jade: charcoal surfaces, white prose, and a shared teal accent.
+-- The darker companion is for borders, not syntax or primary text.
 vim.cmd("highlight clear")
 if vim.fn.exists("syntax_on") == 1 then
   vim.cmd("syntax reset")
@@ -13,16 +13,17 @@ local c = {
   bg = "#121319",
   panel = "#181a20",
   selection = "#282c30",
-  selectionGreen = "#5fa876",
+  selectionGreen = "#439187",
   white = "#ffffff",
   muted = "#85877e",
   dim = "#62656a",
-  accent = "#5e9e80",
-  blueGreen = "#669987",
+  accent = "#439187",
+  accentDark = "#326d65",
+  blueGreen = "#439187",
   bright = "#F2F3F0",
   cream = "#dedec5",
   text = "#D8DAD8",
-  green = "#5fa876",
+  green = "#439187",
   yellow = "#c7b777",
   red = "#c7837c",
 }
@@ -34,7 +35,7 @@ end
 hi("Normal", { fg = c.text, bg = c.bg })
 hi("NormalNC", { link = "Normal" })
 hi("NormalFloat", { fg = c.text, bg = c.panel })
-hi("FloatBorder", { fg = c.accent, bg = c.panel })
+hi("FloatBorder", { fg = c.accentDark, bg = c.panel })
 hi("Cursor", { fg = c.bg, bg = c.bright })
 hi("CursorLine", { bg = c.panel })
 hi("CursorLineNr", { fg = c.blueGreen, bold = true })
@@ -43,7 +44,7 @@ hi("SignColumn", { bg = c.bg })
 hi("EndOfBuffer", { fg = c.dim })
 hi("NonText", { fg = c.dim })
 hi("Whitespace", { fg = c.dim })
-hi("WinSeparator", { fg = c.accent })
+hi("WinSeparator", { fg = c.accentDark })
 hi("StatusLine", { fg = c.cream, bg = c.bg })
 hi("StatusLineNC", { fg = c.muted, bg = c.bg })
 hi("TabLine", { fg = c.muted, bg = c.bg })

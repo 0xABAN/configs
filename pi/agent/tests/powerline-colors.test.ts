@@ -59,7 +59,11 @@ test("mode and thinking keep original gradients alongside the jade footer", asyn
 	const { colors } = JSON.parse(readFileSync(new URL("../extensions/powerline-footer/theme.json", import.meta.url), "utf8"));
 	expect(colors.model).toBe("#D8DAD8");
 	expect(colors.gitClean).toBe("#dedec5");
-	expect(colors.context).toBe("#5e9e80");
+	expect(colors.context).toBe("#439187");
+	expect(colors.queue).toBe("#439187");
+	expect(colors.thinkingLow).toBe("#439187");
+	expect(colors.thinkingMedium).toBe("#439187");
+	expect(colors.border).toBe("#326d65");
 	expect(colors.path).toBe("#dedec5");
 	expect(colors.contextError).toBe("#c7837c");
 });

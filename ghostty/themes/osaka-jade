@@ -1,23 +1,23 @@
-# Screenshot-led Osaka Jade: charcoal canvas, white text, jade accents.
-# Sampled dark/jade colors; whites and supporting ANSI shades are chosen.
+# Osaka Jade: charcoal canvas, white text, and the shared #439187 teal accent.
+# cmux uses its darker #326d65 companion for workspace selection.
 background = #121319
 foreground = #D8DAD8
 cursor-color = #F2F3F0
 cursor-text = #121319
-selection-background = #5fa876
+selection-background = #439187
 selection-foreground = #ffffff
 
 palette = 0=#181a20
 palette = 1=#c7837c
-palette = 2=#5fa876
+palette = 2=#439187
 palette = 3=#c7b777
 palette = 4=#829d9a
 palette = 5=#a6a495
-palette = 6=#669987
+palette = 6=#439187
 palette = 7=#D8DAD8
 palette = 8=#62656a
 palette = 9=#d69a91
-palette = 10=#80b58b
+palette = 10=#69ada5
 palette = 11=#d3c493
 palette = 12=#9bb3ae
 palette = 13=#bebca9

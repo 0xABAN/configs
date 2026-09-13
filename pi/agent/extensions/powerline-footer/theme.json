@@ -7,15 +7,15 @@
     "gitClean": "#dedec5",
     "thinking": "#62656a",
     "thinkingMinimal": "#85877e",
-    "thinkingLow": "#5e9e80",
-    "thinkingMedium": "#5fa876",
-    "context": "#5e9e80",
+    "thinkingLow": "#439187",
+    "thinkingMedium": "#439187",
+    "context": "#439187",
     "contextWarn": "#c7b777",
     "contextError": "#c7837c",
     "cost": "#85877e",
     "tokens": "#85877e",
-    "queue": "#5fa876",
+    "queue": "#439187",
     "separator": "#62656a",
-    "border": "#282c30"
+    "border": "#326d65"
   }
 }

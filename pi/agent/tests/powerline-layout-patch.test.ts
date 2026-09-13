@@ -77,10 +77,12 @@ test("existing right-hand groups upgrade to the green ball separator", () => {
     .replace(align, legacyAlign).replace(newSeparator, legacySeparator).replace(newArgument, oldArgument));
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(current);
-  writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
-    .replace("ansi.getFgAnsi(94, 158, 128)", "ansi.getFgAnsi(95, 168, 118)"));
-  expect(app.run().exitCode).toBe(0);
-  expect(app.contents()).toEqual(current);
+  for (const previous of ["95, 168, 118", "94, 158, 128", "94, 158, 170"]) {
+    writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
+      .replace("ansi.getFgAnsi(67, 145, 135)", `ansi.getFgAnsi(${previous})`));
+    expect(app.run().exitCode).toBe(0);
+    expect(app.contents()).toEqual(current);
+  }
 });
 
 test("changed or partial anchors refuse all writes", () => {
@@ -117,7 +119,7 @@ test("groups align by visible width without stripping gradients", () => {
 
 test("cost stays neutral while the ball and context use blue-green", () => {
   const reset = "\x1b[0m";
-  const green = "\x1b[38;2;94;158;128m";
+  const green = "\x1b[38;2;67;145;135m";
   const cost = `\x1b[38;2;133;135;126m$52.14${reset}`;
   const context = `${green}[▰▰▰▱▱] 52% context${reset}`;
   const row = helpers.buildAlignedContent([
@@ -177,7 +179,7 @@ test.skipIf(!existsSync(installed))("installed layout preserves right alignment 
     js + "\nreturn computeResponsiveLayout;")(
     config, (id: string) => ({ visible: id !== "hidden", content: id }), Bun.stringWidth,
     () => ({ left: "·" }), () => "", { reset: "", getFgAnsi: (...rgb: number[]) => {
-      expect(rgb).toEqual([94, 158, 128]);
+      expect(rgb).toEqual([67, 145, 135]);
       return "";
     } },
     () => ({ leftSegments: ["model", "branch", "hidden"], rightSegments: ["cost", "meter"], secondarySegments: ["mode"] }),

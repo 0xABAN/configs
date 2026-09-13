@@ -74,7 +74,8 @@ test("existing framed prompt upgrades to a diamond and rejects unknown prompts",
   expect(app.run().exitCode).toBe(0);
   const current = app.contents();
   const [oldPrompt, newPrompt] = edits["index.ts"].at(-1)!;
-  for (const previous of [oldPrompt, legacyPrompt]) {
+  const previousTeal = newPrompt.replace("ansi.getFgAnsi(67, 145, 135)", "ansi.getFgAnsi(94, 158, 128)");
+  for (const previous of [oldPrompt, legacyPrompt, previousTeal]) {
     writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(newPrompt, previous));
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
@@ -160,7 +161,7 @@ test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrol
     { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
     false, () => false, () => "+", footer, visibleWidth, truncateToWidth);
   editor.focused = true;
-  expect(editor.render(80)[1]).toContain("\x1b[38;2;94;158;128m◆\x1b[0m");
+  expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
     const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
       tui, () => "\x1b[38;2;95;168;118m",
