@@ -38,8 +38,10 @@ native dialogs. Do not add a second outer margin to individual renderers.
 
 The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
 Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
-widgets share one third of the rows; at larger heights the limit is `Infinity`.
-This is a display-only preview limit, not an expansion-state change. Packages
+widgets share at most one third of the rows, also reserving the native input
+viewport/frame and footer/conversation space. Each retains at least one summary
+row; at larger heights the limit is `Infinity`. This is a display-only preview
+limit, not an expansion-state change. Packages
 choose their visible content and overflow summaries. Unknown widgets do not
 participate. Read the callback during rendering, not registration, so resizing
 and widget removal immediately update the allocation.

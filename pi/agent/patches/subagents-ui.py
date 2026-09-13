@@ -13,6 +13,9 @@ from patch_support import read_payload, backup_sources, write_sources, replace_c
 MODULE = "src/ui/agent-chrome.ts"
 MODULE_SOURCE = read_payload('subagents/subagents-ui.ts.inc')
 LEGACY_MODULE_SOURCE = read_payload('subagents/legacy/subagents-ui.ts.inc')
+PRE_COMPACT_MODULE_SOURCE = read_payload('subagents/legacy/subagents-ui-pre-compact.ts.inc')
+COMPACT_WIDGET = read_payload('subagents/compact-widget.ts.inc') + '\n'
+COMPACT_MARKER = '// configs:subagents-compact-widget-v1'
 MARKER = "// configs:subagents-ui-v1"
 
 # (original, replacement, expected occurrences). Counts are deliberate guards,
@@ -236,9 +239,27 @@ EDITS = {
 }
 
 
+WIDGET = "src/ui/agent-widget.ts"
+LEGACY_WIDGET_EDITS = list(EDITS[WIDGET])
+EDITS[WIDGET] += [
+    ('import { truncateToWidth }', 'import { truncateToWidth, visibleWidth }', 1),
+    ('private renderWidget(width: number, theme: Theme)',
+     'private renderWidget(width: number, theme: Theme, compact = false, previewRows = Infinity)', 1),
+    ('inner => this.renderWidget(inner, theme)',
+     'inner => this.renderWidget(inner, theme, width < 80, tui.configsActivityRows?.() ?? Infinity)', 1),
+    ('    // Build sections separately for overflow-aware assembly.',
+     COMPACT_WIDGET + '    // Build sections separately for overflow-aware assembly.', 1),
+]
+
+
 def transform(name: str, source: str, reverse: bool = False) -> str:
+    # Older installations have the complete original UI but no compact branch.
+    # Still reverse/count every old anchor; a recognized helper is not enough.
+    edits = EDITS[name]
+    if reverse and name == WIDGET and COMPACT_MARKER not in source:
+        edits = LEGACY_WIDGET_EDITS
     return replace_counted(
-        source, EDITS[name], f"{name}: changed/duplicate UI anchor", reverse=reverse,
+        source, edits, f"{name}: changed/duplicate UI anchor", reverse=reverse,
     )
 
 
@@ -255,15 +276,21 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if states[0] == 1:
         if not all(sources[name].startswith(MARKER + "\n") for name in EDITS):
             raise ValueError("subagents UI source marker moved")
-        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
+        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE):
             raise ValueError("subagents UI helper changed or missing; inspect before reapplying")
+        result = dict(sources)
         for name in EDITS:
             source = sources[name].removeprefix(MARKER + "\n")
             original = transform(name, source, reverse=True)
-            if transform(name, original) != source:
+            if name == WIDGET and COMPACT_MARKER not in source:
+                expected = replace_counted(original, LEGACY_WIDGET_EDITS, "inconsistent previous widget")
+            else:
+                expected = transform(name, original)
+            if expected != source:
                 raise ValueError(f"{name}: inconsistent subagents UI patch")
-        # Only a fully validated installation may upgrade its exact older helper.
-        return {**sources, MODULE: MODULE_SOURCE}
+            result[name] = MARKER + "\n" + transform(name, original)
+        # Upgrade sources/helper only after validating the complete installation.
+        return {**result, MODULE: MODULE_SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected subagents UI helper alongside original sources")
     result = {name: MARKER + "\n" + transform(name, sources[name]) for name in EDITS}

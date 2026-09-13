@@ -17,16 +17,26 @@ from patch_support import (
 HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/compact-layout.js"
 SOURCE = read_payload("host/compact-layout.js.inc")
+LEGACY_SOURCE = read_payload("host/legacy/compact-layout-v1.js.inc")
 MARKER = "// configs:pi-compact-layout-v1"
 EDITS = [
     ('import { FooterComponent, formatTokens } from "./components/footer.js";',
      'import { FooterComponent, formatTokens } from "./components/footer.js";\n'
-     'import { CompactWidgetSpacer, installActivityBudget } from "./components/compact-layout.js"; ' + MARKER, 1),
+     'import { CompactFooter, CompactWidgetSpacer, installActivityBudget } from "./components/compact-layout.js"; ' + MARKER, 1),
     ('    mountInteractiveTui(tui, components) {',
      '    mountInteractiveTui(tui, components) {\n'
      '        installActivityBudget(tui, this.extensionWidgetsAbove, this.extensionWidgetsBelow);', 1),
     ('container.addChild(new Spacer(1));',
      'container.addChild(new CompactWidgetSpacer(this.ui));', 2),
+    ('        this.footerContainer = new Container();',
+     '        this.footerContainer = new CompactFooter(this.ui);', 1),
+    ('            { component: this.footerContainer, shrink: 1, minSize: 1 },',
+     '            { component: this.footerContainer, shrink: 1, minSize: 0 },', 1),
+]
+PRE_FOOTER_EDITS = [
+    (EDITS[0][0], EDITS[0][0] + '\n'
+     'import { CompactWidgetSpacer, installActivityBudget } from "./components/compact-layout.js"; ' + MARKER, 1),
+    EDITS[1], EDITS[2],
 ]
 # The first revision attached to only the initial renderer through Pi's proxy.
 # Migrate that exact hook to the mount boundary, retaining the same helper.
@@ -35,21 +45,26 @@ LEGACY_HOOK = (
     '        this.widgetContainerBelow = new Container();\n'
     '        installActivityBudget(this.ui, this.extensionWidgetsAbove, this.extensionWidgetsBelow);', 1,
 )
-LEGACY_EDITS = [EDITS[0], LEGACY_HOOK, EDITS[2]]
+LEGACY_EDITS = [PRE_FOOTER_EDITS[0], LEGACY_HOOK, PRE_FOOTER_EDITS[2]]
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     source = sources[HOST]
     if MARKER in source:
-        if source.count(MARKER) != 1 or sources.get(MODULE) != SOURCE:
+        if source.count(MARKER) != 1 or sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
             raise ValueError("compact layout helper changed, duplicated or missing")
         if source.count("installActivityBudget(") != 1:
             raise ValueError("partial or duplicated compact activity budget hook")
-        edits = LEGACY_EDITS if LEGACY_HOOK[1] in source else EDITS
+        if EDITS[3][1] in source:
+            edits = EDITS
+            if sources[MODULE] != SOURCE:
+                raise ValueError("compact footer requires its matching helper")
+        else:
+            edits = LEGACY_EDITS if LEGACY_HOOK[1] in source else PRE_FOOTER_EDITS
         original = replace_counted(source, edits, "compact layout anchor", reverse=True)
         if replace_counted(original, edits, "compact layout anchor") != source:
             raise ValueError("inconsistent compact layout patch")
-        return {**sources, HOST: replace_counted(original, EDITS, "compact layout anchor")}
+        return {**sources, HOST: replace_counted(original, EDITS, "compact layout anchor"), MODULE: SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected compact layout helper alongside original host")
     if LEGACY_HOOK[1] in source or any(new in source for _, new, _ in EDITS):

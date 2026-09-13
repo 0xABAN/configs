@@ -14,19 +14,28 @@ const sdkSource = process.env.PI_SDK_ROOT;
 const sdk = join(temp, "sdk");
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdkSource && existsSync(installed), { FORCE_COLOR: "1" });
 const edits = describePatch<Record<string, [string, string][]>>(patcher, "m['EDITS']");
+const compactEdits = describePatch<Record<string, [string, string][]>>(patcher, "m['COMPACT_EDITS']");
 const files = Object.keys(edits);
 const run = (root: string, home = root) => Bun.spawnSync(["python3", "-B", patcher], {
   env: { ...process.env, HOME: home, RPIV_TODO_ROOT: root },
 });
 const contents = (root: string) => Object.fromEntries(files.map(file => [file, readFileSync(join(root, file), "utf8")]));
-function sandbox(name: string) {
+function sandbox(name: string, previous = false) {
   const root = join(temp, name);
   mkdirSync(root);
   writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@juicesharp/rpiv-todo", version: "2.9.0", type: "module" }));
   for (const [file, changes] of Object.entries(edits)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
-    const originals = changes.flatMap(([old]) => file === "todo-overlay.ts" && old === 'theme.fg("dim", "└─")' ? [old, old] : [old]);
-    writeFileSync(join(root, file), originals.join("\n") + "\n// unrelated installed edit\n");
+    const replacements = changes.flatMap(([old, replacement]) => file === "todo-overlay.ts" && old === 'theme.fg("dim", "└─")' ? [replacement, replacement] : [replacement]);
+    let source = replacements.join("\n");
+    for (const [old] of compactEdits[file] ?? []) {
+      if (source.includes(old)) continue;
+      // This larger anchor owns one of the two existing final-branch sites.
+      if (old.includes('theme.fg("dim", "╰─")')) source = source.replace('theme.fg("dim", "╰─")', old);
+      else source += "\n" + old;
+    }
+    if (!previous) for (const [old, replacement] of changes) source = source.replaceAll(replacement, old);
+    writeFileSync(join(root, file), source + "\n// unrelated installed edit\n");
   }
   return root;
 }
@@ -60,7 +69,7 @@ test("Todo UI refuses wrong versions, missing/duplicate/modified anchors and mix
     else {
       assertRun(run(root));
       const format = join(root, "view/format.ts");
-      if (state === "modified") writeFileSync(format, readFileSync(format, "utf8").replace("Math.min(3,", "Math.min(4,"));
+      if (state === "modified") writeFileSync(format, readFileSync(format, "utf8").replace("width < 80 ? 1 : 3", "width < 80 ? 2 : 3"));
       else if (state === "altered-clear" || state === "clear-and-mixed") {
         const [originalClear, styledClear] = edits["index.ts"][1];
         const index = join(root, "index.ts");
@@ -79,17 +88,63 @@ test("Todo UI refuses wrong versions, missing/duplicate/modified anchors and mix
   expect(run(join(temp, "absent")).exitCode).toBe(0);
 });
 
+test("compact Todo UI migrates only complete previous sources and exact clear reinjection", () => {
+  const root = sandbox("previous", true);
+  const before = contents(root);
+  assertRun(run(root));
+  const current = contents(root);
+  const backups = join(root, ".config/theme-backups");
+  const [backup] = readdirSync(backups);
+  for (const file of files) expect(readFileSync(join(backups, backup, file), "utf8")).toBe(before[file]);
+  assertRun(run(root));
+  expect(contents(root)).toEqual(current);
+  expect(readdirSync(backups)).toEqual([backup]);
+
+  for (const compact of [false, true]) {
+    const replayRoot = sandbox(`replay-${compact}`, true);
+    if (compact) assertRun(run(replayRoot));
+    const index = join(replayRoot, "index.ts");
+    const [original, styled] = edits["index.ts"][1];
+    const source = readFileSync(index, "utf8").replace(styled, original);
+    writeFileSync(index, source);
+    assertRun(run(replayRoot));
+    expect(readFileSync(index, "utf8")).toBe(source.replace(original, styled));
+  }
+
+  for (const state of ["partial", "modified", "duplicate", "mixed-legacy"]) {
+    const broken = sandbox(`compact-${state}`, true);
+    const overlay = join(broken, "todo-overlay.ts");
+    const [old, replacement] = compactEdits["todo-overlay.ts"][0];
+    if (state === "partial") writeFileSync(overlay, readFileSync(overlay, "utf8").replace(old, replacement));
+    else {
+      assertRun(run(broken));
+      let source = readFileSync(overlay, "utf8");
+      if (state === "modified") source = source.replace("Math.max(2, compactRows)", "Math.max(3, compactRows)");
+      if (state === "duplicate") source += replacement;
+      if (state === "mixed-legacy") source = source.replace(edits["todo-overlay.ts"][0][1], edits["todo-overlay.ts"][0][0]);
+      writeFileSync(overlay, source);
+    }
+    const unchanged = contents(broken);
+    const backupRoot = join(broken, ".config/theme-backups");
+    const beforeBackups = existsSync(backupRoot) ? readdirSync(backupRoot) : [];
+    expect(run(broken).exitCode).not.toBe(0);
+    expect(contents(broken)).toEqual(unchanged);
+    expect(existsSync(backupRoot) ? readdirSync(backupRoot) : []).toEqual(beforeBackups);
+  }
+});
+
 let loaded: Promise<any> | undefined;
 function real() {
   return loaded ??= (async () => {
     copySdk(sdkSource!, sdk);
-    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript", "pi-activity-notices"]);
+    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript", "pi-activity-notices", "pi-compact-layout"]);
     const home = join(temp, "real");
     const root = join(home, ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo");
     copyPackageSources(installed, root);
     // Normalize our complete patch in the COPY so the suite remains replayable.
     for (const [file, changes] of Object.entries(edits)) {
       let source = readFileSync(join(root, file), "utf8");
+      for (const [old, replacement] of compactEdits[file] ?? []) source = source.replaceAll(replacement, old);
       for (const [old, replacement] of changes) source = source.replaceAll(replacement, old);
       writeFileSync(join(root, file), source);
     }
@@ -119,6 +174,9 @@ function real() {
       assertRun(run(root, home));
       expect(contents(root)).toEqual(reapplied);
     }
+    let previousOverlay = after["todo-overlay.ts"];
+    for (const [old, replacement] of compactEdits["todo-overlay.ts"]) previousOverlay = previousOverlay.replace(replacement, old);
+    writeFileSync(join(root, "todo-overlay-before.ts"), previousOverlay);
     const modules = join(root, "node_modules");
     mkdirSync(join(modules, "@earendil-works"), { recursive: true });
     for (const name of ["pi-tui", "pi-ai"]) {
@@ -134,6 +192,8 @@ function real() {
     const colors = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/theme/theme.js")).href);
     const theme = colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor");
     return { ...await load("view/format.ts"), ...await load("todo-overlay.ts"), ...await load("todo.ts"),
+      PreviousTodoOverlay: (await load("todo-overlay-before.ts")).TodoOverlay,
+      ...await import(pathToFileURL(join(sdk, "dist/modes/interactive/components/compact-layout.js")).href),
       registerExtension: (await load("index.ts")).default,
       store: await load("state/store.ts"), tui, theme, colors, root, home, before };
   })();
@@ -270,6 +330,152 @@ realTest("TodoOverlay retains alignment, theme refresh, overflow, expansion, hid
   expect(widget).toBeUndefined();
   overlay.dispose();
   expect(overlay.isRegistered()).toBe(false);
+});
+
+realTest("compact Todo previews share live host budgets and retain active work, counts and display state", async () => {
+  const m = await real();
+  m.store.__resetState();
+  m.store.setActiveRenderSession("compact");
+  const configPath = join(m.home, ".config/rpiv-todo/config.json");
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeFileSync(configPath, '{"maxWidgetLines":12,"collapseKey":"off"}');
+  const tasks = [task(1, "completed", "Done"), task(2, "pending", "Waiting"),
+    task(3, "in_progress", "Active"), task(4, "pending", "Later"), task(5, "deleted", "Deleted")];
+  const state = { tasks, nextId: 6 };
+  m.store.replaceState("compact", state);
+  const above = new Map<string, unknown>();
+  const below = new Map<string, unknown>();
+  const tui = { terminal: { rows: 30 }, requestRender() {} };
+  m.installActivityBudget(tui, above, below);
+  let expanded = false;
+  let widget: any;
+  const ctx = { theme: m.theme, getToolsExpanded: () => expanded,
+    setWidget(key: string, factory: any) {
+      if (factory) { above.set(key, factory); widget = factory(tui, m.theme); }
+      else above.delete(key);
+    } };
+  const overlay = new m.TodoOverlay();
+  overlay.setUICtx(ctx);
+  overlay.update();
+  const render = (width = 40) => widget.render(width).map(m.tui.stripTerminalSequences);
+  const normal = widget.render(80);
+  let previousWidget: any;
+  const previous = new m.PreviousTodoOverlay();
+  previous.setUICtx({ ...ctx, setWidget(_key: string, factory: any) { previousWidget = factory(tui, m.theme); } });
+  previous.update();
+  for (const width of [80, 120]) expect(widget.render(width)).toEqual(previousWidget.render(width));
+
+  tui.terminal.rows = 14;
+  above.set("agents", {});
+  let lines = render();
+  expect(lines).toHaveLength(2);
+  expect(previousWidget.render(40).length).toBeGreaterThan(2);
+  expect(lines[0]).toContain("Todos (1/4) · +3 more");
+  expect(lines[1]).toContain("Active");
+  expect(lines[1]).not.toContain("Waiting");
+  expect(lines.every((line: string) => line.trim().length > 0)).toBe(true);
+  expanded = true;
+  expect(render()).toEqual(lines);
+  expect(expanded).toBe(true);
+  above.delete("agents");
+  lines = render();
+  expect(lines).toHaveLength(4);
+  expect(lines[0]).toContain("+1 more");
+  expect(lines[1]).toContain("Active");
+  expect(lines[2]).toContain("Waiting");
+  expect(lines[3]).toContain("Later");
+
+  tui.terminal.rows = 12;
+  above.set("agents", {});
+  lines = render();
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("Todos · +3 more · ◈ Active");
+  for (const width of [1, 2, 3, 4, 8, 20, 40, 79, 80]) {
+    for (const line of widget.render(width)) expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
+  }
+  expect(m.todoGutter(40)).toBe(1);
+  expect(m.todoGutter(79)).toBe(1);
+  expect(m.todoGutter(80)).toBe(3);
+  const tool = m.renderTodoCall({ action: "create", subject: "漢字 é" }, m.theme, state);
+  expect(text(m, tool, 40)).toMatch(/^ ▧ Todo/);
+  expect(text(m, tool, 80)).toMatch(/^   ▧ Todo/);
+  for (const width of [1, 2, 3, 4, 8]) {
+    for (const line of tool.render(width)) expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
+  }
+
+  overlay.toggleCollapse();
+  expect(render()).toHaveLength(1);
+  expect(render()[0]).toContain("collapsed");
+  tui.terminal.rows = 14;
+  expect(render()).toHaveLength(2);
+  expect(render()[1]).toContain("collapsed");
+  tui.terminal.rows = 30;
+  expect(render().join("\n")).toContain("collapsed");
+  overlay.toggleCollapse();
+  expanded = false;
+  expect(widget.render(80)).toEqual(normal);
+  expect(m.store.getState("compact")).toBe(state);
+
+  // Short previews do not change the pre-existing completed-display policy:
+  // a noncollapsed render tracks eligible completed tasks, not its chosen slice.
+  for (const Controller of [m.TodoOverlay, m.PreviousTodoOverlay]) {
+    let trackedWidget: any;
+    const tracked = new Controller();
+    tracked.setUICtx({ ...ctx, setWidget(_key: string, factory: any) { trackedWidget = factory(tui, m.theme); } });
+    tracked.update();
+    tracked.toggleCollapse();
+    tui.terminal.rows = 6;
+    trackedWidget.render(40);
+    tracked.hideCompletedTasksFromPreviousTurn();
+    tracked.toggleCollapse();
+    tui.terminal.rows = 30;
+    expect(text(m, trackedWidget)).toContain("Done");
+    tui.terminal.rows = 6;
+    trackedWidget.render(40);
+    tracked.hideCompletedTasksFromPreviousTurn();
+    tui.terminal.rows = 30;
+    expect(text(m, trackedWidget)).not.toContain("Done");
+    tracked.resetCompletedDisplayState();
+    expect(text(m, trackedWidget)).toContain("Done");
+  }
+});
+
+realTest("compact Todo counts remain factual when several active or only completed tasks overflow", async () => {
+  const m = await real();
+  let widget: any;
+  let cap = 2;
+  let expanded = false;
+  m.store.__resetState();
+  m.store.setActiveRenderSession("compact-counts");
+  const overlay = new m.TodoOverlay();
+  const ctx = { theme: m.theme, getToolsExpanded: () => expanded,
+    setWidget(_key: string, factory: any) { widget = factory({ requestRender() {}, configsActivityRows: () => cap }, m.theme); } };
+  overlay.setUICtx(ctx);
+  for (const status of ["in_progress", "completed", "pending"]) {
+    m.store.replaceState("compact-counts", { tasks: [task(1, status), task(2, status), task(3, status)], nextId: 4 });
+    overlay.resetCompletedDisplayState();
+    overlay.update();
+    for (cap of [1, 2, 3, 4]) {
+      const lines = widget.render(80).map(m.tui.stripTerminalSequences);
+      expect(lines.length).toBeLessThanOrEqual(cap);
+      const shown = lines.join("\n").match(/Task \d/g)?.length ?? 0;
+      const hidden = 3 - shown;
+      if (hidden) expect(lines[0]).toContain(`+${hidden} more`);
+      else expect(lines[0]).not.toContain("more");
+      expect(lines.every((line: string) => line.trim())).toBe(true);
+    }
+  }
+  const configPath = join(m.home, ".config/rpiv-todo/config.json");
+  writeFileSync(configPath, '{"maxWidgetLines":3,"collapseKey":"off"}');
+  cap = 7;
+  m.store.replaceState("compact-counts", { tasks: Array.from({ length: 9 }, (_, i) => task(i + 1, "pending")), nextId: 10 });
+  expect(widget.render(80)).toHaveLength(3);
+  expanded = true;
+  expect(widget.render(80)).toHaveLength(7);
+  ctx.theme = { ...m.theme, fg: (_: string, value: string) => value.toUpperCase(), strikethrough: (value: string) => value };
+  widget.invalidate();
+  expect(text(m, widget)).toContain("TODOS");
+  expect(expanded).toBe(true);
 });
 
 realTest("/todos stays a notification with IDs, ordered status groups, active form and sanitized rows", async () => {

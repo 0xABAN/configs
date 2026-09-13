@@ -66,7 +66,7 @@ test("the initial-renderer hook migrates exactly and mixed hooks refuse", () => 
   let previous = contents(root)[0]! + "\n" + LEGACY_EDITS[1][0];
   for (const [old, patched] of LEGACY_EDITS) previous = previous.replaceAll(old, patched);
   writeFileSync(join(root, HOST), previous);
-  writeFileSync(join(root, MODULE), readFileSync(new URL("../patches/payloads/host/compact-layout.js.inc", import.meta.url), "utf8"));
+  writeFileSync(join(root, MODULE), readFileSync(new URL("../patches/payloads/host/legacy/compact-layout-v1.js.inc", import.meta.url), "utf8"));
   checkProcess(run(root));
   const after = contents(root);
   expect(after[0]).toContain(EDITS[1][1]);
@@ -110,18 +110,18 @@ realTest("native widget stack shares live short-window budgets without wrapping 
   for (const rows of [40, 12, 16, 20, 24, 12, 40]) {
     app.ui.terminal.rows = rows;
     const lines = app.widgetContainerAbove.render(40);
-    expect(lines.length).toBe(rows >= 24 ? 13 : 2 * Math.floor(Math.floor(rows / 3) / 2));
+    expect(lines.length).toBe(rows >= 24 ? 13 : rows === 12 ? 2 : rows === 16 ? 4 : 6);
     for (const component of app.extensionWidgetsAbove.values()) {
       expect(app.widgetContainerAbove.children).toContain(component);
     }
   }
   app.ui.terminal.rows = 12;
   app.setExtensionWidget("agents", undefined);
-  expect(app.widgetContainerAbove.render(40)).toEqual(Array(4).fill("rpiv-todos"));
+  expect(app.widgetContainerAbove.render(40)).toEqual(Array(2).fill("rpiv-todos"));
   expect(disposed).toBe(1);
   const custom = { render: () => ["untouched"], invalidate() {} };
   app.setExtensionWidget("unrelated", () => custom);
-  expect(app.ui.configsActivityRows()).toBe(4);
+  expect(app.ui.configsActivityRows()).toBe(2);
   expect(app.extensionWidgetsAbove.get("unrelated")).toBe(custom);
   app.clearExtensionWidgets();
   expect(disposed).toBe(2);
@@ -151,7 +151,7 @@ realTest("activity budgets follow regular/fullscreen renderer replacement", asyn
   const budget = app.ui.configsActivityRows;
   for (const mode of ["regular", "fullscreen", "regular"]) {
     expect(app.switchTuiMode(mode, false, false)).toBe(true);
-    expect(budget()).toBe(2);
+    expect(budget()).toBe(1);
     terminal.rows = 40;
     expect(budget()).toBe(Infinity);
     terminal.rows = 12;

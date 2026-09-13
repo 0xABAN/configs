@@ -84,6 +84,46 @@ test("complete previous helper migrates with an exact backup; modified helpers s
   expect(readdirSync(backups)).toHaveLength(before.length + 1);
 });
 
+test("compact widget migrates each complete predecessor and refuses modified source before writes", () => {
+  for (const helper of ["LEGACY_MODULE_SOURCE", "PRE_COMPACT_MODULE_SOURCE"]) {
+    const root = sandbox(`pre-compact-${helper}`);
+    check(run(root));
+    check(patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
+name=m['WIDGET']
+source=(root/name).read_text().removeprefix(m['MARKER']+'\\n')
+original=m['transform'](name,source,True)
+previous=m['replace_counted'](original,m['LEGACY_WIDGET_EDITS'],'previous widget')
+(root/name).write_text(m['MARKER']+'\\n'+previous)
+(root/m['MODULE']).write_text(m[sys.argv[3]])
+`, [root, helper]));
+    const before = contents(root);
+    const backups = join(root, ".config/theme-backups");
+    const previousBackups = readdirSync(backups);
+    check(run(root));
+    expect(contents(root)["src/ui/agent-widget.ts"]).toContain("configs:subagents-compact-widget-v1");
+    const added = readdirSync(backups).filter(name => !previousBackups.includes(name));
+    expect(added).toHaveLength(1);
+    for (const file of files.concat(modulePath)) {
+      expect(readFileSync(join(backups, added[0], file), "utf8")).toBe(before[file]!);
+    }
+    expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
+    const after = contents(root);
+    check(run(root));
+    expect(contents(root)).toEqual(after);
+    expect(readdirSync(backups)).toHaveLength(previousBackups.length + 1);
+
+    // An exact historical helper cannot authorize replacing edited widget code.
+    for (const [file, source] of Object.entries(before)) writeFileSync(join(root, file), source!);
+    const widget = join(root, "src/ui/agent-widget.ts");
+    writeFileSync(widget, readFileSync(widget, "utf8").replace("this.renderWidget(inner, theme)", "this.renderWidget(inner, customTheme)"));
+    const modified = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(modified);
+    expect(readdirSync(backups)).toHaveLength(previousBackups.length + 1);
+  }
+});
+
 test("absent installation is skipped without creating it", () => {
   const root = join(temp, "absent");
   check(run(root));
@@ -133,7 +173,7 @@ let loaded: Promise<any> | undefined;
 function real() {
   return loaded ??= (async () => {
     copySdk(sdkSource!, sdk);
-    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript"]);
+    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript", "pi-compact-layout"]);
     const root = sandbox("real", true);
     check(run(root));
     // Package dependencies remain read-only. Resolve SDK peers to Pi's own copy.
@@ -190,7 +230,13 @@ realTest("shared foreground-only labels, geometric states and gutter preserve Un
     if (width > 1) expect(lines.join("\n")).toContain(marker);
   }
   const image = "\x1b_Ga=T,f=100;AAAA\x1b\\";
-  expect(m.renderAgentBody(30, () => [image])[0]).toBe("   " + image);
+  expect(m.renderAgentBody(30, () => [image])[0]).toBe(" " + image);
+  for (const width of [1, 2, 4, 40, 79, 80, 120]) {
+    const expected = Math.min(width < 80 ? 1 : 3, Math.max(0, Math.floor((width - 2) / 2)));
+    expect(m.agentBodyWidth(width).pad).toBe(expected);
+    expect(m.agentBodyWidth(width, 0).pad).toBe(0);
+    expect(m.renderAgentBody(width, () => ["literal"], 0)[0]).not.toStartWith(" ");
+  }
 });
 
 realTest("AgentWidget uses render width, rounded branches, all states and real activity without badges", async () => {
@@ -220,6 +266,158 @@ realTest("AgentWidget uses render width, rounded branches, all states and real a
   expect(plain(m, component.render(120))).toContain("keep ├─ and ⎿ intact");
   component.invalidate();
   widget.dispose();
+});
+
+realTest("compact AgentWidget budgets heading and useful rows without changing records, modes or linger", async () => {
+  const m = await real();
+  let component: any;
+  let cap = Infinity;
+  let reads = 0;
+  let mode = "all";
+  const agents = [
+    ...["r1", "r2", "r3"].map(id => record("running", id)),
+    record("queued", "q1"), record("queued", "q2"),
+    record("error", "e"), record("aborted", "a"), record("steered", "s"), record("stopped", "x"),
+    record("completed", "c1"), record("completed", "c2"),
+  ];
+  for (const agent of agents) Object.freeze(agent);
+  const before = JSON.stringify(agents);
+  const widget = new m.AgentWidget({ listAgents: () => agents }, new Map(), () => mode,
+    () => { throw new Error("compact preview must not compute dense cost metadata"); },
+    () => { throw new Error("compact preview must not compute dense model metadata"); });
+  widget.setUICtx({ setStatus() {}, setWidget(_key: string, factory: any) {
+    if (factory) component = factory({ terminal: { columns: 120 }, requestRender() {},
+      configsActivityRows: () => { reads++; return cap; } }, m.theme);
+  } });
+  widget.update();
+  widget.markFinished("e");
+  const ages = [...widget.finishedTurnAge];
+  const frame = widget.widgetFrame;
+  for (const budget of [1, 2, 3, 6]) {
+    cap = budget;
+    for (const width of [40, 79, 80, 120]) {
+      const lines = component.render(width);
+      within(m, lines, width);
+      expect(lines).toHaveLength(budget);
+      noBackground(lines);
+      const heading = m.tui.stripTerminalSequences(lines[0]);
+      // Totals are exact even when their detail rows cannot fit. The narrow
+      // labels distinguish errors from abort/turn-limit/stop outcomes.
+      if (width < 80) {
+        for (const count of ["3r", "2q", "1err", "1ab", "1lim", "1stop", "2✓"]) expect(heading).toContain(count);
+      } else {
+        for (const count of ["3 running", "2 queued", "1 error", "1 aborted", "1 turn limit", "1 stopped", "2 done"]) {
+          if (width === 120) expect(heading).toContain(count);
+        }
+      }
+      expect(heading).toContain(`+${9 - (budget - 1)}`);
+      if (budget >= 2) expect(plain(m, [lines[1]])).toContain("Inspect 界");
+      if (budget >= 3) expect(plain(m, lines)).toContain("error: permission denied");
+    }
+  }
+  expect(reads).toBe(16);
+  expect(widget.finishedTurnAge).toEqual(new Map(ages));
+  expect(widget.widgetFrame).toBe(frame);
+  expect(JSON.stringify(agents)).toBe(before);
+
+  // Width alone compacts metadata on an unbounded-height host.
+  cap = Infinity;
+  within(m, component.render(40), 40);
+  mode = "off";
+  expect(component.render(40)).toEqual([]);
+  mode = "all";
+  agents.splice(0, agents.length, record("completed", "finished"), record("error", "failed"));
+  for (const budget of [1, 2, 3, 6]) {
+    cap = budget;
+    const lines = component.render(120);
+    expect(lines).toHaveLength(Math.min(budget, 3));
+    expect(plain(m, [lines[0]])).toContain("1 error 1 done");
+    if (budget >= 2) expect(plain(m, [lines[1]])).toContain("error: permission denied");
+  }
+  agents.splice(0, agents.length, record("queued", "only-queue"));
+  cap = 1;
+  expect(plain(m, component.render(40))).toContain("1 queued");
+  widget.dispose();
+});
+
+realTest("AgentWidget reads the shared host allowance after resize and Todo registration changes", async () => {
+  const m = await real();
+  const { installActivityBudget } = await import(pathToFileURL(join(sdk, "dist/modes/interactive/components/compact-layout.js")).href);
+  const tui = { terminal: { rows: 14 }, requestRender() {} };
+  const above = new Map();
+  installActivityBudget(tui, above, new Map());
+  let component: any;
+  const agents = Array.from({ length: 6 }, (_, index) => record("running", `r${index}`));
+  const widget = new m.AgentWidget({ listAgents: () => agents }, new Map());
+  widget.setUICtx({ setStatus() {}, setWidget(key: string, factory: any) {
+    if (factory) {
+      above.set(key, factory);
+      component = factory(tui, m.theme);
+    } else above.delete(key);
+  } });
+  widget.update();
+  expect(component.render(100)).toHaveLength(4);
+  above.set("rpiv-todos", {});
+  expect(component.render(120)).toHaveLength(2);
+  component.invalidate();
+  // Native lifecycle clears the manager's cache before registering again.
+  // The existing component must still read its factory's live TUI budget.
+  expect(widget.tui).toBeUndefined();
+  expect(widget.widgetRegistered).toBe(false);
+  expect(component.render(120)).toHaveLength(2);
+  above.delete("rpiv-todos");
+  expect(component.render(120)).toHaveLength(4);
+  tui.terminal.rows = 18;
+  expect(component.render(100)).toHaveLength(6);
+  tui.terminal.rows = 24;
+  expect(component.render(100).length).toBeGreaterThan(6);
+  widget.dispose();
+});
+
+realTest("resizing back to full height restores byte-identical original AgentWidget output", async () => {
+  const m = await real();
+  const previousFile = join(m.root, "src/ui/agent-widget-previous.ts");
+  check(patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
+source=(root/m['WIDGET']).read_text().removeprefix(m['MARKER']+'\\n')
+original=m['transform'](m['WIDGET'],source,True)
+pathlib.Path(sys.argv[3]).write_text(m['replace_counted'](original,m['LEGACY_WIDGET_EDITS'],'previous widget'))
+`, [m.root, previousFile]));
+  const previous = await import(pathToFileURL(previousFile).href);
+  const agents = [record("running", "r"), record("queued", "q"), record("error", "e"), record("completed", "c")];
+  let cap = Infinity;
+  const create = (Widget: any, patchedHost: boolean) => {
+    let component: any;
+    const widget = new Widget({ listAgents: () => agents }, new Map());
+    widget.setUICtx({ setStatus() {}, setWidget(_key: string, factory: any) {
+      if (factory) component = factory({ terminal: { columns: 120 }, requestRender() {},
+        ...(patchedHost ? { configsActivityRows: () => cap } : {}) }, m.theme);
+    } });
+    widget.update();
+    return { widget, component };
+  };
+  const current = create(m.AgentWidget, true);
+  const fallback = create(m.AgentWidget, false);
+  const old = create(previous.AgentWidget, false);
+  const now = Date.now;
+  try {
+    const fixed = now();
+    Date.now = () => fixed;
+    for (const width of [80, 120]) {
+      const baseline = old.component.render(width);
+      expect(current.component.render(width)).toEqual(baseline);
+      expect(fallback.component.render(width)).toEqual(baseline);
+      cap = 2;
+      expect(current.component.render(width)).toHaveLength(2);
+      cap = Infinity;
+      expect(current.component.render(width)).toEqual(baseline);
+    }
+  } finally {
+    Date.now = now;
+    current.widget.dispose();
+    fallback.widget.dispose();
+    old.widget.dispose();
+  }
 });
 
 realTest("FleetView keeps focus, selection, navigation and workflow rows inside the shared gutter", async () => {
@@ -456,7 +654,7 @@ realTest("Agent call/results/streaming/notifications and workflow registrations 
   for (const callback of handlers.get("session_shutdown") ?? []) await callback({}, {});
 });
 
-realTest("agent text reuses native Text while retaining previous gutter and render behavior", async () => {
+realTest("agent text reuses native Text while retaining large-window output and compact gutters", async () => {
   const m = await real();
   const previousPath = join(m.root, "src/ui/agent-chrome-previous.ts");
   writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/subagents/legacy/subagents-ui.ts.inc", import.meta.url), "utf8"));
@@ -481,5 +679,9 @@ realTest("agent text reuses native Text while retaining previous gutter and rend
   } finally {
     m.tui.Text.prototype.render = render;
   }
-  for (const width of [0, 1, 2, 4, 8, 20, 80]) expect(text.render(width)).toEqual(oldText.render(width));
+  for (const width of [0, 1, 2, 80, 120]) expect(text.render(width)).toEqual(oldText.render(width));
+  for (const width of [4, 8, 20, 79]) {
+    const expected = m.renderAgentBody(width, (inner: number) => new m.tui.Text(display(), 0, 0).render(inner));
+    expect(text.render(width)).toEqual(expected);
+  }
 });

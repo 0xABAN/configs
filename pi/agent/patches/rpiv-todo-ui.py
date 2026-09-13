@@ -21,7 +21,7 @@ SUBJECT_PATTERN = re.compile(
     r't\.status === "completed" \|\| t\.status === "deleted" \? "dim" : "thinkingText";'
 )
 
-LAYOUT = read_payload('todo/format-layout.ts.inc')
+LAYOUT = read_payload('todo/legacy/format-layout.ts.inc')
 
 # Match exactly what the legacy injector installs, without owning its backend.
 # Only notification expressions below change; no persistence code is copied here.
@@ -203,7 +203,33 @@ for group, glyph, section in [("pending", "○", "PENDING"), ("inProgress", "◐
 COUNTS = {("todo-overlay.ts", 'theme.fg("dim", "└─")'): 2}
 
 
-def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+# Compact changes form a second complete stage over the exact prior UI. This
+# preserves both its backend-aware clear replay and its existing anchor policy.
+COMPACT_EDITS = {
+    "view/format.ts": [(LAYOUT, read_payload('todo/format-layout.ts.inc'))],
+    "todo-overlay.ts": [
+        ('\t\tconst overlayState = { tasks: overlayTasks, nextId: snapshot.nextId };',
+         '''\t\t// configs:rpiv-todo-compact-budget-v1
+		const activityTui = this.tui as (TUI & { configsActivityRows?: () => number }) | undefined;
+		const previewRows = activityTui?.configsActivityRows?.() ?? Infinity;
+		const overlayState = { tasks: overlayTasks, nextId: snapshot.nextId };'''),
+        ('\t\tconst heading = truncate(`${theme.fg(titleTone, headingIcon)} ${theme.fg("muted", headingText)}`);',
+         '''\t\tconst headingContent = `${theme.fg(titleTone, headingIcon)} ${theme.fg("muted", headingText)}`;
+		const heading = truncate(headingContent);'''),
+        ('\t\t\treturn this.withTrailingSpacer([heading, truncate(`${theme.fg("dim", "╰─")} ${theme.fg("dim", hint)}`)]);',
+         '''\t\t\tif (Number.isFinite(previewRows)) {
+				return previewRows === 1
+					? [truncate(`${headingContent} · ${theme.fg("dim", hint)}`)]
+					: [heading, truncate(`${theme.fg("dim", "╰─")} ${theme.fg("dim", hint)}`)];
+			}
+			return this.withTrailingSpacer([heading, truncate(`${theme.fg("dim", "╰─")} ${theme.fg("dim", hint)}`)]);'''),
+        ('\t\tif (layout.hiddenCompleted === 0 && layout.truncatedTail === 0) {',
+         read_payload('todo/compact-preview.ts.inc') + '\n\t\tif (layout.hiddenCompleted === 0 && layout.truncatedTail === 0) {'),
+    ],
+}
+
+
+def patch_legacy_sources(sources: dict[str, str]) -> dict[str, str]:
     normalized = dict(sources)
     normalized["view/format.ts"] = SUBJECT_PATTERN.sub(lambda _: SUBJECT, normalized["view/format.ts"])
     # A single old-gray pass used accent before a later replay made it gray.
@@ -237,6 +263,33 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         for old, new in edits:
             if (name, old) in legacy:
                 result[name] = result[name].replace(old, new)
+    return result
+
+
+def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+    """Migrate only complete compact/previous UI stages; never write partial ones."""
+    normalized = dict(sources)
+    compact = any(new in sources[name] for name, edits in COMPACT_EDITS.items() for _, new in edits)
+    if compact:
+        for name, edits in COMPACT_EDITS.items():
+            remainder = sources[name]
+            for old, new in edits:
+                if remainder.count(new) != 1:
+                    raise ValueError(f"{name}: mixed/modified compact Todo UI")
+                remainder = remainder.replace(new, "")
+            for old, _ in edits:
+                if old in remainder:
+                    raise ValueError(f"{name}: residual compact Todo UI anchor")
+            for old, new in edits:
+                normalized[name] = normalized[name].replace(new, old)
+    result = patch_legacy_sources(normalized)
+    # Prior-stage validation must finish across every file before migration.
+    result = dict(result)
+    for name, edits in COMPACT_EDITS.items():
+        for old, new in edits:
+            if result[name].count(old) != 1:
+                raise ValueError(f"{name}: unknown compact Todo UI anchor: {old[:70]}")
+            result[name] = result[name].replace(old, new)
     return result
 
 

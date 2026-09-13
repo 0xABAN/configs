@@ -12,7 +12,7 @@ export function agentSettingsTheme(): ReturnType<typeof getSettingsListTheme> {
 
 /** The host already owns the outer viewport inset; this is its body gutter. */
 export function agentBodyWidth(width: number, padding = 3): { pad: number; inner: number } {
-  const pad = Math.min(padding, width < 80 ? 1 : padding, Math.max(0, Math.floor((width - 2) / 2)));
+  const pad = Math.min(padding, Math.max(0, Math.floor((width - 2) / 2)));
   return { pad, inner: Math.max(0, width - pad * 2) };
 }
 

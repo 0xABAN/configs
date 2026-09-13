@@ -1,7 +1,7 @@
 // configs:rpiv-todo-ui-v1
 /** Match the transcript body gutter; leave room for text in narrow panes. */
 export function todoGutter(width: number): number {
-	return Math.min(width < 80 ? 1 : 3, Math.max(0, Math.floor((width - 2) / 2)));
+	return Math.min(3, Math.max(0, Math.floor((width - 2) / 2)));
 }
 
 /** Self-shell tools wrap rather than discard details, without painting a box. */
