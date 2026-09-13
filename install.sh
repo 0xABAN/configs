@@ -115,9 +115,27 @@ if [[ -f "$ROOT/pi/agent/patches/pi-transcript.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-transcript.py"
 fi
 
+# Agents' pickers, confirmations and editors use these shared native dialogs.
+if [[ -f "$ROOT/pi/agent/patches/pi-extension-dialogs.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-extension-dialogs.py"
+fi
+
+# Native notifications own wrapping, including continuation-line indentation.
+if [[ -f "$ROOT/pi/agent/patches/pi-activity-notices.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-activity-notices.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true
+fi
+
+# Match extension-owned activity surfaces to the transcript, after legacy todo tweaks.
+if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-ui.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/rpiv-todo-ui.py"
+fi
+if [[ -f "$ROOT/pi/agent/patches/subagents-ui.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/subagents-ui.py"
 fi
 
 echo

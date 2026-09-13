@@ -76,13 +76,28 @@ test("dependency installation failure leaves existing config links untouched", (
 });
 
 test("installer runs the Pi rendering patches and surfaces incompatible installations", () => {
-  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py", "pi-transcript.py"]) {
+  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py", "pi-transcript.py", "pi-extension-dialogs.py", "pi-activity-notices.py", "rpiv-todo-ui.py", "subagents-ui.py"]) {
     const { cwd, run } = sandbox(name);
     const patches = join(cwd, "pi/agent/patches");
     mkdirSync(patches);
     writeFileSync(join(patches, name), "raise SystemExit(23)\n");
     expect(run().exitCode).toBe(23);
   }
+});
+
+test("activity styling runs after legacy todo tweaks", () => {
+  const { cwd, home, run } = sandbox("activity-order");
+  const patches = join(cwd, "pi/agent/patches");
+  mkdirSync(patches);
+  const names = ["pi-extension-dialogs.py", "pi-activity-notices.py", "rpiv-todo-gray.py", "rpiv-todo-ui.py", "subagents-ui.py"];
+  for (const name of names) {
+    writeFileSync(join(patches, name), `from pathlib import Path
+with (Path.home() / "patch-order.log").open("a") as log:
+    log.write("${name}\\n")
+`);
+  }
+  expect(run().exitCode).toBe(0);
+  expect(readFileSync(join(home, "patch-order.log"), "utf8")).toBe(names.join("\n") + "\n");
 });
 
 test("DJ has a single source and its legacy auto-discovered copy is removed", () => {

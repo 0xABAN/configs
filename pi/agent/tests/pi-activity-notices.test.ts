@@ -1,0 +1,117 @@
+import { afterAll, expect, test } from "bun:test";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const patcher = fileURLToPath(new URL("../patches/pi-activity-notices.py", import.meta.url));
+const described = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({k:m[k] for k in ['HOST','MODULE','EDITS']}))", patcher]);
+if (described.exitCode) throw new Error(described.stderr.toString());
+const { HOST, MODULE, EDITS } = JSON.parse(described.stdout.toString()) as { HOST: string; MODULE: string; EDITS: [string, string][] };
+const temp = mkdtempSync(join(tmpdir(), "pi-activity-notices-"));
+afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: root, HOME: root } });
+const contents = (root: string) => [HOST, MODULE].map(file => existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null);
+function fixture(name: string) {
+  const root = join(temp, name);
+  mkdirSync(dirname(join(root, MODULE)), { recursive: true });
+  writeFileSync(join(root, "package.json"), '{"version":"0.84.2","type":"module"}');
+  writeFileSync(join(root, HOST), EDITS.map(([old]) => old).join("\n") + "\n// unrelated host work\n");
+  return root;
+}
+
+test("notices validate every anchor, back up exact originals and reapply without writes", () => {
+  const root = fixture("valid");
+  const before = contents(root);
+  expect(run(root).exitCode).toBe(0);
+  const after = contents(root);
+  const backups = join(root, ".config/theme-backups");
+  const names = readdirSync(backups);
+  expect(names).toHaveLength(1);
+  expect(readFileSync(join(backups, names[0], HOST), "utf8")).toBe(before[0]!);
+  expect(JSON.parse(readFileSync(join(backups, names[0], "added-files.json"), "utf8"))).toEqual([MODULE]);
+  expect(after[0]).toContain("// unrelated host work");
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(after);
+  expect(readdirSync(backups)).toEqual(names);
+});
+
+test("notices reject partial, duplicate and changed sources without writes", () => {
+  for (const state of ["version", "duplicate", "partial", "modified", "missing", "unexpected"]) {
+    const root = fixture(state);
+    if (state === "version") writeFileSync(join(root, "package.json"), '{"version":"0.85.0"}');
+    else if (state === "duplicate") writeFileSync(join(root, HOST), contents(root)[0] + EDITS[0][0]);
+    else if (state === "partial") writeFileSync(join(root, HOST), contents(root)[0]!.replace(...EDITS[0]));
+    else if (state === "unexpected") writeFileSync(join(root, MODULE), "unrelated helper");
+    else {
+      expect(run(root).exitCode).toBe(0);
+      if (state === "missing") rmSync(join(root, MODULE));
+      else writeFileSync(join(root, MODULE), "modified helper");
+    }
+    const before = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(before);
+  }
+  expect(run(join(temp, "absent")).exitCode).toBe(0);
+});
+
+const sdk = process.env.PI_SDK_ROOT;
+const child = process.env.CONFIGS_NOTICES_TEST_CHILD === "1";
+if (sdk && !child) {
+  test("native notification methods pass in an isolated host", () => {
+    const result = Bun.spawnSync([process.execPath, "test", import.meta.path], {
+      env: { ...process.env, CONFIGS_NOTICES_TEST_CHILD: "1" }, timeout: 30_000,
+    });
+    if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
+    expect(result.stderr.toString()).toContain("3 pass");
+  });
+}
+const realTest = sdk && child ? test : test.skip;
+realTest("native notices align every wrapped line and preserve coalescing, warnings and errors", async () => {
+  const root = join(temp, "real");
+  cpSync(join(sdk!, "dist"), join(root, "dist"), { recursive: true });
+  cpSync(join(sdk!, "package.json"), join(root, "package.json"));
+  symlinkSync(join(sdk!, "node_modules"), join(root, "node_modules"));
+  const result = run(root);
+  if (result.exitCode) throw new Error(result.stderr.toString());
+  const { InteractiveMode } = await import(pathToFileURL(join(root, HOST)).href);
+  const tui = await import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+  const colors = await import(pathToFileURL(join(root, "dist/modes/interactive/theme/theme.js")).href);
+  colors.setThemeInstance(colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
+  const app = Object.create(InteractiveMode.prototype);
+  app.chatContainer = new tui.Container();
+  app.ui = { requestRender() {} };
+  app.outputPad = 1;
+  app.showExtensionNotify("◇ Todos\n╰─ ◈ This task has a long subject 漢字 é and active form", "info");
+  const first = app.lastStatusText;
+  for (const width of [4, 8, 20, 80]) {
+    const padding = Math.min(3, Math.max(0, Math.floor((width - 2) / 2)));
+    const lines = first.render(width);
+    for (const line of lines) {
+      expect(tui.visibleWidth(line)).toBeLessThanOrEqual(width);
+      expect(tui.stripTerminalSequences(line)).toStartWith(" ".repeat(padding));
+    }
+  }
+  expect(first.render(20).length).toBeGreaterThan(3);
+  app.showExtensionNotify("◇ Todos cleared", "info");
+  expect(app.lastStatusText).toBe(first);
+  expect(app.chatContainer.children).toHaveLength(2);
+  expect(first.render(80).map(tui.stripTerminalSequences).join("\n")).toContain("   ◇ Todos cleared");
+  app.outputPad = 3;
+  expect(tui.stripTerminalSequences(first.render(80)[0])).toStartWith("     ◇ Todos cleared");
+  for (const type of ["warning", "error"]) {
+    app.showExtensionNotify("Detail preserved", type);
+    const notice = app.chatContainer.children.at(-1);
+    const line = notice.render(80)[0];
+    expect(line).toContain(colors.theme.getFgAnsi(type));
+    expect(tui.stripTerminalSequences(line)).toContain(type === "error" ? "Error: Detail preserved" : "Warning: Detail preserved");
+  }
+  expect(app.chatContainer.children).toHaveLength(6);
+  app.showExtensionNotify("new status after error", "info");
+  expect(app.chatContainer.children).toHaveLength(8);
+  // The added import/notice anchors must coexist with the existing transcript patch.
+  const transcript = Bun.spawnSync(["python3", "-B", fileURLToPath(new URL("../patches/pi-transcript.py", import.meta.url))], {
+    env: { ...process.env, PI_SDK_ROOT: root, HOME: root },
+  });
+  expect(transcript.exitCode).toBe(0);
+});

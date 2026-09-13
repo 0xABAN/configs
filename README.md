@@ -210,6 +210,40 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 
 Restart Pi to apply host changes; `/reload` alone is not enough.
 
+### Todos and Agents
+
+The extension-owned Todos and Agents surfaces follow the transcript's palette,
+rounded trees, and geometric status glyphs. Activity uses a three-column body
+inset inside the existing host viewport, not another terminal-wide margin.
+Labels stay white/cream, metadata and completed rows are muted, and errors stay
+visible. Agent names no longer use filled badges; real selection highlights remain.
+
+This covers the persistent widgets, inline tool output and notifications, plus
+Agents' FleetView, menus, and conversation/workflow panels. Task/agent state,
+commands, keyboard controls, expansion, and execution are unchanged. `/todos`
+remains a notification, not a new panel.
+
+The guarded patches target **rpiv-todo 2.9.0** and **pi-subagents 0.19.0**. The
+installer runs them after the older todo tweaks. Native notifications, pickers,
+confirmations, and editors share **Pi 0.84.2** host patches, so wrapped lines
+align and open dialogs refresh their theme too. These shared components also
+style the same dialogs used by other extensions. Apply once and **restart Pi**:
+
+```sh
+python3 pi/agent/patches/pi-extension-dialogs.py
+python3 pi/agent/patches/pi-activity-notices.py
+```
+
+After reinstalling either extension package, replay its patch and `/reload`:
+
+```sh
+python3 pi/agent/patches/rpiv-todo-ui.py
+python3 pi/agent/patches/subagents-ui.py
+```
+
+They back up changed files and refuse unknown or incompatible sources. Review
+before upgrading the packages; do not force patches through changed anchors.
+
 ## Sync workflow
 
 Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `configs` update so new installs can find the referenced paths.
