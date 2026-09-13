@@ -219,21 +219,6 @@ export class TranscriptContainer extends Container {
             if (child.transcriptRole === "pi" || child.transcriptRole === "user") {
                 child.transcriptTight = tight;
             }
-            if (child.transcriptRole === "tool") {
-                const defaultTextBody = child.getRenderShell?.() === "default"
-                    && !child.result?.content?.some(part => part.type === "image");
-                const nativePadding = defaultTextBody
-                    ? Math.min(bodyPadding, Math.max(0, Math.floor((width - 1) / 2)))
-                    : 1;
-                // ponytail: pinned 0.84.2 Box/Text fields; use setters if upstream adds them.
-                // Only the host shell changes, never extension-owned framing or image rows.
-                for (const body of [child.contentBox, child.contentText]) {
-                    if (body && body.paddingX !== nativePadding) {
-                        body.paddingX = nativePadding;
-                        body.invalidate();
-                    }
-                }
-            }
             const nativeLines = child.render(width);
             if (child.transcriptRole === "tool") {
                 // Every call keeps its row, even when its renderer is silent. Custom,

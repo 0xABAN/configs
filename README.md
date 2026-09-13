@@ -230,9 +230,11 @@ background rather than using a filled box. The existing input/footer are unchang
 Native tools and the installed pi-pretty formatters use compact rows, with error
 summaries kept visible. The existing tool-output expansion action restores their
 original detailed renderers. Other extensions' custom renderers and image output
-keep their native presentation. There are no per-row click controls. Component
-order is preserved; mixed text/tool/text blocks inside one assistant message
-are not split.
+keep their native presentation. Default-shell tool cards, including Intercom,
+share the transcript body's horizontal gutters and wrap inside that width.
+Narrow panes reclaim the extra gutter. Self-framed renderers and image bodies
+keep their own geometry. There are no per-row click controls. Component order
+is preserved; mixed text/tool/text blocks inside one assistant message are not split.
 
 Completed compact rows reserve their right edge for result counts and elapsed
 call time, for example `152 lines · 1.2s`. Narrow rows use `152L 1.2s` or

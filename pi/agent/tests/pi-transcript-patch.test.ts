@@ -81,41 +81,43 @@ test("complete previous revisions migrate together with exact backups; mixed rev
   }
 });
 
-test("the previous metrics helper upgrades alone and refuses mixed or modified sources", () => {
-  const previous = readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-tool-rows.js.inc", import.meta.url), "utf8");
-  const root = sandbox("tool-rows");
-  expect(run(root).exitCode).toBe(0);
-  const current = contents(root);
-  writeFileSync(join(root, modulePath), previous);
-  const backupRoot = join(root, ".config/theme-backups");
-  const originalBackups = readdirSync(backupRoot);
+for (const helper of ["transcript-before-tool-rows.js.inc", "transcript-before-native-padding.js.inc"]) {
+  test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
+    const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
+    const root = sandbox(helper);
+    expect(run(root).exitCode).toBe(0);
+    const current = contents(root);
+    writeFileSync(join(root, modulePath), previous);
+    const backupRoot = join(root, ".config/theme-backups");
+    const originalBackups = readdirSync(backupRoot);
 
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  const backups = readdirSync(backupRoot);
-  const added = backups.filter(name => !originalBackups.includes(name));
-  expect(added).toHaveLength(1);
-  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
-  expect(JSON.parse(readFileSync(join(backupRoot, added[0], "added-files.json"), "utf8"))).toEqual([]);
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  expect(readdirSync(backupRoot)).toEqual(backups);
+    expect(run(root).exitCode).toBe(0);
+    expect(contents(root)).toEqual(current);
+    const backups = readdirSync(backupRoot);
+    const added = backups.filter(name => !originalBackups.includes(name));
+    expect(added).toHaveLength(1);
+    expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
+    expect(JSON.parse(readFileSync(join(backupRoot, added[0], "added-files.json"), "utf8"))).toEqual([]);
+    expect(run(root).exitCode).toBe(0);
+    expect(contents(root)).toEqual(current);
+    expect(readdirSync(backupRoot)).toEqual(backups);
 
-  for (const state of ["modified-helper", "partial-producer"]) {
-    const invalid = sandbox(state);
-    expect(run(invalid).exitCode).toBe(0);
-    writeFileSync(join(invalid, modulePath), previous + (state === "modified-helper" ? "\n// local edit" : ""));
-    if (state === "partial-producer") {
-      const file = "dist/core/tools/read.js";
-      const [old, patched] = edits[file][0];
-      writeFileSync(join(invalid, file), readFileSync(join(invalid, file), "utf8").replace(patched, old));
+    for (const state of ["modified-helper", "partial-producer"]) {
+      const invalid = sandbox(`${helper}-${state}`);
+      expect(run(invalid).exitCode).toBe(0);
+      writeFileSync(join(invalid, modulePath), previous + (state === "modified-helper" ? "\n// local edit" : ""));
+      if (state === "partial-producer") {
+        const file = "dist/core/tools/read.js";
+        const [old, patched] = edits[file][0];
+        writeFileSync(join(invalid, file), readFileSync(join(invalid, file), "utf8").replace(patched, old));
+      }
+      const before = contents(invalid);
+      expect(run(invalid).exitCode).not.toBe(0);
+      expect(contents(invalid)).toEqual(before);
+      expect(readdirSync(join(invalid, ".config/theme-backups"))).toHaveLength(1);
     }
-    const before = contents(invalid);
-    expect(run(invalid).exitCode).not.toBe(0);
-    expect(contents(invalid)).toEqual(before);
-    expect(readdirSync(join(invalid, ".config/theme-backups"))).toHaveLength(1);
-  }
-});
+  });
+}
 
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
@@ -527,6 +529,75 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
       expect(text).toContain("UNCHANGED FOOTER");
       expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
+  }
+});
+
+realTest("default tool bodies share transcript gutters without clipping wrapped Intercom output", async () => {
+  const m = await real();
+  const app = host(m);
+  let outerPad = 1;
+  app.chatContainer = new m.TranscriptContainer(() => outerPad);
+  const intercom = {
+    renderCall: () => new m.tui.Text(m.colors.theme.fg("accent", "intercom list-cwd"), 0, 0),
+    renderResult: (output: any) => new m.tui.Text(m.colors.theme.fg("text", output.content[0].text), 0, 0),
+  };
+  // Intercom's actual renderer uses zero-padding Text components inside Pi's Box.
+  // The generic fallback uses the host's Text instead; both share the same gutter.
+  for (const definition of [intercom, undefined]) {
+    const tool = new m.ToolExecutionComponent("intercom", "padding", {}, {}, definition, app.ui, temp);
+    if (!definition) tool.setExpanded(true); // Generic fallback bodies are otherwise compacted.
+    const output = result("padding", "intercom", "Current session:\n" + "界🙂 long session description ".repeat(20));
+    tool.updateResult(output);
+    app.chatContainer.clear();
+    app.chatContainer.addChild(tool);
+    const children = [...app.chatContainer.children];
+    const state = tool.rendererState;
+
+    for (const [width, pad] of [[120, 1], [90, 1], [80, 1], [79, 1], [40, 1], [12, 1], [8, 1], [90, 5], [90, 1]]) {
+      outerPad = pad;
+      const expectedPad = width < 80 ? 1 : pad + 2;
+      const lines = app.chatContainer.render(width);
+      const native = tool.render(width);
+      const text = native.map(m.tui.stripTerminalSequences).filter((line: string) => line.trim());
+      expect(text[0].match(/^ */)[0].length).toBe(expectedPad);
+      expect(text.every((line: string) => line.startsWith(" ".repeat(expectedPad)) && line.endsWith(" ".repeat(expectedPad)))).toBe(true);
+      expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+      expect(lines.slice(-native.length)).toEqual(native);
+      expect(app.chatContainer.children).toEqual(children);
+      expect(tool.result).toBe(output);
+      expect(tool.rendererState).toBe(state);
+    }
+    tool.setExpanded(true);
+    const expanded = app.chatContainer.render(90).map(m.tui.stripTerminalSequences);
+    expect(expanded.find((line: string) => line.trimStart().startsWith("intercom"))).toMatch(/^   intercom/);
+  }
+});
+
+realTest("native gutter changes leave self-framed and image bodies unchanged", async () => {
+  const m = await real();
+  const app = host(m);
+  const definition = {
+    renderCall: () => new m.tui.Text("native call", 0, 0),
+    renderResult: () => new m.tui.Text("native result", 0, 0),
+  };
+  for (const renderShell of ["default", "self"]) {
+    const create = () => new m.ToolExecutionComponent("custom", "native-padding", {}, { showImages: false },
+      { ...definition, renderShell }, app.ui, temp);
+    const tool = create();
+    app.chatContainer.clear();
+    app.chatContainer.addChild(tool);
+    tool.updateResult(result("native-padding", "custom", "text first"));
+    app.chatContainer.render(90);
+
+    // A streamed image result must restore the native gutter, not retain the text gutter.
+    const output = { content: [{ type: "image", data: "AA==", mimeType: "image/png" }], isError: false };
+    tool.updateResult(output);
+    const untouched = create();
+    untouched.updateResult(output);
+    const lines = app.chatContainer.render(90);
+    const native = untouched.render(90);
+    expect(lines.slice(-native.length)).toEqual(native);
+    expect(tool.render(90)).toEqual(native);
   }
 });
 
