@@ -48,6 +48,18 @@ test("editor patch is idempotent and preserves unrelated changes", () => {
   expect(app.contents()).toEqual(patched);
 });
 
+test("existing editor inset migrates without double-padding the shared viewport", () => {
+  const app = sandbox("legacy-inset");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(
+    "const margin = 0; // The Pi host owns the shared outer inset.",
+    "const margin = Math.max(2, Math.floor(width * 0.04));",
+  ));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+});
+
 test("partial or unknown editor sources fail before any write", () => {
   for (const partial of [false, true]) {
     const app = sandbox(String(partial));
@@ -92,7 +104,7 @@ test.skipIf(!sdk)("real package resolver preserves editor ownership order", asyn
   expect(paths[1]).toContain("pi-powerline-footer");
 });
 
-test.skipIf(!sdk)("real editor stays centered through wrapping, scrolling, completion and paste", async () => {
+test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrolling, completion and paste", async () => {
   const { Editor, visibleWidth } = await host();
   const source = readFileSync(join(installed, "index.ts"), "utf8");
   const start = source.indexOf("      // configs:powerline-editor-v1");
@@ -109,7 +121,7 @@ test.skipIf(!sdk)("real editor stays centered through wrapping, scrolling, compl
     editor.setText(text);
     for (const width of [16, 40, 80, 160]) {
       const rows = editor.render(width);
-      const margin = Math.max(2, Math.floor(width * 0.04));
+      const margin = 0;
       expect(plain(rows[0]).startsWith(" ".repeat(margin) + "╭")).toBe(true);
       expect(plain(rows.at(-1)).endsWith("╯")).toBe(true);
       expect(rows.every((s: string) => visibleWidth(s) <= width)).toBe(true);
@@ -128,7 +140,8 @@ test.skipIf(!sdk)("real editor stays centered through wrapping, scrolling, compl
   expect(completed[2].endsWith("╯")).toBe(true);
   expect(completed[3].trim()).toBe("completion");
   expect(completed[4].trim()).toBe("───");
-  expect(completed[3].startsWith("       ")).toBe(true);
+  // Four columns for the frame/prompt, plus the host's one-column input padding.
+  expect(completed[3].indexOf("completion")).toBe(5);
   editor.autocompleteState = null;
   editor.autocompleteList = null;
   editor.setText("");

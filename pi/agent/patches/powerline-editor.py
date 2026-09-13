@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Center and round powerline's existing editor without replacing its input owner.
+"""Round powerline's existing editor inside the Pi host's shared horizontal inset.
 
 The layoutText hook follows the pinned Pi editor's row contract: two borders,
 visible input rows (30% of terminal height, minimum five), then completion rows.
@@ -27,7 +27,7 @@ EDITS = {
         if (width < 16 || typeof originalLayoutText !== "function") {'''),
         ('''        const bc = (s: string) => `${getFgAnsiCode("sep")}${s}${ansi.reset}`;
         const captureDraft''', '''        const bc = (s: string) => editor.borderColor(s);
-        const margin = Math.max(2, Math.floor(width * 0.04));
+        const margin = 0; // The Pi host owns the shared outer inset.
         const inset = " ".repeat(margin);
         const boxWidth = width - 2 * margin;
         const captureDraft'''),
@@ -93,6 +93,13 @@ EDITS = {
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
+    # Upgrade the complete earlier editor patch without stacking its 4% gutter
+    # inside the host's new 2% gutter. All anchors are still validated below.
+    sources = dict(sources)
+    sources["index.ts"] = sources["index.ts"].replace(
+        "const margin = Math.max(2, Math.floor(width * 0.04));",
+        "const margin = 0; // The Pi host owns the shared outer inset.",
+    )
     states = []
     for name, edits in EDITS.items():
         for old, new in edits:

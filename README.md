@@ -126,24 +126,40 @@ then `/reload` in Pi. The installer also applies it. Changed or partial
 upstream anchors stop without writing; do not force the patch through an
 unreviewed update. Test with `bun test pi/agent/tests/powerline-layout-patch.test.ts`.
 
-The editor patch adds a centered, rounded `╭╮╰╯` frame with a 4% horizontal
-inset (at least two columns). It reserves space before text wrapping and
-keeps scroll indicators, completion rows, paste handling, and hardware cursor
-markers. Tiny terminals fall back to the host editor. Working status and
-mode/thinking labels remain outside the box. Keep **pi-pretty before
+Pi uses a shared horizontal inset of roughly **2% per side** (at least one
+column), rather than separate margins on the input and statusline. The host
+patch keeps conversation output, tools, widgets, menus, and the footer inside
+that viewport in regular and fullscreen modes. Ghostty, the shell, and Neovim
+are unchanged. Raw CLI diagnostics and programs writing directly to the terminal
+are not reflowed.
+
+The editor patch adds the rounded `╭╮╰╯` frame without a second outer inset.
+It reserves space before text wrapping and keeps scroll indicators,
+completion rows, paste handling, and hardware cursor markers. Tiny terminals
+fall back to the host editor. Working status and mode/thinking labels remain
+outside the box, within the shared viewport. Keep **pi-pretty before
 powerline** in `settings.json`'s packages list: both install an editor during
 `session_start`, and Pi awaits those handlers in package order. Powerline must
 run last to retain the framed editor and bash controls; pretty's output
 formatters remain active.
 
-Reapply with `python3 pi/agent/patches/powerline-editor.py`, then `/reload`.
-The installer runs it after the footer patches. Its row-boundary hook follows
-the current Pi host's layout contract, so rerun the real-editor integration
-checks after a Pi update:
+The host patch targets **Pi 0.84.2**; review it before upgrading Pi. To replay
+the host and editor patches, run the following, then **restart Pi**;
+`/reload` alone cannot reload the host renderer:
+
+```sh
+python3 pi/agent/patches/pi-horizontal-inset.py
+python3 pi/agent/patches/powerline-editor.py
+```
+
+The installer applies the host inset before the editor patch. These guarded
+patches follow the installed host's rendering contracts and refuse incompatible
+sources rather than guessing. Rerun the real-host integration checks after updates:
 
 ```sh
 PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
-  bun test pi/agent/tests/powerline-editor-patch.test.ts
+  bun test pi/agent/tests/pi-horizontal-inset-patch.test.ts \
+    pi/agent/tests/powerline-editor-patch.test.ts
 ```
 
 ## Sync workflow

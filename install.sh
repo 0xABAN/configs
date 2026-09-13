@@ -100,6 +100,11 @@ if [[ -f "$ROOT/pi/agent/patches/powerline-layout.py" ]]; then
   python3 "$ROOT/pi/agent/patches/powerline-layout.py"
 fi
 
+# Inset the whole Pi viewport before removing the editor's old private gutter.
+if [[ -f "$ROOT/pi/agent/patches/pi-horizontal-inset.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-horizontal-inset.py"
+fi
+
 # Frame the existing editor without replacing its input/autocomplete owner.
 if [[ -f "$ROOT/pi/agent/patches/powerline-editor.py" ]]; then
   python3 "$ROOT/pi/agent/patches/powerline-editor.py"
