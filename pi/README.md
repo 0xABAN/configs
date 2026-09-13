@@ -215,7 +215,7 @@ clean-launcher/auth tests, using synthetic credentials. It then replays host and
 Powerline patches inside the stage, selects the candidate npm symlink with the
 same launcher helper used at activation, and launches **that executable** in
 120×36 tmux terminals in regular and fullscreen modes. The rendered faux-provider
-response must show `◆ You`, `● Pi`, the cream separator, a two-column outer inset
+response must show `◆ You`, `● Pi`, the dark user-message background, a two-column outer inset
 and the configured Powerline footer. Intercom must show only its invocation row
 when collapsed, a borderless incoming sender/preview, and full details/attachments
 after expansion. Captured ANSI/plain screens, executed
