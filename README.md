@@ -212,7 +212,7 @@ tree navigation reset it; no timings are inferred from history or persisted.
 The badge is display-only, not a clickable control. Run `/reload` after updating
 these local extensions and the guarded powerline editor patch.
 
-The host patch targets **Pi 0.84.2**; review it before upgrading Pi. To replay
+The host patch targets **Pi 0.85.1**; review it before upgrading Pi. To replay
 the host and editor patches, run the following, then **restart Pi**;
 `/reload` alone cannot reload the host renderer:
 
@@ -233,7 +233,7 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 
 ### Transcript preview
 
-The Pi 0.84.2 transcript patch adds `◆ You` / `● Pi` headers and compact
+The Pi 0.85.1 transcript patch adds `◆ You` / `● Pi` headers and compact
 geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
 action icons keep the teal accent. Speaker names retain the normal text color.
 Consecutive visible tool rows share a group; narration
@@ -302,7 +302,7 @@ remains a notification, not a new panel.
 
 The guarded patches target **rpiv-todo 2.9.0** and **pi-subagents 0.19.0**. The
 installer runs them after the older todo tweaks. Native notifications, pickers,
-confirmations, and editors share **Pi 0.84.2** host patches, so wrapped lines
+confirmations, and editors share **Pi 0.85.1** host patches, so wrapped lines
 align and open dialogs refresh their theme too. These shared components also
 style the same dialogs used by other extensions. Apply once and **restart Pi**:
 

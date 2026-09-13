@@ -149,3 +149,72 @@ Restart Pi for host or bundled-TUI changes. Extension/package source changes use
 `/reload`; a full restart also reloads them. Check the visible UI after runtime
 changes. Commit only explicit owned files or hunks, with related tests, and keep
 independently revertible changes separate.
+
+## Checking a Pi upgrade
+
+Keep the existing editor. Stage a candidate before changing either live install:
+
+```sh
+python3 -B pi/upgrade.py 0.85.1
+# After successful checks, also retain rollback copies (still no activation):
+python3 -B pi/upgrade.py 0.85.1 --backup
+```
+
+Requires Python 3.10+, Git, npm/Node, Bun, and the installed Powerline, Todo,
+Subagents and pi-pretty sources under `~/.pi/agent/`. Use an exact stable version;
+`latest`, ranges, prereleases and arbitrary npm specs are rejected. The command
+installs only inside a private `/tmp/pi-upgrade-<version>-*` directory, using
+`npm install --ignore-scripts --save-exact` against the public npm registry.
+
+The check snapshots current configuration sources (including uncommitted files),
+copies installed package sources into a temporary HOME, and sets `PI_SDK_ROOT`
+to the candidate. It runs the full `pi/agent/tests` native suite and the copied
+clean-launcher/auth tests, using synthetic credentials. Personal auth, settings,
+Node overrides and API-key environment variables are not inherited by commands;
+PATH is retained to locate tools. This is isolation for testing, not a sandbox.
+Only npm installation needs network access; no model calls or lifecycle scripts
+are requested. There are no live patcher calls.
+
+A dependency, patch, test, missing-source or skipped-test failure stops the check
+with a nonzero exit status. Unknown host versions must fail their existing exact
+patch guards: review and adapt those patches separately, never loosen them to
+make the checker green. Source changes during the check also require a rerun.
+Logs, the candidate lockfile, input hashes, source/package copies and `report.json`
+remain in the printed stage directory on success or failure. A green report
+covers these tests only, not every extension, a visible terminal smoke test or
+live OAuth refresh. Native child tests are represented by their parent suite
+checks in the reported Bun count.
+
+The patch-contract table above is the version authority. The patch purposes are:
+
+- Host inset: shared viewport margins; transcript: speaker/tool rows and metrics.
+- Dialogs: native selector/input visibility; notices: activity wrapping;
+  compact layout: small-window widget and footer budgets.
+- Powerline DJ/layout/editor: mode presentation, footer sizing and editor frame.
+- Legacy Todo: dependency and persistence tweaks; Todo UI: task presentation.
+- Subagents UI: agent panels, previews and constrained-window layout.
+
+`--backup` runs only after all checks pass. It copies the global Pi package,
+`pi/clean` including its installed dependencies, and the complete Powerline
+source (including `index.ts` and `bash-mode/editor.ts`) into `rollback/`.
+Links are dereferenced and `auth.json` is excluded. A partial copy is not a
+completed backup; check `backup_complete` and `status` in the report. Staging and
+backups can consume hundreds of MB; retain them through the upgrade, then remove
+only the printed stage directory when no longer needed. `/tmp` is not durable
+archival storage; move the whole directory elsewhere if it must survive cleanup.
+
+**Activation remains manual.** Before any install or live patch, require a green
+report for the exact version and unchanged sources, a complete fresh backup,
+and no concurrent package/config edits. Update each intended install explicitly,
+replay patches in the documented serial order, stop on the first failure, and
+verify normal/clean startup plus the visible UI before restarting working
+sessions. Do not treat `install.sh` as an upgrade transaction: its legacy Todo
+step is best-effort. Restore affected files from the matching rollback copies
+if activation fails; do not overwrite credentials or unrelated configuration.
+The checker neither activates nor provides an automatic rollback operation.
+
+Offline checks for the upgrade command itself:
+
+```sh
+python3 -B -m unittest pi/upgrade_test.py
+```
