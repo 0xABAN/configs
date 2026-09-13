@@ -29,6 +29,29 @@ function contents(root: string) {
     existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null]));
 }
 
+test("complete previous helper migrates with an exact backup; modified helpers still refuse", () => {
+  const root = sandbox("previous-helper");
+  expect(run(root).exitCode).toBe(0);
+  const current = readFileSync(join(root, modulePath), "utf8");
+  const legacy = readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8");
+  const backups = join(root, ".config/theme-backups");
+  const before = readdirSync(backups);
+  writeFileSync(join(root, modulePath), legacy);
+  expect(run(root).exitCode).toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(current);
+  const added = readdirSync(backups).filter(name => !before.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backups, added[0], modulePath), "utf8")).toBe(legacy);
+  expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  expect(run(root).exitCode).toBe(0);
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+
+  writeFileSync(join(root, modulePath), legacy + "\n// local helper edit");
+  expect(run(root).exitCode).not.toBe(0);
+  expect(readFileSync(join(root, modulePath), "utf8")).toBe(legacy + "\n// local helper edit");
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+});
+
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
   const before = contents(root);
@@ -299,4 +322,27 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   expect(rendered).toContain("\x1b]133;A\x07");
   expect(contexts[0].messageType).toBe("user");
   expect(contexts[0].availableWidth).toBeLessThan(80);
+});
+
+realTest("simplified connectors match the previous helper for every narrow and error-row combination", async () => {
+  const m = await real();
+  const previousPath = join(fixture, "dist/modes/interactive/components/transcript-previous.js");
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8"));
+  const previous = await import(pathToFileURL(previousPath).href);
+  for (const count of [1, 2, 3]) {
+    for (let failed = -1; failed < count; failed++) {
+      const current = new m.TranscriptContainer();
+      const old = new previous.TranscriptContainer();
+      for (let index = 0; index < count; index++) {
+        const component = () => ({
+          transcriptRole: "tool", toolName: "read", args: { path: "src/界.ts" }, argsComplete: true,
+          result: { isError: index === failed, content: [{ type: "text", text: "Permission denied" }] },
+          render: () => ["native"], invalidate() {},
+        });
+        current.addChild(component());
+        old.addChild(component());
+      }
+      for (let width = 1; width <= 80; width++) expect(current.render(width)).toEqual(old.render(width));
+    }
+  }
 });

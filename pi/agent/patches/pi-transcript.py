@@ -18,6 +18,7 @@ from patch_support import (
 BASE = "dist/modes/interactive/"
 MODULE = BASE + "components/transcript.js"
 MODULE_SOURCE = read_payload('host/transcript.js.inc')
+LEGACY_MODULE_SOURCE = read_payload('host/legacy/transcript.js.inc')
 EDITS = {
     BASE + "interactive-mode.js": [
         ('import { UserMessageComponent } from "./components/user-message.js";',
@@ -105,9 +106,10 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if len(set(states)) != 1:
         raise ValueError("partial transcript patch; inspect before reapplying")
     if states[0] == "patched":
-        if sources.get(MODULE) != MODULE_SOURCE:
+        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
             raise ValueError("transcript module changed or missing; inspect before reapplying")
-        return sources
+        # Only a fully validated installation may upgrade its exact older helper.
+        return {**sources, MODULE: MODULE_SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected transcript module alongside unpatched host")
     result = dict(sources)

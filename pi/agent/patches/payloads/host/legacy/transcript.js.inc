@@ -104,16 +104,10 @@ export class TranscriptContainer extends Container {
             }
             lines.push("", truncateToWidth(indent + theme.fg("muted", `${actions.length} action${actions.length === 1 ? "" : "s"}`), width));
             for (let i = 0; i < actions.length; i++) {
-                const isLast = i === actions.length - 1;
-                let branch = "";
-                let continuation = "";
-                if (width - bodyPadding >= 6) {
-                    branch = isLast ? "╰─ " : "├─ ";
-                    continuation = isLast ? "   " : "│  ";
-                }
+                const branch = width - bodyPadding >= 6 ? (i === actions.length - 1 ? "╰─ " : "├─ ") : "";
                 const rows = actionLines(actions[i], Math.max(1, width - bodyPadding - branch.length));
                 for (let row = 0; row < rows.length; row++) {
-                    const connector = row === 0 ? branch : continuation;
+                    const connector = row === 0 ? branch : (branch ? (i === actions.length - 1 ? "   " : "│  ") : "");
                     lines.push(indent + theme.fg("borderMuted", connector) + rows[row]);
                 }
             }
