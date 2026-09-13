@@ -5,9 +5,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-horizontal-inset.py", import.meta.url));
-const describe = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; print(json.dumps(runpy.run_path(sys.argv[1])['EDITS']))", patcher]);
+const describe = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({'edits':m['EDITS'],'legacyInset':m['LEGACY_INSET']}))", patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const edits = JSON.parse(describe.stdout.toString()) as Record<string, [string, string][]>;
+const { edits, legacyInset } = JSON.parse(describe.stdout.toString()) as {
+  edits: Record<string, [string, string][]>; legacyInset: string;
+};
 const temp = mkdtempSync(join(tmpdir(), "pi-horizontal-inset-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
@@ -43,6 +45,16 @@ test("patch validates all files, backs up exact sources, and is idempotent", () 
   expect(readdirSync(backupRoot)).toEqual(backups);
 });
 
+test("the installed older inset upgrades without duplicating methods", () => {
+  const app = sandbox("legacy");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const file = "node_modules/@earendil-works/pi-tui/dist/tui.js";
+  writeFileSync(join(app.root, file), current[file].replace(edits[file][0][1], legacyInset));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+});
+
 test("partial, incompatible, and changed hosts fail before writing", () => {
   const lastFile = Object.keys(edits).at(-1)!;
   for (const state of ["partial", "changed", "version"]) {
@@ -59,6 +71,20 @@ test("absent Pi installation is a harmless skip", () => {
   const result = Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: join(temp, "absent") } });
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("skipping");
+});
+
+test("prompt markers precede the inset so Ghostty does not advance an extra row", () => {
+  const methods = edits["node_modules/@earendil-works/pi-tui/dist/tui.js"][0][1];
+  const Frame = new Function(`return class { ${methods} }`)();
+  const frame = new Frame();
+  const starts = ["\x1b]133;A\x07", "\x1b]133;A\x1b\\", "\x1b]133;B\x07\x1b]133;C\x07"];
+  const image = "\x1b_Ga=T;YWJj\x1b\\";
+  for (const start of starts) {
+    expect(frame.insetLines([start, start + "You", start + image], 100)).toEqual([
+      start + "  ", start + "  You", start + "  " + image,
+    ]);
+  }
+  expect(frame.insetLines(["", image, "plain"], 100)).toEqual(["", "  " + image, "  plain"]);
 });
 
 // Opt in to real-host rendering; these tests never patch the installation.

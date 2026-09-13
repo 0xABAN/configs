@@ -71,8 +71,24 @@ EDITS = {
 }
 
 
+# Migrate the complete earlier inset without adding another copy of its methods.
+LEGACY_INSET = EDITS[TUI + "tui.js"][0][1]
+EDITS[TUI + "tui.js"][0] = (EDITS[TUI + "tui.js"][0][0], LEGACY_INSET.replace(
+    "        return lines.map((line) => line ? padding + line : line);",
+    r'''        return lines.map((line) => {
+            if (!line) return line;
+            // OSC 133 prompt starts must stay at column zero: Ghostty otherwise
+            // advances to a fresh line, leaving the old editor border behind.
+            const markers = line.match(/^(?:\x1b\]133;[ABC](?:\x07|\x1b\\))+/)?.[0] ?? "";
+            return markers + padding + line.slice(markers.length);
+        });''',
+))
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Check every anchor before any write, including idempotence/partial state."""
+    sources = dict(sources)
+    sources[TUI + "tui.js"] = sources[TUI + "tui.js"].replace(LEGACY_INSET, EDITS[TUI + "tui.js"][0][1])
     states = []
     for name, edits in EDITS.items():
         for old, new in edits:
