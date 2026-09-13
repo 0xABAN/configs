@@ -27,8 +27,7 @@ function buildAlignedContent(
 LEGACY_ALIGN = ALIGN
 ALIGN = ALIGN.replace(
     "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
-    'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style,\n'
-    '    ansi.getFgAnsi(67, 145, 135) + "●" + ansi.reset);',
+    'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style, "");',
 )
 
 METER = '''// configs:powerline-meter-v1
@@ -40,6 +39,10 @@ function contextMeter(percent: number | null, approximate: boolean): string {
 }
 
 '''
+
+# The ball belongs to the meter's text, so the segment colors both together.
+LEGACY_METER = METER
+METER = METER.replace('return "[-----]', 'return "● [-----]').replace('return `[${', 'return `● [${')
 
 EDITS = {
     "index.ts": [
@@ -103,14 +106,25 @@ SEPARATOR_ARGUMENT_EDIT = (
 )
 
 
+SEPARATOR_JOIN_EDIT = (
+    'parts.join(` ${sepAnsi}${sep}${ansi.reset} `)',
+    'parts.join(separator === "" ? " " : ` ${sepAnsi}${sep}${ansi.reset} `)',
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Accept a wholly original or wholly patched set, never a partial patch."""
     # Small appearance upgrades also apply over an already-installed layout.
     # Keep other warning colors and separator styles intact.
     sources = dict(sources)
-    for previous_color in ["95, 168, 118", "94, 158, 128", "94, 158, 170"]:
-        previous_align = ALIGN.replace("ansi.getFgAnsi(67, 145, 135)", f"ansi.getFgAnsi({previous_color})")
+    for previous_color in ["95, 168, 118", "94, 158, 128", "94, 158, 170", "67, 145, 135"]:
+        previous_align = LEGACY_ALIGN.replace(
+            "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
+            'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style,\n'
+            f'    ansi.getFgAnsi({previous_color}) + "●" + ansi.reset);',
+        )
         sources["index.ts"] = sources["index.ts"].replace(previous_align, ALIGN)
+    sources["segments.ts"] = sources["segments.ts"].replace(LEGACY_METER, METER)
     sources["index.ts"] = (sources["index.ts"]
         .replace(LEGACY_ALIGN, ALIGN)
         .replace(LEGACY_SEPARATOR, SEPARATOR_EDIT[1]))
@@ -118,6 +132,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         ("segments.ts", UNSTAGED_EDIT),
         ("index.ts", SEPARATOR_EDIT),
         ("index.ts", SEPARATOR_ARGUMENT_EDIT),
+        ("index.ts", SEPARATOR_JOIN_EDIT),
     ]:
         source = sources[name]
         if source.count(new) == 0 and source.count(old) == 1:

@@ -10,14 +10,15 @@ import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('patcher',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 m.EDITS['segments.ts'].append(m.UNSTAGED_EDIT)
+m.EDITS['index.ts'].append(m.SEPARATOR_JOIN_EDIT)
 m.EDITS['index.ts'].append(m.SEPARATOR_ARGUMENT_EDIT)
 m.EDITS['index.ts'].append(m.SEPARATOR_EDIT)
-print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER,'legacyAlign':m.LEGACY_ALIGN,'legacySeparator':m.LEGACY_SEPARATOR}))
+print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER,'legacyAlign':m.LEGACY_ALIGN,'legacySeparator':m.LEGACY_SEPARATOR,'legacyMeter':m.LEGACY_METER}))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const { edits, align, meter, legacyAlign, legacySeparator } = JSON.parse(describe.stdout.toString()) as {
+const { edits, align, meter, legacyAlign, legacySeparator, legacyMeter } = JSON.parse(describe.stdout.toString()) as {
   edits: Record<string, [string, string][]>; align: string; meter: string;
-  legacyAlign: string; legacySeparator: string;
+  legacyAlign: string; legacySeparator: string; legacyMeter: string;
 };
 const root = mkdtempSync(join(tmpdir(), "powerline-layout-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -77,9 +78,14 @@ test("existing right-hand groups upgrade to the green ball separator", () => {
     .replace(align, legacyAlign).replace(newSeparator, legacySeparator).replace(newArgument, oldArgument));
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(current);
-  for (const previous of ["95, 168, 118", "94, 158, 128", "94, 158, 170"]) {
-    writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
-      .replace("ansi.getFgAnsi(67, 145, 135)", `ansi.getFgAnsi(${previous})`));
+  for (const previous of ["95, 168, 118", "94, 158, 128", "94, 158, 170", "67, 145, 135"]) {
+    const previousAlign = legacyAlign.replace(
+      "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
+      'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style,\n'
+        + `    ansi.getFgAnsi(${previous}) + "●" + ansi.reset);`,
+    );
+    writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(align, previousAlign));
+    writeFileSync(join(app.dir, "segments.ts"), current["segments.ts"].replace(meter, legacyMeter));
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
   }
@@ -100,7 +106,7 @@ const transpiler = new Bun.Transpiler({ loader: "ts" });
 const helpers = new Function("visibleWidth", "buildContentFromParts", "ansi", transpiler.transformSync(align + meter) +
   "\nreturn { buildAlignedContent, contextMeter };")(
   Bun.stringWidth,
-  (parts: string[], _style: string, separator = "·") => parts.length ? " " + parts.join(` ${separator} `) + " " : "",
+  (parts: string[], _style: string, separator = "·") => parts.length ? " " + parts.join(separator === "" ? " " : ` ${separator} `) + " " : "",
   { getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`, reset: "\x1b[0m" },
 );
 
@@ -121,25 +127,25 @@ test("cost stays neutral while the ball and context use blue-green", () => {
   const reset = "\x1b[0m";
   const green = "\x1b[38;2;67;145;135m";
   const cost = `\x1b[38;2;133;135;126m$52.14${reset}`;
-  const context = `${green}[▰▰▰▱▱] 52% context${reset}`;
+  const context = `${green}● [▰▰▰▱▱] 52% context${reset}`;
   const row = helpers.buildAlignedContent([
     { content: "model", right: false },
     { content: cost, right: true },
     { content: context, right: true },
   ], "chevron", 80);
-  expect(row).toContain(`${cost} ${green}●${reset} ${context}`);
+  expect(row).toContain(`${cost} ${context}`);
   expect(Bun.stringWidth(row)).toBe(80);
 });
 
 test("context meter clamps fill and preserves unknown and approximate usage", () => {
   const meter = helpers.contextMeter;
-  expect(meter(0, false)).toBe("[▱▱▱▱▱] 0% context");
-  expect(meter(20, false)).toBe("[▰▱▱▱▱] 20% context");
-  expect(meter(100, false)).toBe("[▰▰▰▰▰] 100% context");
-  expect(meter(120, true)).toBe("[▰▰▰▰▰] ~120% context");
-  expect(meter(-20, false)).toBe("[▱▱▱▱▱] -20% context");
-  expect(meter(null, false)).toBe("[-----] ? context");
-  expect(meter(NaN, false)).toBe("[-----] ? context");
+  expect(meter(0, false)).toBe("● [▱▱▱▱▱] 0% context");
+  expect(meter(20, false)).toBe("● [▰▱▱▱▱] 20% context");
+  expect(meter(100, false)).toBe("● [▰▰▰▰▰] 100% context");
+  expect(meter(120, true)).toBe("● [▰▰▰▰▰] ~120% context");
+  expect(meter(-20, false)).toBe("● [▱▱▱▱▱] -20% context");
+  expect(meter(null, false)).toBe("● [-----] ? context");
+  expect(meter(NaN, false)).toBe("● [-----] ? context");
 });
 
 // Exercise the actual installed renderer, not a second implementation of its packing.
@@ -156,6 +162,34 @@ test.skipIf(!existsSync(installed))("configured chevron uses the requested glyph
   );
   expect(render(["model", "main"], settings.powerline.separator)).toBe(" model ❯ main ");
   expect(render(["model", "main"], "dot")).toBe(" model · main ");
+});
+
+test.skipIf(!existsSync(installed))("ball and meter share the real context segment color at every threshold", () => {
+  const source = readFileSync(join(installed, "../segments.ts"), "utf8");
+  const start = source.indexOf("// configs:powerline-meter-v1");
+  const end = source.indexOf("const contextTotalSegment", start);
+  const codes = {
+    context: "\x1b[38;2;67;145;135m",
+    contextWarn: "\x1b[38;2;199;183;119m",
+    contextError: "\x1b[38;2;199;131;124m",
+  };
+  const segment = new Function("getIcons", "color", "withIcon", "formatTokens",
+    transpiler.transformSync(source.slice(start, end)) + "\nreturn contextPctSegment;")(
+    () => ({}), (_ctx: unknown, name: keyof typeof codes, text: string) => `${codes[name]}${text}\x1b[0m`,
+    (_icon: string, text: string) => text, String,
+  );
+  for (const [percent, expected] of [[null, "context"], [52, "context"], [70, "context"],
+    [71, "contextWarn"], [90, "contextWarn"], [91, "contextError"], [100, "contextError"]] as const) {
+    const ctx = { options: { context: { format: "meter" } }, contextPercent: percent,
+      contextTokens: percent === null ? null : 1000, contextWindow: 10000, contextApproximate: true };
+    const { content, visible } = segment.render(ctx);
+    expect(visible).toBe(true);
+    expect(content).toStartWith(`${codes[expected]}● [`);
+    expect(content).toEndWith("\x1b[0m");
+    expect(content.match(/\x1b\[38;2;/g)).toHaveLength(1);
+    expect(content).toContain(percent === null ? "? context" : `~${percent}% context`);
+    expect(segment.render({ ...ctx, customCompactionEnabled: true }).visible).toBe(false);
+  }
 });
 
 test.skipIf(!existsSync(installed))("installed unstaged count uses sage without changing its label", () => {
@@ -177,11 +211,8 @@ test.skipIf(!existsSync(installed))("installed layout preserves right alignment 
   const config = { separator: "dot" };
   const compute = new Function("config", "renderSegment", "visibleWidth", "getSeparator", "getFgAnsiCode", "ansi", "mergeSegmentsWithCustomItems",
     js + "\nreturn computeResponsiveLayout;")(
-    config, (id: string) => ({ visible: id !== "hidden", content: id }), Bun.stringWidth,
-    () => ({ left: "·" }), () => "", { reset: "", getFgAnsi: (...rgb: number[]) => {
-      expect(rgb).toEqual([67, 145, 135]);
-      return "";
-    } },
+    config, (id: string) => ({ visible: id !== "hidden", content: id === "meter" ? "● meter" : id }), Bun.stringWidth,
+    () => ({ left: "·" }), () => "", { reset: "" },
     () => ({ leftSegments: ["model", "branch", "hidden"], rightSegments: ["cost", "meter"], secondarySegments: ["mode"] }),
   );
   const wide = compute({}, {}, 80);

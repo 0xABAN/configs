@@ -131,8 +131,10 @@ The installer patches the installed powerline package so below-editor rows stay 
 
 The footer layout patch puts model/branch on the left and reported cost plus
 an opt-in five-cell context meter on the right. Mode/thinking live in the
-input's top border, right-aligned with their original gradients, not duplicated
-in the footer. Subscription cost is the provider-reported
+input's top border, right-aligned with a near-white teal build gradient and
+purple plan gradient, not duplicated in the footer. The context ball shares
+the meter's color, including warning/critical states, and remains visible when
+cost is hidden. Subscription cost is the provider-reported
 estimate, not a subscription bill. DJ placement is unchanged.
 
 After a powerline update, run `python3 pi/agent/patches/powerline-layout.py`,
