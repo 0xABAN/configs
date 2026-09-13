@@ -95,8 +95,12 @@ PROMPT_EDIT = (
     '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : ">";
         const promptColor = captureDraft ? getFgAnsiCode("queue") : ansi.getFgAnsi(200, 200, 200);''',
     '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : "◆";
-        const promptColor = bashModeActive ? ansi.getFgAnsi(200, 200, 200) : getFgAnsiCode("queue");''',
+        const promptColor = bashModeActive ? ansi.getFgAnsi(200, 200, 200)
+          : captureDraft ? getFgAnsiCode("queue") : ansi.getFgAnsi(94, 158, 128);''',
 )
+
+LEGACY_PROMPT = '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : "◆";
+        const promptColor = bashModeActive ? ansi.getFgAnsi(200, 200, 200) : getFgAnsiCode("queue");'''
 
 
 BORDER_EDIT = (
@@ -130,6 +134,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # The prompt can upgrade an already-framed editor or a fresh installation.
     # Validate it separately, still before any file is written.
     old_prompt, new_prompt = PROMPT_EDIT
+    sources["index.ts"] = sources["index.ts"].replace(LEGACY_PROMPT, new_prompt)
     index = sources["index.ts"]
     if index.count(new_prompt) == 0 and index.count(old_prompt) == 1:
         sources["index.ts"] = index.replace(old_prompt, new_prompt, 1)
