@@ -50,7 +50,14 @@ background-opacity = 1
 ```
 
 Remove explicit background/foreground/selection overrides if they override
-the theme. Opacity 1 avoids wallpaper blending the hex colors. Reload cmux's
+the theme. Also check `cmux themes list`: cmux's own theme override in
+`~/Library/Application Support/com.cmuxterm.app/config.ghostty` takes
+precedence over the shared Ghostty theme. Back up that file, then run
+`cmux themes clear` to inherit the shared palette. `ghostty +show-config`
+alone does not reveal this override. The old Black Metal override is backed
+up locally in `~/.config/theme-backups/cmux-20260913-015205/`.
+
+Opacity 1 avoids wallpaper blending the hex colors. Reload cmux's
 configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
 
