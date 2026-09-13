@@ -41,9 +41,13 @@ default). Neither paints another charcoal layer over the terminal. Panels
 selections (including Pi), Neovim Visual mode, and completion selections
 use the core teal (`#439187`) with white text (`#ffffff`). Search/diff backgrounds
 remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
-near-white (`#F2F3F0`) for emphasis. Variables, strings, numbers, headings, editor
-status text, and Pi tool output use cream (`#dedec5`).
-Keywords, active highlights, functions, types, links, success states, and
+near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
+status text, and Pi tool output use cream (`#dedec5`). Numbers and types use
+the warning yellow (`#c7b777`) as a small syntax accent in Neovim and Pi.
+Pi follows its existing token classes: literals such as booleans share the
+number role, built-ins share the type role, and some C++ types such as `int`
+remain keywords (teal). Neovim booleans remain teal.
+Keywords, active highlights, functions, links, success states, and
 additions use the core teal, as do terminal ANSI green/cyan, Pi's diamond,
 and its context ball/meter. Neovim separators and floating-window borders,
 and Pi's muted/Markdown borders, use the darker companion. Mode/thinking
