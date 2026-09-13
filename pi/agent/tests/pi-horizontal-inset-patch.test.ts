@@ -16,7 +16,7 @@ const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !
 function sandbox(name: string) {
   const root = join(temp, name);
   mkdirSync(root, { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ version: "0.84.2" }));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ version: "0.85.1" }));
   for (const [file, replacements] of Object.entries(edits)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), replacements.map(([old]) => old).join("\n") + "\n// unrelated change\n");
@@ -196,7 +196,7 @@ realTest("fullscreen layout, mouse selection, scrollbar, search and flashes use 
   expect(app.tui.selectionAnchor.col).toBe(0);
   expect(app.tui.selectionAnchor.scrollView).toBe(scroll);
   app.tui.handleTerminalInput("\x1b[O"); // Cancel selection without touching clipboard.
-  app.tui.openSearch();
+  app.tui.toggleSearch();
   app.tui.updateSearchQuery("hello");
   app.tui.renderNow();
   expect(app.tui.activeSearch.matches.length).toBe(30);
@@ -221,6 +221,7 @@ realTest("fresh Pi composition root keeps the inset across regular/fullscreen sw
     const child = { render(width) { receivedWidth = width; return ['x'.repeat(width)]; }, invalidate() {} };
     const app = Object.create(InteractiveMode.prototype);
     app.options = {};
+    app.runtimeHost = { session: { settingsManager: { getFullscreenCopyOnSelect: () => false } } };
     app.renderer = createInteractiveTui({ tuiMode: 'regular', terminal });
     app.ui = createInteractiveTuiReference(() => app.renderer);
     app.fullscreenLayoutRoot = new VStack([{ component: child }]);

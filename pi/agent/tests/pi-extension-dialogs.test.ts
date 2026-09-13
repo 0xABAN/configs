@@ -19,7 +19,7 @@ const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: {
 function sandbox(name: string) {
   const root = join(temp, name);
   mkdirSync(root, { recursive: true });
-  writeFileSync(join(root, "package.json"), '{"version":"0.84.2","type":"module"}');
+  writeFileSync(join(root, "package.json"), '{"version":"0.85.1","type":"module"}');
   for (const [file, replacements] of Object.entries(edits)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), replacements.flatMap(([old, , count]) => Array(count).fill(old)).join("\n") + "\n        super();\n// unrelated source edit\n");
@@ -131,7 +131,7 @@ if (root/m['MODULE']).exists(): s[m['MODULE']]=(root/m['MODULE']).read_text()
 s=m['patch_sources'](s)
 if all(s[n].startswith(m['MARKER']) for n in m['EDITS']):
  for n in m['EDITS']: (root/n).write_text(m['transform'](n,s[n].removeprefix(m['MARKER']+'\\n'),True))
- (root/m['MODULE']).unlink()
+ (root/m['MODULE']).unlink(missing_ok=True)
 `, [fixture]);
     check(normalize);
     const originals = contents(fixture);

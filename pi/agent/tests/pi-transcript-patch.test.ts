@@ -16,7 +16,7 @@ const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: {
 function sandbox(name: string) {
   const root = join(temp, name);
   mkdirSync(root, { recursive: true });
-  writeFileSync(join(root, "package.json"), '{"version":"0.84.2","type":"module"}');
+  writeFileSync(join(root, "package.json"), '{"version":"0.85.1","type":"module"}');
   for (const [file, changes] of Object.entries(edits)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), changes.map(([old]) => old).join("\n") + "\n// unrelated edit\n");
@@ -39,6 +39,8 @@ test("complete previous revisions migrate together with exact backups; mixed rev
     { changes: preMetricsEdits, helper: "transcript-before-metrics.js.inc" },
   ];
   for (const { changes, helper } of revisions) {
+    // Historical layouts still require the current host's built-in renderer lookup.
+    changes["dist/modes/interactive/interactive-mode.js"][2] = edits["dist/modes/interactive/interactive-mode.js"][2];
     const root = sandbox(helper);
     for (const [file, changesForFile] of Object.entries(changes)) {
       let source = readFileSync(join(root, file), "utf8");
@@ -144,13 +146,17 @@ test("transcript patch validates, backs up exact originals, and repeats without 
 
 test("partial hosts, changed modules, duplicate anchors and wrong versions refuse all writes", () => {
   const last = Object.keys(edits).at(-1)!;
-  for (const state of ["partial", "duplicate", "version", "missing-module", "changed-module", "unexpected-module", "residual-original"]) {
+  for (const state of ["partial", "duplicate", "version", "missing-module", "changed-module", "unexpected-module", "residual-original", "old-tool-lookup"]) {
     const root = sandbox(state);
     if (state === "version") writeFileSync(join(root, "package.json"), '{"version":"0.85.0"}');
     else if (state === "partial") writeFileSync(join(root, last), edits[last][0][1]);
     else if (state === "duplicate") writeFileSync(join(root, last), edits[last][0][0].repeat(2));
     else if (state === "unexpected-module") writeFileSync(join(root, modulePath), "user-owned module");
-    else {
+    else if (state === "old-tool-lookup") {
+      const file = join(root, "dist/modes/interactive/interactive-mode.js");
+      writeFileSync(file, readFileSync(file, "utf8").replace(
+        "withBuiltInRenderers(toolName, this.session.getToolDefinition(toolName))", "this.session.getToolDefinition(toolName)"));
+    } else {
       expect(run(root).exitCode).toBe(0);
       if (state === "missing-module") rmSync(join(root, modulePath));
       else if (state === "residual-original") writeFileSync(join(root, last), readFileSync(join(root, last), "utf8") + edits[last][0][0]);
@@ -375,7 +381,7 @@ realTest("parallel timings persist outside model context and replay from only th
   expect(replay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool")
     .map((child: any) => child.transcriptDurationMs)).toEqual(replayTools.map((child: any) => child.transcriptDurationMs));
 
-  // Pi 0.84.2 keeps entries via firstKeptEntryId; verify an actual compacted-file reopen.
+  // Pi keeps entries via firstKeptEntryId; verify an actual compacted-file reopen.
   const compactedManager = m.SessionManager.open(reopened.getSessionFile());
   const compactedReplay = host(m, compactedManager);
   compactedReplay.renderSessionEntries(compactedManager.buildContextEntries());
@@ -582,8 +588,9 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
       const inset = tui.getHorizontalInset(width);
       const track = mode === "fullscreen" && scrollbar === "always" ? 1 : 0;
       const separator = lines.map(m.tui.stripTerminalSequences).find((line: string) => line.trimStart().startsWith("──"));
-      // The editor uses this full viewport too; an explicit scrollbar keeps its native column.
-      expect(separator?.trimEnd()).toBe(" ".repeat(inset) + "─".repeat(width - 2 * inset - track));
+      // 0.85.1 paints the always-visible scrollbar even without overflowing content.
+      // Compare the transcript columns separately from that native track column.
+      expect(separator?.slice(0, width - inset - track)).toBe(" ".repeat(inset) + "─".repeat(width - 2 * inset - track));
       expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
   }
@@ -656,6 +663,23 @@ realTest("native gutter changes leave self-framed and image bodies unchanged", a
     expect(lines.slice(-native.length)).toEqual(native);
     expect(tool.render(90)).toEqual(native);
   }
+});
+
+realTest("host renderer lookup retains built-in fallbacks without authorizing unknown formatters", async () => {
+  const m = await real();
+  const { readRenderers } = await import(pathToFileURL(join(fixture, "dist/core/tools/renderers/index.js")).href);
+  const app = host(m);
+  const customCall = () => new m.tui.Text("CUSTOM CALL", 0, 0);
+  app.runtimeHost.session.getAllTools = () => [{ name: "read", sourceInfo: { source: "builtin" } }];
+  for (const definition of [undefined, { renderCall: customCall }]) {
+    app.runtimeHost.session.getToolDefinition = () => definition;
+    const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "read");
+    expect(registered.renderCall).toBe(definition?.renderCall ?? readRenderers.renderCall);
+    expect(registered.renderResult).toBe(readRenderers.renderResult);
+    expect(registered.configsTranscriptCompact).toBe(true);
+  }
+  app.runtimeHost.session.getToolDefinition = () => undefined;
+  expect(m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "unknown")).toBeUndefined();
 });
 
 realTest("builtin-name overrides keep native cards beneath their invocation unless their formatter opts in", async () => {

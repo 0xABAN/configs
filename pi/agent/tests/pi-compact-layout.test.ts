@@ -6,23 +6,25 @@ import { checkProcess, copySdk, describePatch, temporaryDirectory } from "./supp
 import { nativeSuite } from "./support/native-suite";
 
 const patcher = fileURLToPath(new URL("../patches/pi-compact-layout.py", import.meta.url));
-const { HOST, MODULE, EDITS, LEGACY_EDITS } = describePatch<{
-  HOST: string; MODULE: string; EDITS: [string, string, number][]; LEGACY_EDITS: [string, string, number][];
-}>(patcher, "{k:m[k] for k in ['HOST','MODULE','EDITS','LEGACY_EDITS']}");
+const { HOST, VIEWPORT, VIEWPORT_EDITS, MODULE, EDITS, LEGACY_EDITS } = describePatch<{
+  HOST: string; VIEWPORT: string; MODULE: string;
+  VIEWPORT_EDITS: [string, string, number][]; EDITS: [string, string, number][]; LEGACY_EDITS: [string, string, number][];
+}>(patcher, "{k:m[k] for k in ['HOST','VIEWPORT','VIEWPORT_EDITS','MODULE','EDITS','LEGACY_EDITS']}");
 const temp = temporaryDirectory("pi-compact-layout-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], {
   env: { ...process.env, PI_SDK_ROOT: root, HOME: root },
 });
-const contents = (root: string) => [HOST, MODULE].map(file =>
+const contents = (root: string) => [HOST, MODULE, VIEWPORT].map(file =>
   existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null);
 
 function fixture(name: string) {
   const root = join(temp, name);
   mkdirSync(dirname(join(root, MODULE)), { recursive: true });
-  writeFileSync(join(root, "package.json"), '{"version":"0.84.2","type":"module"}');
+  writeFileSync(join(root, "package.json"), '{"version":"0.85.1","type":"module"}');
   writeFileSync(join(root, HOST), EDITS.flatMap(([old, , count]) => Array(count).fill(old)).join("\n"));
+  writeFileSync(join(root, VIEWPORT), VIEWPORT_EDITS[0][0]);
   return root;
 }
 
@@ -35,6 +37,7 @@ test("compact layout backs up exact sources and reapplies without writes", () =>
   const names = readdirSync(backups);
   expect(names).toHaveLength(1);
   expect(readFileSync(join(backups, names[0], HOST), "utf8")).toBe(before[0]!);
+  expect(readFileSync(join(backups, names[0], VIEWPORT), "utf8")).toBe(before[2]!);
   expect(JSON.parse(readFileSync(join(backups, names[0], "added-files.json"), "utf8"))).toEqual([MODULE]);
   checkProcess(run(root));
   expect(contents(root)).toEqual(after);
@@ -42,11 +45,17 @@ test("compact layout backs up exact sources and reapplies without writes", () =>
 });
 
 test("compact layout refuses partial, duplicate and modified installations before writes", () => {
-  for (const state of ["version", "duplicate", "partial-import", "partial-budget", "modified", "missing", "unexpected"]) {
+  for (const state of ["version", "duplicate", "partial-import", "partial-budget", "modified", "missing", "unexpected", "changed-viewport", "duplicate-viewport", "partial-viewport", "residual-viewport"]) {
     const root = fixture(state);
     if (state === "version") writeFileSync(join(root, "package.json"), '{"version":"0.85.0"}');
     else if (state === "duplicate") writeFileSync(join(root, HOST), contents(root)[0] + EDITS[0][0]);
-    else if (state.startsWith("partial")) {
+    else if (state.endsWith("viewport")) {
+      const [old, patched] = VIEWPORT_EDITS[0];
+      if (state === "residual-viewport") checkProcess(run(root));
+      writeFileSync(join(root, VIEWPORT), state === "changed-viewport" ? "changed source"
+        : state === "duplicate-viewport" ? old + old
+        : state === "partial-viewport" ? patched : patched + old);
+    } else if (state.startsWith("partial")) {
       const [old, next] = EDITS[state === "partial-import" ? 0 : 1];
       writeFileSync(join(root, HOST), contents(root)[0]!.replace(old, next));
     } else if (state === "unexpected") writeFileSync(join(root, MODULE), "unrelated helper");
@@ -142,6 +151,7 @@ realTest("activity budgets follow regular/fullscreen renderer replacement", asyn
   const terminal = { columns: 40, rows: 12, write() {}, hideCursor() {}, showCursor() {}, stop() {} };
   const app = Object.create(InteractiveMode.prototype);
   app.options = {};
+  app.runtimeHost = { session: { settingsManager: { getFullscreenCopyOnSelect: () => false } } };
   app.extensionWidgetsAbove = new Map([["rpiv-todos", {}], ["agents", {}]]);
   app.extensionWidgetsBelow = new Map();
   app.renderer = createInteractiveTui({ tuiMode: "regular", terminal });

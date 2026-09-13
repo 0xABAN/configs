@@ -77,7 +77,9 @@ test("real activity factories preserve the input cursor and both summaries in a 
   app.extensionWidgetsBelow = new Map();
   for (const name of ["documentContainer", "pendingMessagesContainer", "statusContainer", "widgetContainerAbove", "widgetContainerBelow", "editorContainer", "footerContainer"]) app[name] = new tui.Container();
   app.footerContainer = new CompactFooter(app.ui);
-  app.runtimeHost = { session: { settingsManager: { getFullscreenScrollbar: () => "always" } } };
+  app.runtimeHost = { session: { settingsManager: {
+    getFullscreenScrollbar: () => "always", getFullscreenCopyOnSelect: () => false,
+  } } };
   app.documentContainer.addChild(new tui.Text(Array(30).fill("Conversation history").join("\n"), 0, 0));
   app.statusContainer.addChild(new tui.Text("Working", 0, 0));
   app.editor = wrapEditor(new tui.Editor(app.ui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
@@ -102,7 +104,8 @@ test("real activity factories preserve the input cursor and both summaries in a 
   agentWidget.update();
   const source = readFileSync(join(sdk, "dist/modes/interactive/interactive-mode.js"), "utf8");
   const composition = source.slice(source.indexOf("        this.renderWidgets(); // Initialize with default spacer"), source.indexOf("        // Accept text while startup completes"));
-  new Function("TuiLayouts", "theme", composition).call(app, tui, colors.theme);
+  const { createChatViewport } = await load(join(sdk, "dist/modes/interactive/chat-viewport.js"));
+  new Function("createChatViewport", "theme", composition).call(app, createChatViewport, colors.theme);
 
   try {
     for (const mode of ["regular", "fullscreen", "regular"]) {

@@ -103,6 +103,35 @@ test("existing plain border upgrades without disturbing other source", () => {
   }
 });
 
+test("the exact previous compact badge payload migrates; partial or modified predecessors refuse writes", () => {
+  const app = sandbox("centered-scroll-migration");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const previousBorder = readFileSync(new URL(
+    "../patches/payloads/powerline/legacy/editor-badges-before-centered-scroll.ts.inc", import.meta.url), "utf8").trimEnd();
+  const previous = current["index.ts"].replace(border[1], previousBorder);
+  writeFileSync(join(app.dir, "index.ts"), previous);
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+
+  for (const mode of ["missing-import", "modified-payload", "duplicate-payload", "mixed-payload", "partial-frame"]) {
+    let index = previous;
+    if (mode === "missing-import") index = index.replace(badgeImport[1], badgeImport[0]);
+    if (mode === "modified-payload") index = index.replace("const compact = width < 80", "const compact = width < 81");
+    if (mode === "duplicate-payload") index += previousBorder;
+    if (mode === "mixed-payload") index += border[1];
+    writeFileSync(join(app.dir, "index.ts"), index);
+    writeFileSync(join(app.dir, "bash-mode/editor.ts"), mode === "partial-frame"
+      ? current["bash-mode/editor.ts"].replace(edits["bash-mode/editor.ts"][0][1], edits["bash-mode/editor.ts"][0][0])
+      : current["bash-mode/editor.ts"]);
+    const before = app.contents();
+    expect(app.run().exitCode, mode).not.toBe(0);
+    expect(app.contents()).toEqual(before);
+  }
+});
+
 test("partial or modified compact badges refuse writes", () => {
   const app = sandbox("compact-partial");
   expect(app.run().exitCode).toBe(0);
@@ -221,7 +250,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       const rows = editor.render(width);
       expect(rows.every((row: string) => visibleWidth(row) <= width)).toBe(true);
       expect(rows.join("").split(marker)).toHaveLength(2);
-      expect(plain(rows[0])).toContain("↑");
+      // Preserve the complete native count, not just an arrow left after clipping.
+      const nativeBorder = Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset);
+      const hint = plain(nativeBorder).match(/↑ \d+ more/)![0];
+      expect(plain(rows[0])).toContain(hint);
+      expect(plain(rows[0])).toStartWith("╭────── ↑ ");
       expect(plain(rows[0])).toContain("build");
       expect(plain(rows[0])).toContain("med");
       expect(rows[0]).toContain("\x1b[0m ❯ ");

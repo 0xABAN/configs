@@ -125,6 +125,7 @@ LEGACY_BORDER_EDIT = (
 
 
 BORDER_EDIT = (LEGACY_BORDER_EDIT[0], read_payload("powerline/editor-badges.ts.inc").rstrip("\n"))
+PRE_CENTERED_SCROLL_BORDER = read_payload("powerline/legacy/editor-badges-before-centered-scroll.ts.inc").rstrip("\n")
 BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
     "SelectList, sliceByColumn, truncateToWidth,",
@@ -139,9 +140,11 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # The final result restores it below, so replay leaves installed bytes intact.
     old_border, new_border = BORDER_EDIT
     index = sources["index.ts"]
-    if (new_border in index) != (BADGE_IMPORT[1] in index):
-        raise ValueError("partial compact editor badge patch")
-    border_variants = [new_border, LEGACY_BORDER_EDIT[1],
+    compact_borders = (new_border, PRE_CENTERED_SCROLL_BORDER)
+    compact_count = sum(index.count(border) for border in compact_borders)
+    if compact_count > 1 or (compact_count == 1) != (BADGE_IMPORT[1] in index):
+        raise ValueError("partial or duplicated compact editor badge patch")
+    border_variants = [*compact_borders, LEGACY_BORDER_EDIT[1],
                        LEGACY_BORDER_EDIT[1].replace('join(" ❯ ")', 'join(" · ")')]
     for variant in border_variants:
         index = index.replace(variant, old_border)

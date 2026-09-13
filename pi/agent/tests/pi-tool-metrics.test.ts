@@ -309,8 +309,8 @@ test("native write reports written Unicode/newline counts without changing text 
     const path = "nested/output.txt";
     const result = await write.execute("write", { path, content });
     expect(readFileSync(join(root, path), "utf8")).toBe(content);
-    // Preserve the SDK's existing success text, including its length-based byte label.
-    expect(result.content).toEqual([{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }]);
+    // Preserve 0.85.1's success text; line counts belong only in UI metadata.
+    expect(result.content).toEqual([{ type: "text", text: `Successfully wrote to ${path}` }]);
     expect(result.details).toEqual({ configsTranscript: { lines } });
   }
 });
