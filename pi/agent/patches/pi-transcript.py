@@ -19,13 +19,15 @@ BASE = "dist/modes/interactive/"
 MODULE = BASE + "components/transcript.js"
 MODULE_SOURCE = read_payload('host/transcript.js.inc')
 LEGACY_MODULE_SOURCE = read_payload('host/legacy/transcript.js.inc')
+PRE_COMPACT_MODULE_SOURCE = read_payload('host/legacy/transcript-before-compact.js.inc')
+LEGACY_EDITS = json.loads(read_payload('host/legacy/transcript-edits-v1.json'))
 EDITS = {
     BASE + "interactive-mode.js": [
         ('import { UserMessageComponent } from "./components/user-message.js";',
          'import { UserMessageComponent } from "./components/user-message.js";\n'
          'import { TranscriptContainer } from "./components/transcript.js"; // configs:pi-transcript-v1'),
         ("        this.chatContainer = new Container();",
-         "        this.chatContainer = new TranscriptContainer(() => this.outputPad);"),
+         "        this.chatContainer = new TranscriptContainer(() => this.outputPad, () => this.ui.terminal.rows);"),
         ('''    getRegisteredToolDefinition(toolName) {
         return this.session.getToolDefinition(toolName);
     }''', '''    getRegisteredToolDefinition(toolName) {
@@ -45,7 +47,7 @@ EDITS = {
     BASE + "components/user-message.js": [
         ('import { createMarkdownTransform } from "./markdown-transform.js";',
          'import { createMarkdownTransform } from "./markdown-transform.js";\n'
-         'import { speakerHeader } from "./transcript.js"; // configs:pi-transcript-v1'),
+         'import { speakerHeader, transcriptPadding } from "./transcript.js"; // configs:pi-transcript-v1'),
         ("    text;", '    transcriptRole = "user";\n    timestamp;\n    text;'),
         ("constructor(text, markdownTheme = getMarkdownTheme(), outputPad = 1, markdownTransformers = [])",
          "constructor(text, markdownTheme = getMarkdownTheme(), outputPad = 1, markdownTransformers = [], timestamp)"),
@@ -53,22 +55,23 @@ EDITS = {
         ("        this.outputPad = padding;", "        this.outputPad = padding + 2;\n        this.transcriptBasePad = padding;"),
         ('        const contentBox = new Box(this.outputPad, 1, (content) => theme.bg("userMessageBg", content));',
          "        const contentBox = new Box(this.outputPad, 0);"),
-        ("        const lines = super.render(width);", '''        const padding = Math.min(this.transcriptBasePad + 2, Math.max(0, Math.floor((width - 2) / 2)));
+        ("        const lines = super.render(width);", '''        const padding = transcriptPadding(this.transcriptBasePad, width);
         if (this.outputPad !== padding) {
             this.outputPad = padding;
             this.rebuild();
         }
         const lines = super.render(width);
-        lines.unshift("", speakerHeader("You", this.timestamp, this.transcriptBasePad, width));'''),
+        lines.unshift(speakerHeader("You", this.timestamp, this.transcriptBasePad, width));
+        if (!this.transcriptTight) lines.unshift("");'''),
     ],
     BASE + "components/assistant-message.js": [
         ('import { createMarkdownTransform } from "./markdown-transform.js";',
          'import { createMarkdownTransform } from "./markdown-transform.js";\n'
-         'import { speakerHeader } from "./transcript.js"; // configs:pi-transcript-v1'),
+         'import { speakerHeader, transcriptPadding } from "./transcript.js"; // configs:pi-transcript-v1'),
         ("    contentContainer;", '    transcriptRole = "pi";\n    contentContainer;'),
         ("        this.outputPad = outputPad;", "        this.outputPad = outputPad + 2;\n        this.transcriptBasePad = outputPad;"),
         ("        this.outputPad = padding;", "        this.outputPad = padding + 2;\n        this.transcriptBasePad = padding;"),
-        ("        const lines = super.render(width);", '''        const padding = Math.min(this.transcriptBasePad + 2, Math.max(0, Math.floor((width - 2) / 2)));
+        ("        const lines = super.render(width);", '''        const padding = transcriptPadding(this.transcriptBasePad, width);
         if (this.outputPad !== padding) {
             this.outputPad = padding;
             if (this.lastMessage) this.updateContent(this.lastMessage);
@@ -76,7 +79,8 @@ EDITS = {
         const lines = super.render(width);
         if (this.transcriptHeader !== false && (lines.length || this.hasToolCalls)) {
             if (lines[0] === "") lines.shift();
-            lines.unshift("", speakerHeader("Pi", this.lastMessage?.timestamp, this.transcriptBasePad, width));
+            lines.unshift(speakerHeader("Pi", this.lastMessage?.timestamp, this.transcriptBasePad, width));
+            if (!this.transcriptTight) lines.unshift("");
         }'''),
     ],
     BASE + "components/tool-execution.js": [
@@ -85,10 +89,10 @@ EDITS = {
 }
 
 
-def patch_sources(sources: dict[str, str]) -> dict[str, str]:
-    """Accept original sources or this complete preview, not mixed installations."""
+def source_state(sources: dict[str, str], replacements: dict) -> str:
+    """Classify a whole known source revision, including overlapping setters."""
     states = []
-    for name, edits in EDITS.items():
+    for name, edits in replacements.items():
         source = sources[name]
         # New render blocks can legitimately contain an old setter statement.
         # Exclude all recognized replacements before looking for stray originals.
@@ -105,11 +109,30 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
                 raise ValueError(f"{name}: transcript anchor changed or duplicated: {old[:70]}")
     if len(set(states)) != 1:
         raise ValueError("partial transcript patch; inspect before reapplying")
-    if states[0] == "patched":
-        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
+    return states[0]
+
+
+def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+    """Accept complete current/original sources or an exact pre-compact revision."""
+    try:
+        state = source_state(sources, EDITS)
+    except ValueError as current_error:
+        if sources.get(MODULE) not in (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE):
+            raise current_error
+        # Old host edits and their helper migrate together. Never repair a mixed
+        # installation merely because one of its helper files is recognizable.
+        if source_state(sources, LEGACY_EDITS) != "patched":
+            raise current_error
+        original = dict(sources)
+        del original[MODULE]
+        for name, edits in LEGACY_EDITS.items():
+            for old, new in reversed(edits):
+                original[name] = original[name].replace(new, old, 1)
+        return patch_sources(original)
+    if state == "patched":
+        if sources.get(MODULE) != MODULE_SOURCE:
             raise ValueError("transcript module changed or missing; inspect before reapplying")
-        # Only a fully validated installation may upgrade its exact older helper.
-        return {**sources, MODULE: MODULE_SOURCE}
+        return sources
     if MODULE in sources:
         raise ValueError("unexpected transcript module alongside unpatched host")
     result = dict(sources)

@@ -29,27 +29,39 @@ function contents(root: string) {
     existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null]));
 }
 
-test("complete previous helper migrates with an exact backup; modified helpers still refuse", () => {
-  const root = sandbox("previous-helper");
-  expect(run(root).exitCode).toBe(0);
-  const current = readFileSync(join(root, modulePath), "utf8");
-  const legacy = readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8");
-  const backups = join(root, ".config/theme-backups");
-  const before = readdirSync(backups);
-  writeFileSync(join(root, modulePath), legacy);
-  expect(run(root).exitCode).toBe(0);
-  expect(readFileSync(join(root, modulePath), "utf8")).toBe(current);
-  const added = readdirSync(backups).filter(name => !before.includes(name));
-  expect(added).toHaveLength(1);
-  expect(readFileSync(join(backups, added[0], modulePath), "utf8")).toBe(legacy);
-  expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
-  expect(run(root).exitCode).toBe(0);
-  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+test("complete previous revisions migrate together with exact backups; mixed revisions refuse", () => {
+  const legacyEdits = JSON.parse(readFileSync(new URL("../patches/payloads/host/legacy/transcript-edits-v1.json", import.meta.url), "utf8")) as typeof edits;
+  for (const helper of ["transcript.js.inc", "transcript-before-compact.js.inc"]) {
+    const root = sandbox(helper);
+    for (const [file, changes] of Object.entries(legacyEdits)) {
+      let source = readFileSync(join(root, file), "utf8");
+      for (const [old, patched] of changes) source = source.replace(old, patched);
+      writeFileSync(join(root, file), source);
+    }
+    const legacy = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
+    writeFileSync(join(root, modulePath), legacy);
+    const before = contents(root);
+    expect(run(root).exitCode).toBe(0);
+    const backups = join(root, ".config/theme-backups");
+    const names = readdirSync(backups);
+    expect(names).toHaveLength(1);
+    for (const [file, source] of Object.entries(before)) {
+      expect(readFileSync(join(backups, names[0], file), "utf8")).toBe(source!);
+    }
+    expect(JSON.parse(readFileSync(join(backups, names[0], "added-files.json"), "utf8"))).toEqual([]);
+    const after = contents(root);
+    expect(run(root).exitCode).toBe(0);
+    expect(contents(root)).toEqual(after);
+    expect(readdirSync(backups)).toEqual(names);
 
-  writeFileSync(join(root, modulePath), legacy + "\n// local helper edit");
-  expect(run(root).exitCode).not.toBe(0);
-  expect(readFileSync(join(root, modulePath), "utf8")).toBe(legacy + "\n// local helper edit");
-  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+    // A known old helper is not compatible with the new host imports by itself.
+    for (const source of [legacy, legacy + "\n// local helper edit"]) {
+      writeFileSync(join(root, modulePath), source);
+      expect(run(root).exitCode).not.toBe(0);
+      expect(readFileSync(join(root, modulePath), "utf8")).toBe(source);
+      expect(readdirSync(backups)).toEqual(names);
+    }
+  }
 });
 
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
@@ -97,13 +109,7 @@ function real() {
   return loaded ??= (async () => {
     copySdk(sdk!, fixture);
     applySdkPatches(fixture, ["pi-horizontal-inset"]);
-    // Make repeat runs work after the preview is installed, using the guarded anchors.
-    for (const [file, changes] of Object.entries(edits)) {
-      let source = readFileSync(join(fixture, file), "utf8");
-      for (const [old, patched] of changes) source = source.replace(patched, old);
-      writeFileSync(join(fixture, file), source);
-    }
-    rmSync(join(fixture, modulePath), { force: true });
+    // Apply the checkout's guarded migration to the disposable supported host.
     const result = run(fixture);
     if (result.exitCode) throw new Error(result.stderr.toString());
     const load = (file: string) => import(pathToFileURL(join(fixture, "dist/modes/interactive", file)).href);
@@ -324,7 +330,7 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   expect(contexts[0].availableWidth).toBeLessThan(80);
 });
 
-realTest("simplified connectors match the previous helper for every narrow and error-row combination", async () => {
+realTest("wide transcript output matches the previous helper across error-row combinations", async () => {
   const m = await real();
   const previousPath = join(fixture, "dist/modes/interactive/components/transcript-previous.js");
   writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8"));
@@ -342,7 +348,46 @@ realTest("simplified connectors match the previous helper for every narrow and e
         current.addChild(component());
         old.addChild(component());
       }
-      for (let width = 1; width <= 80; width++) expect(current.render(width)).toEqual(old.render(width));
+      for (const width of [80, 90, 120, 160]) expect(current.render(width)).toEqual(old.render(width));
     }
   }
+});
+
+realTest("compact transcript reclaims gutters and blank rows without losing content or expansion", async () => {
+  const m = await real();
+  const app = host(m);
+  let rows = 40;
+  app.chatContainer = new m.TranscriptContainer(() => 1, () => rows);
+  app.renderSessionItems([
+    { role: "user", content: "Inspect 界.ts", timestamp },
+    assistant([toolCall("r", "read", { path: "界.ts" })]),
+    result("r", "read", "Permission denied\nFull native error details", true),
+    assistant([{ type: "text", text: "The file could not be read." }]),
+  ]);
+  const children = [...app.chatContainer.children];
+  const large = app.chatContainer.render(120);
+  rows = 12;
+  const short = app.chatContainer.render(120);
+  const meaningful = (lines: string[]) => lines.map(m.tui.stripTerminalSequences).filter((line: string) => line.trim());
+  expect(short.length).toBeLessThan(large.length);
+  expect(meaningful(short)).toEqual(meaningful(large));
+
+  for (const [width, height] of [[40, 12], [50, 16], [60, 20], [70, 12], [120, 12], [40, 40], [120, 40]]) {
+    rows = height;
+    const rendered = app.chatContainer.render(width);
+    const text = rendered.map(m.tui.stripTerminalSequences).join("\n");
+    expect(text).toContain("Permission denied");
+    expect(text).toContain("界.ts");
+    expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+    expect(app.chatContainer.children).toEqual(children);
+    for (const child of children.filter((c: any) => c.transcriptRole === "pi" || c.transcriptRole === "user")) {
+      expect(child.outputPad).toBe(width < 80 ? 1 : 3);
+    }
+  }
+  expect(app.chatContainer.render(120)).toEqual(large);
+  const tool = children.find((child: any) => child.transcriptRole === "tool");
+  tool.setExpanded(true);
+  rows = 12;
+  expect(transcript(m, app, 40)).toContain("Full native error details");
+  expect(tool.expanded).toBe(true);
 });

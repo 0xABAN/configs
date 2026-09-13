@@ -15,7 +15,7 @@ export class ActivityNotice {
     }
     render(width) {
         if (width <= 0) return [];
-        const padding = Math.min(width < 80 ? 1 : Math.max(0, this.getPadding()), Math.max(0, Math.floor((width - 2) / 2)));
+        const padding = Math.min(Math.max(0, this.getPadding()), Math.max(0, Math.floor((width - 2) / 2)));
         const gutter = " ".repeat(padding);
         const innerWidth = width - padding * 2;
         return this.content.render(innerWidth)

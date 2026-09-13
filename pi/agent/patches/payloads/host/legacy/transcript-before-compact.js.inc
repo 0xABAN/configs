@@ -20,11 +20,6 @@ function plain(value) {
         : "";
 }
 
-/** Narrow panes reclaim the two decorative body columns before truncating prose. */
-export function transcriptPadding(base, width) {
-    return Math.min(width < 80 ? 1 : Math.max(0, base + 2), Math.max(0, Math.floor((width - 2) / 2)));
-}
-
 export function speakerHeader(name, timestamp, padding, width) {
     const glyph = name === "You" ? "◆" : "●";
     let text = theme.fg("accent", glyph) + " " + theme.bold(theme.fg("text", name));
@@ -70,9 +65,8 @@ export function actionLines(component, width) {
     const status = failed ? "×" : complete ? "✓" : component.executionStarted ? "◌" : "○";
     const color = failed ? "error" : complete ? "muted" : "accent";
     const target = targetFor(component) || (component.argsComplete ? "" : "…");
-    const shownLabel = width < 60 ? label : label.padEnd(6);
     const title = theme.fg(color, status) + " " + theme.fg("accent", glyph)
-        + " " + theme.fg("muted", shownLabel) + " " + theme.fg("text", target);
+        + " " + theme.fg("muted", label.padEnd(6)) + " " + theme.fg("text", target);
     const lines = [truncateToWidth(title, width)];
 
     if (failed) {
@@ -89,32 +83,26 @@ export function actionLines(component, width) {
  * never move prose, custom messages or tool results to manufacture a cleaner turn.
  */
 export class TranscriptContainer extends Container {
-    constructor(getPadding = () => 1, getRows = () => Infinity) {
+    constructor(getPadding = () => 1) {
         super();
         this.getPadding = getPadding;
-        this.getRows = getRows;
     }
 
     render(width) {
         const lines = [];
         const actions = [];
         const padding = Math.min(Math.max(0, this.getPadding()), Math.max(0, width - 1));
-        const bodyPadding = width < 80
-            ? transcriptPadding(padding, width)
-            : Math.min(padding + 2, Math.max(0, width - 1));
-        const tight = this.getRows() < 24;
+        const bodyPadding = Math.min(padding + 2, Math.max(0, width - 1));
         const indent = " ".repeat(bodyPadding);
         let speaker;
 
         const flushActions = () => {
             if (!actions.length) return;
             if (speaker !== "pi") {
-                if (!tight) lines.push("");
-                lines.push(speakerHeader("Pi", undefined, padding, width));
+                lines.push("", speakerHeader("Pi", undefined, padding, width));
                 speaker = "pi";
             }
-            if (!tight) lines.push("");
-            lines.push(truncateToWidth(indent + theme.fg("muted", `${actions.length} action${actions.length === 1 ? "" : "s"}`), width));
+            lines.push("", truncateToWidth(indent + theme.fg("muted", `${actions.length} action${actions.length === 1 ? "" : "s"}`), width));
             for (let i = 0; i < actions.length; i++) {
                 const isLast = i === actions.length - 1;
                 let branch = "";
@@ -137,9 +125,6 @@ export class TranscriptContainer extends Container {
             // not leave a cached speaker identity behind.
             if (child.transcriptRole === "pi") {
                 child.transcriptHeader = speaker !== "pi" && actions.length === 0;
-            }
-            if (child.transcriptRole === "pi" || child.transcriptRole === "user") {
-                child.transcriptTight = tight;
             }
             const nativeLines = child.render(width);
             if (canCompact(child, nativeLines)) {

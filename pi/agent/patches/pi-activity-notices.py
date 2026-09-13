@@ -17,6 +17,7 @@ from patch_support import (
 HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/activity-notice.js"
 SOURCE = read_payload('host/activity-notice.js.inc')
+LEGACY_SOURCE = read_payload('host/legacy/activity-notice.js.inc')
 EDITS = [
     ('import { CustomEntryComponent } from "./components/custom-entry.js";',
      'import { CustomEntryComponent } from "./components/custom-entry.js";\n'
@@ -47,9 +48,9 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if len(set(states)) != 1:
         raise ValueError("partial notification patch; inspect before reapplying")
     if states[0] == "patched":
-        if sources.get(MODULE) != SOURCE:
+        if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
             raise ValueError("notification helper changed or missing")
-        return sources
+        return {**sources, MODULE: SOURCE}
     if MODULE in sources:
         raise ValueError("unexpected notification helper alongside original host")
     for old, new in EDITS:

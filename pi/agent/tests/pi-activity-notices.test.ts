@@ -56,6 +56,23 @@ test("notices reject partial, duplicate and changed sources without writes", () 
   expect(run(join(temp, "absent")).exitCode).toBe(0);
 });
 
+test("the exact previous notice helper upgrades without marking it as newly added", () => {
+  const root = fixture("legacy-helper");
+  expect(run(root).exitCode).toBe(0);
+  const before = readdirSync(join(root, ".config/theme-backups"));
+  const legacy = readFileSync(new URL("../patches/payloads/host/legacy/activity-notice.js.inc", import.meta.url), "utf8");
+  writeFileSync(join(root, MODULE), legacy);
+  expect(run(root).exitCode).toBe(0);
+  const backups = join(root, ".config/theme-backups");
+  const added = readdirSync(backups).filter(name => !before.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backups, added[0], MODULE), "utf8")).toBe(legacy);
+  expect(JSON.parse(readFileSync(join(backups, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  const after = contents(root);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(after);
+});
+
 realTest("native notices align every wrapped line and preserve coalescing, warnings and errors", async () => {
   const root = join(temp, "real");
   copySdk(sdk!, root);
@@ -72,7 +89,7 @@ realTest("native notices align every wrapped line and preserve coalescing, warni
   app.showExtensionNotify("◇ Todos\n╰─ ◈ This task has a long subject 漢字 é and active form", "info");
   const first = app.lastStatusText;
   for (const width of [4, 8, 20, 80]) {
-    const padding = Math.min(3, Math.max(0, Math.floor((width - 2) / 2)));
+    const padding = Math.min(width < 80 ? 1 : 3, Math.max(0, Math.floor((width - 2) / 2)));
     const lines = first.render(width);
     for (const line of lines) {
       expect(tui.visibleWidth(line)).toBeLessThanOrEqual(width);
