@@ -31,7 +31,7 @@ Existing files are renamed `*.bak.<timestamp>` before linking. The installer als
 
 `osaka-jade` now follows the reference screenshot rather than the upstream
 palette's green-tinted surfaces. Sampled colors are charcoal `#121319`,
-jade `#5fa876`, and muted teal `#5e9e80`. The screenshot
+jade `#5fa876`, muted teal `#5e9e80`, and blue-green `#669987`. The screenshot
 contains compression/antialiasing variations, so these are representative
 pixel samples, not claims about its underlying theme configuration.
 
@@ -41,9 +41,10 @@ use bright jade (`#5fa876`) with white text (`#ffffff`). Search/diff backgrounds
 remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
 near-white (`#F2F3F0`) for emphasis. Variables, strings, numbers, headings, editor
 status text, and Pi tool output use cream (`#dedec5`).
-Keywords use jade; functions, types, links, and thin borders use muted teal.
-Active items and additions are green. Outside selections, large surfaces
-never use green fills.
+Keywords, active highlights, and Neovim info diagnostics use blue-green;
+terminal ANSI cyan uses it too. Functions, types, links, and thin borders
+retain muted teal. Success states, additions, and selections stay jade.
+Outside selections, large surfaces never use green fills.
 Supporting neutrals and subdued warning/error colors are chosen to fit;
 ANSI colors use the same restrained treatment. No theme plugins required.
 

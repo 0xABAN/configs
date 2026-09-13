@@ -18,6 +18,7 @@ local c = {
   muted = "#85877e",
   dim = "#62656a",
   accent = "#5e9e80",
+  blueGreen = "#669987",
   bright = "#F2F3F0",
   cream = "#dedec5",
   text = "#D8DAD8",
@@ -36,7 +37,7 @@ hi("NormalFloat", { fg = c.text, bg = c.panel })
 hi("FloatBorder", { fg = c.accent, bg = c.panel })
 hi("Cursor", { fg = c.bg, bg = c.bright })
 hi("CursorLine", { bg = c.panel })
-hi("CursorLineNr", { fg = c.green, bold = true })
+hi("CursorLineNr", { fg = c.blueGreen, bold = true })
 hi("LineNr", { fg = c.dim })
 hi("SignColumn", { bg = c.bg })
 hi("EndOfBuffer", { fg = c.dim })
@@ -46,7 +47,7 @@ hi("WinSeparator", { fg = c.accent })
 hi("StatusLine", { fg = c.cream, bg = c.bg })
 hi("StatusLineNC", { fg = c.muted, bg = c.bg })
 hi("TabLine", { fg = c.muted, bg = c.bg })
-hi("TabLineSel", { fg = c.green, bg = c.panel, bold = true })
+hi("TabLineSel", { fg = c.blueGreen, bg = c.panel, bold = true })
 hi("TabLineFill", { bg = c.bg })
 hi("WinBar", { fg = c.text, bg = c.bg })
 hi("WinBarNC", { link = "WinBar" })
@@ -77,7 +78,7 @@ hi("Removed", { fg = c.red })
 hi("Changed", { fg = c.yellow })
 
 hi("Comment", { fg = c.dim, italic = true })
-hi("Statement", { fg = c.green, bold = true })
+hi("Statement", { fg = c.blueGreen, bold = true })
 hi("Keyword", { link = "Statement" })
 hi("PreProc", { fg = c.accent })
 hi("Function", { fg = c.accent })
@@ -86,7 +87,7 @@ hi("String", { fg = c.cream })
 hi("Character", { link = "String" })
 hi("Number", { fg = c.cream })
 hi("Float", { link = "Number" })
-hi("Boolean", { fg = c.green })
+hi("Boolean", { fg = c.blueGreen })
 hi("Type", { fg = c.accent })
 hi("Operator", { fg = c.muted })
 hi("Delimiter", { fg = c.text })
@@ -138,5 +139,5 @@ end
 
 hi("DiagnosticError", { fg = c.red })
 hi("DiagnosticWarn", { fg = c.yellow })
-hi("DiagnosticInfo", { fg = c.accent })
+hi("DiagnosticInfo", { fg = c.blueGreen })
 hi("DiagnosticHint", { fg = c.green })

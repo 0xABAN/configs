@@ -8,6 +8,7 @@
     "muted": "#85877e",
     "dim": "#62656a",
     "accent": "#5e9e80",
+    "blueGreen": "#669987",
     "bright": "#F2F3F0",
     "cream": "#dedec5",
     "text": "#D8DAD8",
@@ -16,9 +17,9 @@
     "red": "#c7837c"
   },
   "colors": {
-    "accent": "accent",
+    "accent": "blueGreen",
     "border": "accent",
-    "borderAccent": "green",
+    "borderAccent": "blueGreen",
     "borderMuted": "selection",
     "success": "green",
     "error": "red",
@@ -55,7 +56,7 @@
     "toolDiffRemoved": "red",
     "toolDiffContext": "text",
     "syntaxComment": "dim",
-    "syntaxKeyword": "green",
+    "syntaxKeyword": "blueGreen",
     "syntaxFunction": "accent",
     "syntaxVariable": "cream",
     "syntaxString": "cream",
