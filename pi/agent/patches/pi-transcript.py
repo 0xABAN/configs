@@ -25,6 +25,7 @@ PRE_YELLOW_ICON_MODULE_SOURCE = read_payload('host/legacy/transcript-before-yell
 PRE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-metrics.js.inc')
 PRE_TOOL_ROWS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-tool-rows.js.inc')
 PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-native-padding.js.inc')
+PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_METRICS_EDITS = json.loads(read_payload('host/legacy/transcript-edits-before-metrics.json'))
 LEGACY_EDITS = json.loads(read_payload('host/legacy/transcript-edits-v1.json'))
 EDITS = {
@@ -194,7 +195,9 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             return patch_sources(original)
         raise current_error
     if state == "patched":
-        if sources.get(MODULE) in (PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE):
+        if sources.get(MODULE) in (
+            PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE, PRE_INLINE_METRICS_MODULE_SOURCE,
+        ):
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:
             raise ValueError("transcript module changed or missing; inspect before reapplying")

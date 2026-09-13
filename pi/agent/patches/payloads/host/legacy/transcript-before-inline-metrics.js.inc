@@ -120,7 +120,7 @@ function metricVariants(component) {
     ].filter(Boolean);
 }
 
-/** Budget for inline metrics first; paths yield before counts, then counts before time. */
+/** Reserve the right edge first; paths yield before metrics, then counts before time. */
 function actionTitle(title, heading, component, width) {
     const variants = metricVariants(component);
     const minimumTitle = Math.min(visibleWidth(heading), width < 20 ? 3 : 12);
@@ -132,7 +132,7 @@ function actionTitle(title, heading, component, width) {
     if (!metrics) return truncateToWidth(title, width, width < 4 ? "" : "...");
     const leftWidth = width - visibleWidth(metrics) - 1;
     const left = truncateToWidth(title, leftWidth, leftWidth < 4 ? "" : "…");
-    return left + " " + theme.fg("muted", metrics);
+    return left + " ".repeat(width - visibleWidth(left) - visibleWidth(metrics)) + theme.fg("muted", metrics);
 }
 
 /** Return compact text only; expanded bodies always come from the native renderer. */

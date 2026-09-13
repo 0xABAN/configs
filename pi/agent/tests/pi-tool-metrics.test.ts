@@ -103,7 +103,27 @@ test("collectToolTimings accepts only matching result-entry metadata", async () 
   expect(m.collectToolTimings([]).size).toBe(0);
 });
 
-test("metrics reserve the exact right edge before truncating Unicode and unsafe targets", async () => {
+test("metrics follow short statements with one space rather than filling the row", async () => {
+  const m = await real();
+  for (const [toolName, args, statement, stats, suffix] of [
+    ["read", { path: "README.md" }, "README.md", { lines: 152 }, "152 lines · 1.2s"],
+    ["read", { path: "AGENTS.md" }, "AGENTS.md", undefined, "1.2s"],
+    ["write", { path: "out.txt" }, "out.txt", { lines: 0 }, "0 lines · 1.2s"],
+    ["edit", { path: "app.ts" }, "app.ts", { edits: 2 }, "2 edits · 1.2s"],
+    ["bash", { command: "git status" }, "git status", undefined, "1.2s"],
+    ["intercom", {}, "intercom", undefined, "1.2s"],
+  ] as const) {
+    const call = component({ toolName, args, transcriptDurationMs: 1200,
+      result: { isError: false, content: [], details: { configsTranscript: stats } } });
+    for (const width of [70, 120, 200]) {
+      const row = m.tui.stripTerminalSequences(m.actionLines(call, width)[0]);
+      expect(row.endsWith(`${statement} ${suffix}`), row).toBe(true);
+      expect(m.tui.visibleWidth(row)).toBeLessThan(width);
+    }
+  }
+});
+
+test("metrics retain room when truncating Unicode and unsafe targets", async () => {
   const m = await real();
   const call = component({
     args: { path: "界🙂/\x1b[31mcolored\x1b[0m\x1b]0;injected-title\x07\n\t" + "long-path/".repeat(20) },
@@ -120,10 +140,7 @@ test("metrics reserve the exact right edge before truncating Unicode and unsafe 
     expect(plain).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
     expect(rows[0]).not.toContain("injected-title");
     expect(rows[0]).not.toContain("\x1b[31m");
-    if (width >= 8) {
-      expect(m.tui.visibleWidth(rows[0])).toBe(width);
-      expect(plain.endsWith("1.2s")).toBe(true);
-    }
+    if (width >= 8) expect(plain.endsWith("1.2s")).toBe(true);
     if (width >= 70) {
       expect(plain.endsWith("152 lines · 1.2s")).toBe(true);
       expect(rows[0]).toContain(m.colors.theme.fg("muted", "152 lines · 1.2s"));
@@ -168,8 +185,8 @@ test("duration formatting covers zero and sub-100ms; read, write and edit counts
   const m = await real();
   for (const [durationMs, suffix] of [[0, "<0.1s"], [99, "<0.1s"], [100, "0.1s"], [1200, "1.2s"]] as const) {
     const row = m.actionLines(component({ transcriptDurationMs: durationMs }), 70)[0];
-    expect(m.tui.stripTerminalSequences(row).endsWith(suffix)).toBe(true);
-    expect(m.tui.visibleWidth(row)).toBe(70);
+    expect(m.tui.stripTerminalSequences(row).endsWith(`src/session.ts ${suffix}`)).toBe(true);
+    expect(m.tui.visibleWidth(row)).toBeLessThan(70);
   }
   for (const [toolName, stats, full, compact] of [
     ["read", { lines: 152 }, "152 lines", "152L"],

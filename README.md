@@ -236,8 +236,9 @@ Narrow panes reclaim the extra gutter. Self-framed renderers and image bodies
 keep their own geometry. There are no per-row click controls. Component order
 is preserved; mixed text/tool/text blocks inside one assistant message are not split.
 
-Completed compact rows reserve their right edge for result counts and elapsed
-call time, for example `152 lines · 1.2s`. Narrow rows use `152L 1.2s` or
+Completed compact rows append result counts and elapsed call time directly after
+the statement, separated by one space, for example `README.md 152 lines · 1.2s`.
+Short statements do not stretch to fill the row. Narrow rows use `152L 1.2s` or
 `2ed 1.2s`, truncating the path first; when necessary, counts yield to timing.
 At widths too small for both a status and timing, the status takes precedence.
 This uses each row's available width after existing gutters, not terminal width.

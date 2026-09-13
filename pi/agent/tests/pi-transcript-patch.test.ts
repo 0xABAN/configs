@@ -81,7 +81,11 @@ test("complete previous revisions migrate together with exact backups; mixed rev
   }
 });
 
-for (const helper of ["transcript-before-tool-rows.js.inc", "transcript-before-native-padding.js.inc"]) {
+for (const helper of [
+  "transcript-before-tool-rows.js.inc",
+  "transcript-before-native-padding.js.inc",
+  "transcript-before-inline-metrics.js.inc",
+]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
     const root = sandbox(helper);
