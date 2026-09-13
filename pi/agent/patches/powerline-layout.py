@@ -24,6 +24,13 @@ function buildAlignedContent(
 }
 
 '''
+LEGACY_ALIGN = ALIGN
+ALIGN = ALIGN.replace(
+    "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
+    'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style,\n'
+    '    ansi.getFgAnsi(95, 168, 118) + "●" + ansi.reset);',
+)
+
 METER = '''// configs:powerline-meter-v1
 /** Clamp the five-cell gauge, but retain the reported percentage and approximation. */
 function contextMeter(percent: number | null, approximate: boolean): string {
@@ -80,7 +87,19 @@ UNSTAGED_EDIT = (
 
 SEPARATOR_EDIT = (
     'const sep = separatorDef.left;',
-    'const sep = separatorStyle === "chevron" ? "❯" : separatorDef.left;',
+    'const sep = separator ?? (separatorStyle === "chevron" ? "❯" : separatorDef.left);',
+)
+LEGACY_SEPARATOR = 'const sep = separatorStyle === "chevron" ? "❯" : separatorDef.left;'
+SEPARATOR_ARGUMENT_EDIT = (
+    '''function buildContentFromParts(
+  parts: string[],
+  separatorStyle: StatusLineSeparatorStyle,
+): string {''',
+    '''function buildContentFromParts(
+  parts: string[],
+  separatorStyle: StatusLineSeparatorStyle,
+  separator?: string,
+): string {''',
 )
 
 
@@ -89,7 +108,12 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # Small appearance upgrades also apply over an already-installed layout.
     # Keep other warning colors and separator styles intact.
     sources = dict(sources)
-    for name, (old, new) in [("segments.ts", UNSTAGED_EDIT), ("index.ts", SEPARATOR_EDIT)]:
+    sources["index.ts"] = sources["index.ts"].replace(LEGACY_ALIGN, ALIGN).replace(LEGACY_SEPARATOR, SEPARATOR_EDIT[1])
+    for name, (old, new) in [
+        ("segments.ts", UNSTAGED_EDIT),
+        ("index.ts", SEPARATOR_EDIT),
+        ("index.ts", SEPARATOR_ARGUMENT_EDIT),
+    ]:
         source = sources[name]
         if source.count(new) == 0 and source.count(old) == 1:
             sources[name] = source.replace(old, new, 1)

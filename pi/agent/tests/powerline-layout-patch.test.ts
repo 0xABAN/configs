@@ -10,12 +10,14 @@ import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('patcher',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 m.EDITS['segments.ts'].append(m.UNSTAGED_EDIT)
+m.EDITS['index.ts'].append(m.SEPARATOR_ARGUMENT_EDIT)
 m.EDITS['index.ts'].append(m.SEPARATOR_EDIT)
-print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER}))
+print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER,'legacyAlign':m.LEGACY_ALIGN,'legacySeparator':m.LEGACY_SEPARATOR}))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const { edits, align, meter } = JSON.parse(describe.stdout.toString()) as {
+const { edits, align, meter, legacyAlign, legacySeparator } = JSON.parse(describe.stdout.toString()) as {
   edits: Record<string, [string, string][]>; align: string; meter: string;
+  legacyAlign: string; legacySeparator: string;
 };
 const root = mkdtempSync(join(tmpdir(), "powerline-layout-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -65,6 +67,18 @@ test("existing layouts upgrade their chevron renderer", () => {
   expect(app.contents()).toEqual(current);
 });
 
+test("existing right-hand groups upgrade to the green ball separator", () => {
+  const app = sandbox("context-ball");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const [oldArgument, newArgument] = edits["index.ts"].at(-2)!;
+  const [, newSeparator] = edits["index.ts"].at(-1)!;
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
+    .replace(align, legacyAlign).replace(newSeparator, legacySeparator).replace(newArgument, oldArgument));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+});
+
 test("changed or partial anchors refuse all writes", () => {
   for (const partial of [false, true]) {
     const app = sandbox(String(partial));
@@ -77,10 +91,11 @@ test("changed or partial anchors refuse all writes", () => {
 });
 
 const transpiler = new Bun.Transpiler({ loader: "ts" });
-const helpers = new Function("visibleWidth", "buildContentFromParts", transpiler.transformSync(align + meter) +
+const helpers = new Function("visibleWidth", "buildContentFromParts", "ansi", transpiler.transformSync(align + meter) +
   "\nreturn { buildAlignedContent, contextMeter };")(
   Bun.stringWidth,
-  (parts: string[]) => parts.length ? " " + parts.join(" · ") + " " : "",
+  (parts: string[], _style: string, separator = "·") => parts.length ? " " + parts.join(` ${separator} `) + " " : "",
+  { getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`, reset: "\x1b[0m" },
 );
 
 test("groups align by visible width without stripping gradients", () => {
@@ -94,6 +109,20 @@ test("groups align by visible width without stripping gradients", () => {
   expect(helpers.buildAlignedContent([parts[0]], "dot", 40)).toBe(` ${left} `);
   expect(Bun.stringWidth(helpers.buildAlignedContent([parts[1]], "dot", 40))).toBe(40);
   expect(Bun.stringWidth(helpers.buildAlignedContent(parts, "dot", 12))).toBe(12);
+});
+
+test("cost stays neutral while the ball and context stay jade", () => {
+  const reset = "\x1b[0m";
+  const green = "\x1b[38;2;95;168;118m";
+  const cost = `\x1b[38;2;133;135;126m$52.14${reset}`;
+  const context = `${green}[▰▰▰▱▱] 52% context${reset}`;
+  const row = helpers.buildAlignedContent([
+    { content: "model", right: false },
+    { content: cost, right: true },
+    { content: context, right: true },
+  ], "chevron", 80);
+  expect(row).toContain(`${cost} ${green}●${reset} ${context}`);
+  expect(Bun.stringWidth(row)).toBe(80);
 });
 
 test("context meter clamps fill and preserves unknown and approximate usage", () => {
@@ -143,16 +172,16 @@ test.skipIf(!existsSync(installed))("installed layout preserves right alignment 
   const compute = new Function("config", "renderSegment", "visibleWidth", "getSeparator", "getFgAnsiCode", "ansi", "mergeSegmentsWithCustomItems",
     js + "\nreturn computeResponsiveLayout;")(
     config, (id: string) => ({ visible: id !== "hidden", content: id }), Bun.stringWidth,
-    () => ({ left: "·" }), () => "", { reset: "" },
+    () => ({ left: "·" }), () => "", { reset: "", getFgAnsi: () => "" },
     () => ({ leftSegments: ["model", "branch", "hidden"], rightSegments: ["cost", "meter"], secondarySegments: ["mode"] }),
   );
   const wide = compute({}, {}, 80);
-  expect(wide.topContent).toBe(" model · branch · mode" + " ".repeat(45) + "cost · meter ");
+  expect(wide.topContent).toBe(" model · branch · mode" + " ".repeat(45) + "cost ● meter ");
   expect(Bun.stringWidth(wide.topContent)).toBe(80);
   for (const width of [0, 7, 16, 25, 40]) {
     const rows = compute({}, {}, width);
     expect(Bun.stringWidth(rows.topContent)).toBeLessThanOrEqual(width);
     expect(Bun.stringWidth(rows.secondaryContent)).toBeLessThanOrEqual(width);
   }
-  expect(compute({}, {}, 16).secondaryContent.endsWith("cost · meter ")).toBe(true);
+  expect(compute({}, {}, 16).secondaryContent.endsWith("cost ● meter ")).toBe(true);
 });
