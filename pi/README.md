@@ -75,7 +75,7 @@ gate for extreme window sizes.
 
 | Target | Supported input | Commands under `agent/patches/` |
 |--------|-----------------|--------------------------------|
-| Pi host and bundled TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
+| Pi unbundled host and package-local TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
 | Powerline | Git commit `8c9bda10fdfd2822e89334ec85f3da9f8ca49182` | `powerline-dj.py`, `powerline-layout.py`, `powerline-editor.py` |
 | rpiv-todo UI | `@juicesharp/rpiv-todo` `2.9.0`, after legacy tweaks | `rpiv-todo-ui.py` |
 | Subagents UI | `@tintinweb/pi-subagents` `0.19.0` | `subagents-ui.py` |
@@ -105,9 +105,45 @@ Do not change persistence as part of a visual cleanup.
 
 `install.sh` owns the serial order: powerline DJ/layout, host inset, editor,
 transcript, dialogs, notices, compact layout, legacy Todo tweaks, Todo UI, then
-Subagents UI.
+Subagents UI, then `pi/launcher.py`.
 The legacy Todo command remains best-effort; the other patch failures propagate.
 Keep pi-pretty before powerline in package settings because both install editors.
+
+### Which CLI runs the patches?
+
+Pi 0.85.1 declares `dist/bundle/cli.js` as its npm `pi` command. That bundled
+program contains its own host implementation; patching `dist/modes/...` does not
+change it. A successful import test or `pi --version` cannot prove the customized
+host is running.
+
+Our customized command instead selects the published `dist/cli.js`. It calls
+`setupCli()` and `main()` and loads the unbundled host and package-local TUI that
+our patchers modify. **This is a published but private compatibility boundary,
+not a documented upstream entrypoint guarantee.** `pi/launcher.py` checks the
+exact version, npm bin declaration and entry/setup bytes before atomically
+repointing only the known npm-owned symlink. Unknown wrappers, targets and
+modified entrypoints are refused. Package metadata and minified bundles are
+never edited. Repeating the command is a no-op.
+
+After all host patches pass, select it explicitly (POSIX npm installation only):
+
+```sh
+python3 -B pi/launcher.py --sdk "$(npm root -g)/@earendil-works/pi-coding-agent" \
+  --launcher "$(command -v pi)"
+```
+
+The helper retains the exact old link as `pi` plus `launcher.json` under the
+printed `~/.config/theme-backups/pi-launcher-*` directory. To roll back, verify
+the current link still equals the recorded `replacement`, then replace only
+that symlink with the recorded `target`; do not copy its resolved package file.
+A refusal leaves the original link in place. Every npm update/reinstall may
+reset the link to the bundled CLI: **replay this final step after every update**.
+`install.sh` does this after its patch chain. Do not run the broad installer just
+to repair a launcher. Restart existing Pi processes after activation.
+
+`pi-clean` is separate: its launcher already invokes its own unbundled
+`dist/cli.js`, whose host is deliberately unpatched. Neither this helper nor
+custom-host activation changes `pi-clean`.
 
 ## Verification and replay
 
@@ -160,7 +196,7 @@ python3 -B pi/upgrade.py 0.85.1
 python3 -B pi/upgrade.py 0.85.1 --backup
 ```
 
-Requires Python 3.10+, Git, npm/Node, Bun, and the installed Powerline, Todo,
+Requires Python 3.10+, Git, npm/Node, Bun, tmux, and the installed Powerline, Todo,
 Subagents and pi-pretty sources under `~/.pi/agent/`. Use an exact stable version;
 `latest`, ranges, prereleases and arbitrary npm specs are rejected. The command
 installs only inside a private `/tmp/pi-upgrade-<version>-*` directory, using
@@ -169,7 +205,18 @@ installs only inside a private `/tmp/pi-upgrade-<version>-*` directory, using
 The check snapshots current configuration sources (including uncommitted files),
 copies installed package sources into a temporary HOME, and sets `PI_SDK_ROOT`
 to the candidate. It runs the full `pi/agent/tests` native suite and the copied
-clean-launcher/auth tests, using synthetic credentials. Personal auth, settings,
+clean-launcher/auth tests, using synthetic credentials. It then replays host and
+Powerline patches inside the stage, selects the candidate npm symlink with the
+same launcher helper used at activation, and launches **that executable** in
+120×36 tmux terminals in regular and fullscreen modes. The rendered faux-provider
+response must show `◆ You`, `● Pi`, the cream separator, a two-column outer inset
+and the configured Powerline footer. Captured ANSI/plain screens, executed
+commands and individual assertions are retained under `cli-smoke/`.
+
+The terminal checks load copied pi-pretty and Powerline sources in configured
+order, with the configured theme and Powerline options. They do not load all
+personal extensions: intercom, MCP and subagents can contact live peers/services.
+Personal auth, remaining settings,
 Node overrides and API-key environment variables are not inherited by commands;
 PATH is retained to locate tools. This is isolation for testing, not a sandbox.
 Only npm installation needs network access; no model calls or lifecycle scripts
@@ -181,8 +228,9 @@ patch guards: review and adapt those patches separately, never loosen them to
 make the checker green. Source changes during the check also require a rerun.
 Logs, the candidate lockfile, input hashes, source/package copies and `report.json`
 remain in the printed stage directory on success or failure. A green report
-covers these tests only, not every extension, a visible terminal smoke test or
-live OAuth refresh. Native child tests are represented by their parent suite
+covers these tests only, not every extension or live OAuth refresh. The report
+records both the candidate command and the actual `pi` found on PATH. An unknown
+live wrapper or a symlink belonging to another npm installation stops the check. Native child tests are represented by their parent suite
 checks in the reported Bun count.
 
 The patch-contract table above is the version authority. The patch purposes are:
@@ -197,7 +245,9 @@ The patch-contract table above is the version authority. The patch purposes are:
 `--backup` runs only after all checks pass. It copies the global Pi package,
 `pi/clean` including its installed dependencies, and the complete Powerline
 source (including `index.ts` and `bash-mode/editor.ts`) into `rollback/`.
-Links are dereferenced and `auth.json` is excluded. A partial copy is not a
+It also saves the actual command's exact link as `pi-launcher` and its path/target
+in `launcher.json`. Package-copy links are dereferenced; the launcher link itself
+is deliberately preserved. `auth.json` is excluded. A partial copy is not a
 completed backup; check `backup_complete` and `status` in the report. Staging and
 backups can consume hundreds of MB; retain them through the upgrade, then remove
 only the printed stage directory when no longer needed. `/tmp` is not durable
@@ -206,8 +256,8 @@ archival storage; move the whole directory elsewhere if it must survive cleanup.
 **Activation remains manual.** Before any install or live patch, require a green
 report for the exact version and unchanged sources, a complete fresh backup,
 and no concurrent package/config edits. Update each intended install explicitly,
-replay patches in the documented serial order, stop on the first failure, and
-verify normal/clean startup plus the visible UI before restarting working
+replay patches and the launcher selection in the documented serial order, stop
+on the first failure, and verify normal/clean startup plus the visible UI before restarting working
 sessions. Do not treat `install.sh` as an upgrade transaction: its legacy Todo
 step is best-effort. Restore affected files from the matching rollback copies
 if activation fails; do not overwrite credentials or unrelated configuration.
@@ -216,5 +266,5 @@ The checker neither activates nor provides an automatic rollback operation.
 Offline checks for the upgrade command itself:
 
 ```sh
-python3 -B -m unittest pi/upgrade_test.py
+python3 -B -m unittest pi/upgrade_test.py pi/launcher_test.py
 ```

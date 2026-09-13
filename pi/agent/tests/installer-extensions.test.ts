@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,6 +16,11 @@ function sandbox(name: string) {
   mkdirSync(bin);
   copyFileSync(installer, join(cwd, "install.sh"));
   writeFileSync(join(cwd, "pi/agent/mcp.json.example"), "{}\n");
+  // Launcher mechanics have separate tests; this fixture proves replay ordering.
+  writeFileSync(join(cwd, "pi/launcher.py"), `from pathlib import Path
+with (Path.home() / "patch-order.log").open("a") as log:
+    log.write("launcher.py\\n")
+`);
   // Keep this installer test offline; assert the exact clone request and provide its output.
   writeFileSync(join(bin, "git"), `#!/bin/sh
 set -eu
@@ -36,8 +41,9 @@ echo install >> "$HOME/dependencies.log"
 exit "\${FAIL_DEPENDENCIES:-0}"
 `);
   chmodSync(join(bin, "bun"), 0o755);
+  writeFileSync(join(bin, "pi"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   const run = (env: Record<string, string> = {}) => Bun.spawnSync(["bash", "install.sh"], {
-    cwd, env: { ...process.env, ...env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+    cwd, env: { ...process.env, ...env, HOME: home, PATH: `${bin}:${env.PATH ?? process.env.PATH}` },
   });
   return { cwd, home, run };
 }
@@ -97,7 +103,27 @@ with (Path.home() / "patch-order.log").open("a") as log:
 `);
   }
   expect(run().exitCode).toBe(0);
-  expect(readFileSync(join(home, "patch-order.log"), "utf8")).toBe(names.join("\n") + "\n");
+  expect(readFileSync(join(home, "patch-order.log"), "utf8")).toBe([...names, "launcher.py"].join("\n") + "\n");
+});
+
+test("installer skips launcher selection when Pi is absent", () => {
+  const { cwd, home, run } = sandbox("no-pi");
+  const bin = join(cwd, "bin");
+  rmSync(join(bin, "pi"));
+  // Include only installer utilities, never a Pi from the developer's PATH.
+  for (const name of ["bash", "date", "dirname", "mkdir", "ln", "mv", "rm", "cp"]) {
+    symlinkSync(Bun.which(name)!, join(bin, name));
+  }
+  const result = run({ PATH: "" });
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain("Pi not installed; skipping launcher selection");
+  expect(existsSync(join(home, "patch-order.log"))).toBe(false);
+});
+
+test("installer propagates launcher refusal", () => {
+  const { cwd, run } = sandbox("launcher-refusal");
+  writeFileSync(join(cwd, "pi/launcher.py"), "raise SystemExit(24)\n");
+  expect(run().exitCode).toBe(24);
 });
 
 test("DJ has a single source and its legacy auto-discovered copy is removed", () => {

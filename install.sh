@@ -144,6 +144,14 @@ if [[ -f "$ROOT/pi/agent/patches/subagents-ui.py" ]]; then
   python3 "$ROOT/pi/agent/patches/subagents-ui.py"
 fi
 
+# npm restores its bundled bin on update; our host patches need the unbundled CLI.
+# Preserve config-only installation on machines that do not have Pi yet.
+if command -v pi >/dev/null 2>&1; then
+  python3 -B "$ROOT/pi/launcher.py"
+else
+  echo "Pi not installed; skipping launcher selection"
+fi
+
 echo
 echo "done. edit files under: $ROOT"
 echo "secrets: put exports in ~/.zshrc.local (sourced if present)"

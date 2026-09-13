@@ -78,7 +78,8 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
         "version": version, "status": "failed", "activated": False, "backup_complete": False,
         "coverage": {},
         "scope": "Local config/native suites and clean launcher/auth tests with synthetic tokens. "
-                 "Not upstream suites, authenticated model calls, or a visible terminal smoke test.",
+                 "Real CLI terminal checks cover pi-pretty, Powerline and the configured theme in both modes. "
+                 "Not every personal extension, upstream suites or authenticated model calls.",
     }
     isolated_home = stage / "home"
     isolated_home.mkdir()
@@ -144,17 +145,48 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
         report["coverage"]["clean"] = test_counts(
             run("clean-tests", ["node", "--test", "--test-reporter=tap", "pi-clean.test.mjs", "auth-store.test.mjs"], clean), "node",
         )
+        # Native tests patch disposable fixtures, not the candidate itself. Replay
+        # into this candidate only after the unmodified clean-launcher tests pass.
+        for patcher in ("powerline-dj", "powerline-layout", "pi-horizontal-inset", "powerline-editor",
+                        "pi-transcript", "pi-extension-dialogs", "pi-activity-notices", "pi-compact-layout"):
+            run(patcher, ["python3", "-B", f"pi/agent/patches/{patcher}.py"], snapshot)
+        candidate_launcher = clean / "node_modules/.bin/pi"
+        run("select-launcher", ["python3", "-B", "pi/launcher.py", "--sdk", str(sdk),
+                                "--launcher", str(candidate_launcher)], snapshot)
+        run("cli-smoke", ["python3", "-B", "pi/cli_smoke.py", "--sdk", str(sdk),
+                          "--launcher", str(candidate_launcher), "--config", str(snapshot),
+                          "--home", str(isolated_home), "--output", str(stage / "cli-smoke")], snapshot)
+        cli_checks = json.loads((stage / "cli-smoke/assertions.json").read_text())
+        if set(cli_checks) != {"regular", "fullscreen"} or any(
+            not checks or not all(value is True for value in checks.values()) for checks in cli_checks.values()
+        ):
+            raise RuntimeError("incomplete actual-CLI rendering coverage")
+        report["coverage"]["cli"] = cli_checks
+        report["candidate_launcher"] = {"path": str(candidate_launcher), "target": os.readlink(candidate_launcher)}
         if source_snapshot(repo, env) != hashes:
             raise RuntimeError("configuration changed during checks; rerun before using this result")
+
+        # Record the real executable, not just npm's package directory. Unknown
+        # wrappers/other installations need review before a safe activation plan.
+        output = run("global-root", ["npm", "root", "-g"], stage)
+        global_root = (Path(output.splitlines()[-1]) / PACKAGE).resolve()
+        live_command = shutil.which("pi", path=env["PATH"])
+        if not live_command:
+            raise RuntimeError("live pi command not found")
+        live_launcher = Path(live_command)
+        if not live_launcher.is_symlink() or live_launcher.resolve() not in (
+            global_root / "dist/bundle/cli.js", global_root / "dist/cli.js",
+        ):
+            raise RuntimeError(f"unrecognized live launcher: {live_launcher}; review activation manually")
+        report["live_launcher"] = {"path": str(live_launcher), "target": os.readlink(live_launcher)}
         if backup:
-            # Query npm only after green checks. Never invoke live installers/patchers.
-            output = run("global-root", ["npm", "root", "-g"], stage)
-            global_root = Path(output.splitlines()[-1]) / PACKAGE
             rollback = stage / "rollback"
             rollback.mkdir()
             for source, destination in ((global_root, "global-pi"), (repo / "pi/clean", "pi-clean"),
                                         (home / POWERLINE, "powerline")):
                 copy_tree(source, rollback / destination)
+            (rollback / "launcher.json").write_text(json.dumps(report["live_launcher"], indent=2) + "\n")
+            (rollback / "pi-launcher").symlink_to(report["live_launcher"]["target"])
             report["backup_complete"] = True
             report["backup_sources"] = {"global-pi": str(global_root), "pi-clean": str(repo / "pi/clean"),
                                         "powerline": str(home / POWERLINE)}

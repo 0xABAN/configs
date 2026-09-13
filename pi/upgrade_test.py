@@ -27,7 +27,10 @@ class UpgradeTest(unittest.TestCase):
 
     def test_isolated_green_run_backup_and_failure_gates(self):
         # Exercise the real filesystem orchestration with controlled subprocesses.
-        for failure in (None, "install", "config", "clean", "skip", "missing-summary", "source-change", "backup", "no-backup"):
+        for failure in (
+            None, "install", "config", "clean", "skip", "missing-summary", "source-change",
+            "backup", "no-backup", "cli", "launcher", "cli-assertions", "foreign-launcher",
+        ):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repo, home, stage, global_modules = (root / name for name in ("repo", "home", "stage", "global"))
@@ -53,6 +56,12 @@ class UpgradeTest(unittest.TestCase):
                 # Copying rollback material must not retain mutable links to live files.
                 (global_modules / upgrade.PACKAGE / "alias.txt").symlink_to("original.txt")
                 (repo / "pi/clean/auth.json").write_text("also excluded from backup")
+                live_launcher = root / "bin/pi"
+                live_launcher.parent.mkdir()
+                live_launcher.symlink_to(global_modules / upgrade.PACKAGE / "dist/bundle/cli.js")
+                if failure == "foreign-launcher":
+                    live_launcher.unlink()
+                    live_launcher.symlink_to("/bin/sh")
                 calls = []
 
                 def fake_run(args, *, cwd, env, **kwargs):
@@ -77,6 +86,8 @@ class UpgradeTest(unittest.TestCase):
                         sdk = Path(cwd) / "node_modules" / upgrade.PACKAGE
                         sdk.mkdir(parents=True)
                         (sdk / "package.json").write_text('{"version":"0.85.1"}')
+                        (sdk.parent.parent / ".bin").mkdir()
+                        (sdk.parent.parent / ".bin/pi").symlink_to(sdk / "dist/bundle/cli.js")
                         code = 1 if failure == "install" else 0
                     elif args[:2] == ["bun", "test"]:
                         self.assertTrue(Path(env["PI_SDK_ROOT"]).is_relative_to(stage))
@@ -92,6 +103,23 @@ class UpgradeTest(unittest.TestCase):
                         output = "# pass 3\n# fail 0\n# skipped 0\n"
                         if failure == "source-change":
                             (repo / "pi/agent/patches/guard.py").write_text("edited concurrently")
+                    elif args[:2] == ["python3", "-B"]:
+                        self.assertTrue(Path(env["PI_SDK_ROOT"]).is_relative_to(stage))
+                        if args[2] == "pi/launcher.py":
+                            link = Path(args[args.index("--launcher") + 1])
+                            self.assertTrue(link.is_relative_to(stage))
+                            link.unlink()
+                            link.symlink_to(Path(env["PI_SDK_ROOT"]) / "dist/cli.js")
+                            code = 1 if failure == "launcher" else 0
+                        elif args[2] == "pi/cli_smoke.py":
+                            code = 1 if failure == "cli" else 0
+                            directory = stage / "cli-smoke"
+                            directory.mkdir()
+                            (directory / "assertions.json").write_text(json.dumps({
+                                "regular": {"rendered": failure != "cli-assertions"}, "fullscreen": {"rendered": True},
+                            }))
+                        else:
+                            self.assertTrue(args[2].startswith("pi/agent/patches/"))
                     elif args == ["npm", "root", "-g"]:
                         output = str(global_modules) + "\n"
                         if failure == "backup":
@@ -102,6 +130,7 @@ class UpgradeTest(unittest.TestCase):
                     return subprocess.CompletedProcess(args, code)
 
                 with patch.object(upgrade.subprocess, "run", side_effect=fake_run), \
+                     patch.object(upgrade.shutil, "which", return_value=str(live_launcher)), \
                      patch.dict(os.environ, {"OPENAI_API_KEY": "secret", "NODE_OPTIONS": "unsafe", "npm_config_prefix": "unsafe"}), \
                      contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                     result = upgrade.check_upgrade("0.85.1", failure != "no-backup", repo, home, stage)
@@ -111,24 +140,27 @@ class UpgradeTest(unittest.TestCase):
                 self.assertEqual(report["status"], "passed" if green else "failed")
                 self.assertFalse(report["activated"])
                 self.assertIn("synthetic tokens", report["scope"])
-                self.assertIn("visible terminal", report["scope"])
+                self.assertIn("Real CLI terminal", report["scope"])
                 self.assertEqual(report["source_head"], "fixture-head")
                 if failure in ("install", "config", "skip", "missing-summary"):
                     self.assertFalse(any(command[:2] == ["node", "--test"] for command in calls))
                 if not green and failure != "backup":
                     self.assertFalse((stage / "rollback").exists())
-                    self.assertNotIn(["npm", "root", "-g"], calls)
+                    if failure != "foreign-launcher":
+                        self.assertNotIn(["npm", "root", "-g"], calls)
                 if failure == "no-backup":
                     self.assertFalse(report["backup_complete"])
                     self.assertFalse((stage / "rollback").exists())
                 if failure is None:
-                    self.assertEqual(report["coverage"], {"config": {"pass": 90, "fail": 0, "skip": 0}, "clean": {"pass": 3, "fail": 0, "skip": 0}})
+                    self.assertEqual(report["coverage"], {"config": {"pass": 90, "fail": 0, "skip": 0}, "clean": {"pass": 3, "fail": 0, "skip": 0}, "cli": {"regular": {"rendered": True}, "fullscreen": {"rendered": True}}})
                     self.assertTrue(report["backup_complete"])
                     rollback = stage / "rollback"
                     self.assertEqual((rollback / "powerline/bash-mode/editor.ts").read_text(), "original bash editor")
                     self.assertEqual((rollback / "pi-clean/node_modules/installed.txt").read_text(), "live clean install")
                     self.assertFalse((rollback / "global-pi/alias.txt").is_symlink())
                     self.assertFalse(list(rollback.rglob("auth.json")))
+                    self.assertEqual(os.readlink(rollback / "pi-launcher"), os.readlink(live_launcher))
+                    self.assertEqual(json.loads((rollback / "launcher.json").read_text())["path"], str(live_launcher))
                     (rollback / "global-pi/alias.txt").write_text("independent backup")
                 for path, text in files.items():
                     if failure == "source-change" and path.name == "guard.py":
