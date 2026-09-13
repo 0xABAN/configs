@@ -22,12 +22,20 @@ EDITS = [
     ('import { FooterComponent, formatTokens } from "./components/footer.js";',
      'import { FooterComponent, formatTokens } from "./components/footer.js";\n'
      'import { CompactWidgetSpacer, installActivityBudget } from "./components/compact-layout.js"; ' + MARKER, 1),
-    ('        this.widgetContainerBelow = new Container();',
-     '        this.widgetContainerBelow = new Container();\n'
-     '        installActivityBudget(this.ui, this.extensionWidgetsAbove, this.extensionWidgetsBelow);', 1),
+    ('    mountInteractiveTui(tui, components) {',
+     '    mountInteractiveTui(tui, components) {\n'
+     '        installActivityBudget(tui, this.extensionWidgetsAbove, this.extensionWidgetsBelow);', 1),
     ('container.addChild(new Spacer(1));',
      'container.addChild(new CompactWidgetSpacer(this.ui));', 2),
 ]
+# The first revision attached to only the initial renderer through Pi's proxy.
+# Migrate that exact hook to the mount boundary, retaining the same helper.
+LEGACY_HOOK = (
+    '        this.widgetContainerBelow = new Container();',
+    '        this.widgetContainerBelow = new Container();\n'
+    '        installActivityBudget(this.ui, this.extensionWidgetsAbove, this.extensionWidgetsBelow);', 1,
+)
+LEGACY_EDITS = [EDITS[0], LEGACY_HOOK, EDITS[2]]
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
@@ -35,13 +43,16 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if MARKER in source:
         if source.count(MARKER) != 1 or sources.get(MODULE) != SOURCE:
             raise ValueError("compact layout helper changed, duplicated or missing")
-        original = replace_counted(source, EDITS, "compact layout anchor", reverse=True)
-        if replace_counted(original, EDITS, "compact layout anchor") != source:
+        if source.count("installActivityBudget(") != 1:
+            raise ValueError("partial or duplicated compact activity budget hook")
+        edits = LEGACY_EDITS if LEGACY_HOOK[1] in source else EDITS
+        original = replace_counted(source, edits, "compact layout anchor", reverse=True)
+        if replace_counted(original, edits, "compact layout anchor") != source:
             raise ValueError("inconsistent compact layout patch")
-        return sources
+        return {**sources, HOST: replace_counted(original, EDITS, "compact layout anchor")}
     if MODULE in sources:
         raise ValueError("unexpected compact layout helper alongside original host")
-    if any(new in source for _, new, _ in EDITS):
+    if LEGACY_HOOK[1] in source or any(new in source for _, new, _ in EDITS):
         raise ValueError("partial compact layout patch")
     return {HOST: replace_counted(source, EDITS, "compact layout anchor"), MODULE: SOURCE}
 

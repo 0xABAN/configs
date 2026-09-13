@@ -6,9 +6,9 @@ import { checkProcess, copySdk, describePatch, temporaryDirectory } from "./supp
 import { nativeSuite } from "./support/native-suite";
 
 const patcher = fileURLToPath(new URL("../patches/pi-compact-layout.py", import.meta.url));
-const { HOST, MODULE, EDITS } = describePatch<{
-  HOST: string; MODULE: string; EDITS: [string, string, number][];
-}>(patcher, "{k:m[k] for k in ['HOST','MODULE','EDITS']}");
+const { HOST, MODULE, EDITS, LEGACY_EDITS } = describePatch<{
+  HOST: string; MODULE: string; EDITS: [string, string, number][]; LEGACY_EDITS: [string, string, number][];
+}>(patcher, "{k:m[k] for k in ['HOST','MODULE','EDITS','LEGACY_EDITS']}");
 const temp = temporaryDirectory("pi-compact-layout-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -61,6 +61,30 @@ test("compact layout refuses partial, duplicate and modified installations befor
   }
 });
 
+test("the initial-renderer hook migrates exactly and mixed hooks refuse", () => {
+  const root = fixture("initial-renderer");
+  let previous = contents(root)[0]! + "\n" + LEGACY_EDITS[1][0];
+  for (const [old, patched] of LEGACY_EDITS) previous = previous.replaceAll(old, patched);
+  writeFileSync(join(root, HOST), previous);
+  writeFileSync(join(root, MODULE), readFileSync(new URL("../patches/payloads/host/compact-layout.js.inc", import.meta.url), "utf8"));
+  checkProcess(run(root));
+  const after = contents(root);
+  expect(after[0]).toContain(EDITS[1][1]);
+  expect(after[0]).not.toContain(LEGACY_EDITS[1][1]);
+  const backups = join(root, ".config/theme-backups");
+  const names = readdirSync(backups);
+  expect(names).toHaveLength(1);
+  expect(readFileSync(join(backups, names[0], HOST), "utf8")).toBe(previous);
+  expect(JSON.parse(readFileSync(join(backups, names[0], "added-files.json"), "utf8"))).toEqual([]);
+  checkProcess(run(root));
+  expect(contents(root)).toEqual(after);
+  expect(readdirSync(backups)).toEqual(names);
+  writeFileSync(join(root, HOST), after[0]! + "\n" + LEGACY_EDITS[1][1]);
+  const mixed = contents(root);
+  expect(run(root).exitCode).not.toBe(0);
+  expect(contents(root)).toEqual(mixed);
+});
+
 realTest("native widget stack shares live short-window budgets without wrapping custom components", async () => {
   const root = join(temp, "native");
   copySdk(sdk!, root);
@@ -104,4 +128,32 @@ realTest("native widget stack shares live short-window budgets without wrapping 
   expect(app.widgetContainerAbove.render(40)).toEqual([]);
   app.ui.terminal.rows = 40;
   expect(app.widgetContainerAbove.render(40)).toEqual([""]);
+});
+
+realTest("activity budgets follow regular/fullscreen renderer replacement", async () => {
+  const root = join(temp, "mode-switch");
+  copySdk(sdk!, root);
+  checkProcess(run(root));
+  const { InteractiveMode, createInteractiveTui, createInteractiveTuiReference } = await import(pathToFileURL(join(root, HOST)).href);
+  const { installActivityBudget } = await import(pathToFileURL(join(root, MODULE)).href);
+  const { TuiBase } = await import(pathToFileURL(join(root, "node_modules/@earendil-works/pi-tui/dist/tui.js")).href);
+  const { VStack } = await import(pathToFileURL(join(root, "node_modules/@earendil-works/pi-tui/dist/components/v-stack.js")).href);
+  TuiBase.prototype.requestRender = () => {};
+  const terminal = { columns: 40, rows: 12, write() {}, hideCursor() {}, showCursor() {}, stop() {} };
+  const app = Object.create(InteractiveMode.prototype);
+  app.options = {};
+  app.extensionWidgetsAbove = new Map([["rpiv-todos", {}], ["agents", {}]]);
+  app.extensionWidgetsBelow = new Map();
+  app.renderer = createInteractiveTui({ tuiMode: "regular", terminal });
+  app.ui = createInteractiveTuiReference(() => app.renderer);
+  app.fullscreenLayoutRoot = new VStack([]);
+  installActivityBudget(app.ui, app.extensionWidgetsAbove, app.extensionWidgetsBelow);
+  const budget = app.ui.configsActivityRows;
+  for (const mode of ["regular", "fullscreen", "regular"]) {
+    expect(app.switchTuiMode(mode, false, false)).toBe(true);
+    expect(budget()).toBe(2);
+    terminal.rows = 40;
+    expect(budget()).toBe(Infinity);
+    terminal.rows = 12;
+  }
 });
