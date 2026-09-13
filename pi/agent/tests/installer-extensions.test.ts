@@ -76,7 +76,7 @@ test("dependency installation failure leaves existing config links untouched", (
 });
 
 test("installer runs the Pi rendering patches and surfaces incompatible installations", () => {
-  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py"]) {
+  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py", "pi-transcript.py"]) {
     const { cwd, run } = sandbox(name);
     const patches = join(cwd, "pi/agent/patches");
     mkdirSync(patches);

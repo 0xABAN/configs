@@ -185,6 +185,31 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
     pi/agent/tests/powerline-editor-patch.test.ts
 ```
 
+### Transcript preview
+
+The Pi 0.84.2 transcript patch adds `◆ You` / `● Pi` headers and compact
+geometric action trees. Consecutive visible tool rows share a group; narration
+and custom messages remain in place. Normal user messages inherit the terminal
+background rather than using a filled box. The existing input/footer are unchanged.
+
+Native tools and the installed pi-pretty formatters use compact rows, with error
+summaries kept visible. The existing tool-output expansion action restores their
+original detailed renderers. Other extensions' custom renderers and image output
+keep their native presentation. There are no per-row click controls or inferred
+durations. This first pass preserves Pi's component order; it does not yet split
+mixed text/tool/text blocks inside one assistant message.
+
+The patch changes presentation only, never session records or tool execution.
+The installer applies it with version/anchor checks and complete backups. To replay:
+
+```sh
+python3 pi/agent/patches/pi-transcript.py
+PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
+  bun test pi/agent/tests/pi-transcript-patch.test.ts
+```
+
+Restart Pi to apply host changes; `/reload` alone is not enough.
+
 ## Sync workflow
 
 Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `configs` update so new installs can find the referenced paths.

@@ -110,6 +110,11 @@ if [[ -f "$ROOT/pi/agent/patches/powerline-editor.py" ]]; then
   python3 "$ROOT/pi/agent/patches/powerline-editor.py"
 fi
 
+# Display-only transcript preview: keep native tools, history and expansion intact.
+if [[ -f "$ROOT/pi/agent/patches/pi-transcript.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-transcript.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true

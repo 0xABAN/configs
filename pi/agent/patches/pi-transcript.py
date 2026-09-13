@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Install the display-only transcript preview into Pi 0.84.2; restart to apply.
+
+Keep native tools and session records intact. Refuse partial/unknown hosts before
+writing; back up every changed source and leave unrelated installed edits alone.
+"""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+
+BASE = "dist/modes/interactive/"
+MODULE = BASE + "components/transcript.js"
+MODULE_SOURCE = Path(__file__).with_name("transcript.js.inc").read_text()
+EDITS = {
+    BASE + "interactive-mode.js": [
+        ('import { UserMessageComponent } from "./components/user-message.js";',
+         'import { UserMessageComponent } from "./components/user-message.js";\n'
+         'import { TranscriptContainer } from "./components/transcript.js"; // configs:pi-transcript-v1'),
+        ("        this.chatContainer = new Container();",
+         "        this.chatContainer = new TranscriptContainer(() => this.outputPad);"),
+        ('''    getRegisteredToolDefinition(toolName) {
+        return this.session.getToolDefinition(toolName);
+    }''', '''    getRegisteredToolDefinition(toolName) {
+        const definition = this.session.getToolDefinition(toolName);
+        if (!definition) return definition;
+        // Only native and the installed pretty formatters opt into compact rows.
+        // Do not replace arbitrary extensions' custom UI, even for built-in names.
+        const owner = this.session.getAllTools().find(tool => tool.name === toolName)?.sourceInfo?.source;
+        return { ...definition, configsTranscriptCompact:
+            owner === "builtin" || /^npm:@heyhuynhgiabuu\\/pi-pretty(?:@|$)/.test(owner ?? "") };
+    }'''),
+        ("new UserMessageComponent(skillBlock.userMessage, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers())",
+         "new UserMessageComponent(skillBlock.userMessage, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers(), message.timestamp)"),
+        ("new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers())",
+         "new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers(), message.timestamp)"),
+    ],
+    BASE + "components/user-message.js": [
+        ('import { createMarkdownTransform } from "./markdown-transform.js";',
+         'import { createMarkdownTransform } from "./markdown-transform.js";\n'
+         'import { speakerHeader } from "./transcript.js"; // configs:pi-transcript-v1'),
+        ("    text;", '    transcriptRole = "user";\n    timestamp;\n    text;'),
+        ("constructor(text, markdownTheme = getMarkdownTheme(), outputPad = 1, markdownTransformers = [])",
+         "constructor(text, markdownTheme = getMarkdownTheme(), outputPad = 1, markdownTransformers = [], timestamp)"),
+        ("        this.outputPad = outputPad;", "        this.outputPad = outputPad + 2;\n        this.transcriptBasePad = outputPad;\n        this.timestamp = timestamp;"),
+        ("        this.outputPad = padding;", "        this.outputPad = padding + 2;\n        this.transcriptBasePad = padding;"),
+        ('        const contentBox = new Box(this.outputPad, 1, (content) => theme.bg("userMessageBg", content));',
+         "        const contentBox = new Box(this.outputPad, 0);"),
+        ("        const lines = super.render(width);", '''        const padding = Math.min(this.transcriptBasePad + 2, Math.max(0, Math.floor((width - 2) / 2)));
+        if (this.outputPad !== padding) {
+            this.outputPad = padding;
+            this.rebuild();
+        }
+        const lines = super.render(width);
+        lines.unshift("", speakerHeader("You", this.timestamp, this.transcriptBasePad, width));'''),
+    ],
+    BASE + "components/assistant-message.js": [
+        ('import { createMarkdownTransform } from "./markdown-transform.js";',
+         'import { createMarkdownTransform } from "./markdown-transform.js";\n'
+         'import { speakerHeader } from "./transcript.js"; // configs:pi-transcript-v1'),
+        ("    contentContainer;", '    transcriptRole = "pi";\n    contentContainer;'),
+        ("        this.outputPad = outputPad;", "        this.outputPad = outputPad + 2;\n        this.transcriptBasePad = outputPad;"),
+        ("        this.outputPad = padding;", "        this.outputPad = padding + 2;\n        this.transcriptBasePad = padding;"),
+        ("        const lines = super.render(width);", '''        const padding = Math.min(this.transcriptBasePad + 2, Math.max(0, Math.floor((width - 2) / 2)));
+        if (this.outputPad !== padding) {
+            this.outputPad = padding;
+            if (this.lastMessage) this.updateContent(this.lastMessage);
+        }
+        const lines = super.render(width);
+        if (this.transcriptHeader !== false && (lines.length || this.hasToolCalls)) {
+            if (lines[0] === "") lines.shift();
+            lines.unshift("", speakerHeader("Pi", this.lastMessage?.timestamp, this.transcriptBasePad, width));
+        }'''),
+    ],
+    BASE + "components/tool-execution.js": [
+        ("    contentBox;", '    transcriptRole = "tool"; // configs:pi-transcript-v1\n    contentBox;'),
+    ],
+}
+
+
+def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+    """Accept original sources or this complete preview, not mixed installations."""
+    states = []
+    for name, edits in EDITS.items():
+        source = sources[name]
+        # New render blocks can legitimately contain an old setter statement.
+        # Exclude all recognized replacements before looking for stray originals.
+        remainder = source
+        for _, new in edits:
+            if source.count(new) == 1:
+                remainder = remainder.replace(new, "", 1)
+        for old, new in edits:
+            if source.count(new) == 1 and old not in remainder:
+                states.append("patched")
+            elif source.count(new) == 0 and source.count(old) == 1:
+                states.append("original")
+            else:
+                raise ValueError(f"{name}: transcript anchor changed or duplicated: {old[:70]}")
+    if len(set(states)) != 1:
+        raise ValueError("partial transcript patch; inspect before reapplying")
+    if states[0] == "patched":
+        if sources.get(MODULE) != MODULE_SOURCE:
+            raise ValueError("transcript module changed or missing; inspect before reapplying")
+        return sources
+    if MODULE in sources:
+        raise ValueError("unexpected transcript module alongside unpatched host")
+    result = dict(sources)
+    for name, edits in EDITS.items():
+        for old, new in edits:
+            result[name] = result[name].replace(old, new, 1)
+    result[MODULE] = MODULE_SOURCE
+    return result
+
+
+def discover_root() -> Path | None:
+    if os.environ.get("PI_SDK_ROOT"):
+        return Path(os.environ["PI_SDK_ROOT"]).expanduser()
+    if not shutil.which("npm"):
+        return None
+    result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
+    return Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
+
+
+def main() -> None:
+    root = discover_root()
+    if root is None or not root.exists():
+        print("Pi host not installed; skipping transcript preview")
+        return
+    version = json.loads((root / "package.json").read_text())["version"]
+    if version != "0.84.2":
+        raise ValueError(f"transcript patch requires Pi 0.84.2, found {version}; review upstream first")
+    sources = {name: (root / name).read_text() for name in EDITS}
+    if (root / MODULE).exists():
+        sources[MODULE] = (root / MODULE).read_text()
+    patched = patch_sources(sources)
+    if patched != sources:
+        backup_root = Path.home() / ".config/theme-backups"
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup = Path(tempfile.mkdtemp(prefix="pi-transcript-", dir=backup_root))
+        for name in sources:
+            target = backup / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / name, target)
+        # Record newly installed files so restoring a backup is unambiguous.
+        (backup / "added-files.json").write_text(json.dumps(sorted(set(patched) - set(sources))) + "\n")
+        print(f"Pi transcript backup: {backup}")
+        for name, source in patched.items():
+            (root / name).write_text(source)
+    print("Pi transcript preview ready; restart Pi to apply")
+
+
+if __name__ == "__main__":
+    main()
