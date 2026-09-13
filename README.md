@@ -31,13 +31,19 @@ Existing files are renamed `*.bak.<timestamp>` before linking. The installer als
 
 `osaka-jade` now follows the reference screenshot rather than the upstream
 palette's green-tinted surfaces. Sampled colors are charcoal `#121319`,
-cream `#c7c9a2`, jade `#5fa876`, and muted teal `#5e9e80`. The screenshot
+jade `#5fa876`, and muted teal `#5e9e80`. The screenshot
 contains compression/antialiasing variations, so these are representative
 pixel samples, not claims about its underlying theme configuration.
 
-Dark surfaces dominate. Panels (`#181a20`) and selections (`#282c30`) stay
-neutral; most text and syntax use cream. Jade marks active items, links,
-types, and additions rather than filling panels or coloring every heading.
+Dark surfaces dominate. Panels (`#181a20`) stay neutral. Terminal text
+selections (including Pi), Neovim Visual mode, and completion selections
+use bright jade (`#5fa876`) with white text (`#ffffff`). Search/diff backgrounds
+remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
+near-white (`#F2F3F0`) for emphasis. Variables, strings, numbers, headings, editor
+status text, and Pi tool output use cream (`#dedec5`).
+Keywords use jade; functions, types, links, and thin borders use muted teal.
+Active items and additions are green. Outside selections, large surfaces
+never use green fills.
 Supporting neutrals and subdued warning/error colors are chosen to fit;
 ANSI colors use the same restrained treatment. No theme plugins required.
 
@@ -46,7 +52,7 @@ activate it in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.65
+background-opacity = 0.85
 background-blur = 20
 background-opacity-cells = true
 ```
@@ -59,7 +65,10 @@ precedence over the shared Ghostty theme. Back up that file, then run
 alone does not reveal this override. The old Black Metal override is backed
 up locally in `~/.config/theme-backups/cmux-20260913-015205/`.
 
-Opacity 0.65 lets the backdrop show through, including colored terminal
+Keep `"activePaneBorderColor": null` in `~/.config/cmux/cmux.json` to avoid
+an extra green outline around the focused pane.
+
+Opacity 0.85 lets the backdrop show through, including colored terminal
 cells; blur keeps it soft. Use opacity 1 for unblended palette colors.
 Reload cmux's configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
