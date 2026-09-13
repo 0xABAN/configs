@@ -1,26 +1,25 @@
-# CLIAMP's Osaka Jade core, with the original Osaka Jade ANSI palette.
-# https://github.com/bjarneo/cliamp/blob/main/theme/themes/osaka-jade.toml
-# https://github.com/Justikun/omarchy-osaka-jade-theme/blob/main/ghostyy.conf
-background = #111c18
-foreground = #C1C497
-cursor-color = #F7E8B2
-cursor-text = #111c18
-selection-background = #509475
-selection-foreground = #F7E8B2
+# Screenshot-led Osaka Jade: charcoal canvas, cream text, sparse jade accents.
+# Sampled core colors; supporting ANSI shades are deliberately subdued.
+background = #121319
+foreground = #c7c9a2
+cursor-color = #dedec5
+cursor-text = #121319
+selection-background = #282c30
+selection-foreground = #dedec5
 
-palette = 0=#23372B
-palette = 1=#FF5345
-palette = 2=#549e6a
-palette = 3=#459451
-palette = 4=#509475
-palette = 5=#D2689C
-palette = 6=#2DD5B7
-palette = 7=#F6F5DD
-palette = 8=#53685B
-palette = 9=#db9f9c
-palette = 10=#63b07a
-palette = 11=#E5C736
-palette = 12=#ACD4CF
-palette = 13=#75bbb3
-palette = 14=#8CD3CB
-palette = 15=#9eebb3
+palette = 0=#181a20
+palette = 1=#c7837c
+palette = 2=#5fa876
+palette = 3=#c7b777
+palette = 4=#829d9a
+palette = 5=#a6a495
+palette = 6=#5e9e80
+palette = 7=#c7c9a2
+palette = 8=#62656a
+palette = 9=#d69a91
+palette = 10=#80b58b
+palette = 11=#d3c493
+palette = 12=#9bb3ae
+palette = 13=#bebca9
+palette = 14=#88aca6
+palette = 15=#dedec5

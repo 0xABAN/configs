@@ -29,13 +29,17 @@ Existing files are renamed `*.bak.<timestamp>` before linking. The installer als
 
 ## Colors
 
-`osaka-jade` uses [CLIAMP's original core palette](https://github.com/bjarneo/cliamp/blob/main/theme/themes/osaka-jade.toml):
-background `#111c18`, text `#C1C497`, bright cream `#F7E8B2`, jade
-`#509475`, green `#86c994`, yellow `#e5c736`, and red `#FF5345`.
-Supporting shades and ANSI colors come from the
-[original Osaka Jade terminal theme](https://github.com/Justikun/omarchy-osaka-jade-theme/blob/main/ghostyy.conf).
-Like the reference screenshot, jade and cream dominate; red/yellow mark
-errors and warnings. No extra theme plugins are required.
+`osaka-jade` now follows the reference screenshot rather than the upstream
+palette's green-tinted surfaces. Sampled colors are charcoal `#121319`,
+cream `#c7c9a2`, jade `#5fa876`, and muted teal `#5e9e80`. The screenshot
+contains compression/antialiasing variations, so these are representative
+pixel samples, not claims about its underlying theme configuration.
+
+Dark surfaces dominate. Panels (`#181a20`) and selections (`#282c30`) stay
+neutral; most text and syntax use cream. Jade marks active items, links,
+types, and additions rather than filling panels or coloring every heading.
+Supporting neutrals and subdued warning/error colors are chosen to fit;
+ANSI colors use the same restrained treatment. No theme plugins required.
 
 Pi and Neovim select it by default. The installer links the terminal theme;
 activate it in `~/.config/ghostty/config` (also used by cmux):
