@@ -16,13 +16,18 @@ test("isolates each run, forwards arguments, cleans up and preserves failures", 
     const cli = join(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
     mkdirSync(dirname(cli), { recursive: true });
     writeFileSync(cli, `
-      console.log(JSON.stringify({ cwd: process.cwd(), env: process.env, args: process.argv.slice(2) }));
+      const fd = require("node:child_process").spawnSync("fd", ["--version"], { encoding: "utf8" });
+      console.log(JSON.stringify({ cwd: process.cwd(), env: process.env, args: process.argv.slice(2), fd: fd.stdout }));
       process.exit(process.argv.includes("--fail") ? 7 : 0);
     `);
     const bin = join(root, "bin");
     mkdirSync(bin);
     const link = join(bin, "pi-clean");
     symlinkSync("../pi-clean", link);
+
+    const agentDir = join(root, "personal-agent");
+    mkdirSync(join(agentDir, "bin"), { recursive: true });
+    writeFileSync(join(agentDir, "bin/fd"), "#!/bin/sh\nprintf 'fixture-fd\\n'\n", { mode: 0o755 });
 
     const homes = new Set();
     for (const fail of [false, true]) {
@@ -33,7 +38,8 @@ test("isolates each run, forwards arguments, cleans up and preserves failures", 
         env: {
           ...process.env,
           OPENAI_API_KEY: "must-not-leak",
-          PI_CODING_AGENT_DIR: "/personal/config",
+          PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+          PI_CODING_AGENT_DIR: agentDir,
           PI_PACKAGE_DIR: "/patched/pi",
           PI_SESSION_ID: "personal-session",
           NODE_OPTIONS: "--invalid-option-must-not-reach-node",
@@ -43,6 +49,7 @@ test("isolates each run, forwards arguments, cleans up and preserves failures", 
       const report = JSON.parse(result.stdout);
       assert.notEqual(report.cwd, root);
       assert.equal(report.env.PWD, report.cwd);
+      assert.equal(report.fd, "fixture-fd\n", "managed tools must remain discoverable without shell PATH setup");
       assert.equal(report.env.PI_OFFLINE, "1");
       assert.equal(report.env.PI_TELEMETRY, "0");
       for (const name of ["OPENAI_API_KEY", "PI_PACKAGE_DIR", "PI_SESSION_ID", "NODE_OPTIONS"]) {

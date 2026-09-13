@@ -28,9 +28,10 @@ mkdir -p "$run_dir/home" "$run_dir/work" "$run_dir/tmp" "$run_dir/config" "$run_
 cd "$run_dir/work"
 
 # Keep terminal capabilities, but not API keys, NODE_OPTIONS, Pi overrides, or
-# host integration variables. PATH remains available for ordinary development tools.
+# host integration variables. Reuse Pi's managed binaries (fd/rg), even when
+# the caller's shell has not added its agent bin directory to PATH.
 env -i \
-  PATH="$PATH" \
+  PATH="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/bin:$PATH" \
   HOME="$run_dir/home" \
   USERPROFILE="$run_dir/home" \
   PWD="$run_dir/work" \

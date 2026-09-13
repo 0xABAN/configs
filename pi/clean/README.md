@@ -32,8 +32,10 @@ files are disabled. Explicit reproduction extensions still work. Use **absolute
 paths** for file arguments because the working directory changes.
 
 Inherited credentials, Pi overrides, Node options, and host integration variables
-are removed. Terminal capabilities, locale, and `PATH` are retained. Startup
-network operations and telemetry are disabled. Model calls are not network-blocked,
+are removed. Terminal capabilities, locale, and `PATH` are retained. The original
+Pi agent's `bin` directory is prepended to `PATH` so downloaded tools such as `fd`
+remain available without another download. Startup network operations and telemetry
+are disabled. Model calls are not network-blocked,
 but no personal authentication is supplied; UI reproduction needs none.
 
 Sessions are not saved. Temporary files, settings, and any login performed during
