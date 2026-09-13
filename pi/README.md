@@ -36,8 +36,10 @@ The transcript owns speaker headers and tool invocation rows. Every call keeps a
 row, even when its renderer is silent. Built-in names retain their action labels;
 other names use `⌇ Tool <name>` without exposing arbitrary extension arguments.
 Custom cards, images, and expanded output stay intact below their invocation row.
-Package renderers own Todos, Agents and incoming Intercom messages; the host
-owns notification wrapping and native dialogs. Intercom's installed npm owner
+Package renderers own Todos, Agents and incoming Intercom messages; Todo keeps
+its schema, state and execution while its silent hooks leave the native Tool
+action row as the only Todo invocation body. The host owns notification
+wrapping and native dialogs. Intercom's installed npm owner
 and `intercom` tool name opt into collapsed invocation-only output. Its native
 expanded renderers, error summaries and images remain available. Incoming
 messages use a sender heading and message preview; expansion retains the full

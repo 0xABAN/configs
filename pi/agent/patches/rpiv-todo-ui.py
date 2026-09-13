@@ -22,6 +22,12 @@ SUBJECT_PATTERN = re.compile(
 )
 
 LAYOUT = read_payload('todo/legacy/format-layout.ts.inc')
+TOOL_ROW_EDITS = {
+    "view/format.ts": [
+        (read_payload("todo/tool-call.ts.inc"), read_payload("todo/empty-tool-call.ts.inc")),
+        (read_payload("todo/tool-result.ts.inc"), read_payload("todo/empty-tool-result.ts.inc")),
+    ],
+}
 
 # Match exactly what the legacy injector installs, without owning its backend.
 # Only notification expressions below change; no persistence code is copied here.
@@ -267,12 +273,25 @@ def patch_legacy_sources(sources: dict[str, str]) -> dict[str, str]:
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
-    """Migrate only complete compact/previous UI stages; never write partial ones."""
+    """Migrate only complete UI stages; never write partial ones."""
     normalized = dict(sources)
-    compact = any(new in sources[name] for name, edits in COMPACT_EDITS.items() for _, new in edits)
+    tool_row = any(new in sources[name] for name, edits in TOOL_ROW_EDITS.items() for _, new in edits)
+    if tool_row:
+        for name, edits in TOOL_ROW_EDITS.items():
+            for old, new in edits:
+                if sources[name].count(new) != 1 or sources[name].count(old) != 0:
+                    raise ValueError(f"{name}: mixed/modified Todo tool renderer")
+                normalized[name] = normalized[name].replace(new, old, 1)
+    elif any(old in sources[name] for name, edits in TOOL_ROW_EDITS.items() for old, _ in edits):
+        for name, edits in TOOL_ROW_EDITS.items():
+            for old, new in edits:
+                if sources[name].count(old) != 1 or sources[name].count(new) != 0:
+                    raise ValueError(f"{name}: mixed/modified Todo tool renderer")
+
+    compact = any(new in normalized[name] for name, edits in COMPACT_EDITS.items() for _, new in edits)
     if compact:
         for name, edits in COMPACT_EDITS.items():
-            remainder = sources[name]
+            remainder = normalized[name]
             for old, new in edits:
                 if remainder.count(new) != 1:
                     raise ValueError(f"{name}: mixed/modified compact Todo UI")
@@ -290,6 +309,14 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             if result[name].count(old) != 1:
                 raise ValueError(f"{name}: unknown compact Todo UI anchor: {old[:70]}")
             result[name] = result[name].replace(old, new)
+
+    for name, edits in TOOL_ROW_EDITS.items():
+        for old, new in edits:
+            if result[name].count(new) == 1 and result[name].count(old) == 0:
+                continue
+            if result[name].count(old) != 1 or result[name].count(new) != 0:
+                raise ValueError(f"{name}: unknown Todo tool renderer anchor")
+            result[name] = result[name].replace(old, new, 1)
     return result
 
 

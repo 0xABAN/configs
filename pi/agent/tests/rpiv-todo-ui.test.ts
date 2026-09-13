@@ -15,6 +15,7 @@ const sdk = join(temp, "sdk");
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdkSource && existsSync(installed), { FORCE_COLOR: "1" });
 const edits = describePatch<Record<string, [string, string][]>>(patcher, "m['EDITS']");
 const compactEdits = describePatch<Record<string, [string, string][]>>(patcher, "m['COMPACT_EDITS']");
+const toolRowEdits = describePatch<Record<string, [string, string][]>>(patcher, "m['TOOL_ROW_EDITS']");
 const files = Object.keys(edits);
 const run = (root: string, home = root) => Bun.spawnSync(["python3", "-B", patcher], {
   env: { ...process.env, HOME: home, RPIV_TODO_ROOT: root },
@@ -86,6 +87,26 @@ test("Todo UI refuses wrong versions, missing/duplicate/modified anchors and mix
     expect(existsSync(backupRoot) ? readdirSync(backupRoot) : []).toEqual(backups);
   }
   expect(run(join(temp, "absent")).exitCode).toBe(0);
+});
+
+test("Todo tool renderer migration is complete and rejects mixed sources", () => {
+  const root = sandbox("tool-renderer");
+  assertRun(run(root));
+  const current = contents(root);
+  for (const [old, replacement] of toolRowEdits["view/format.ts"]) {
+    expect(current["view/format.ts"]).toContain(replacement);
+    expect(current["view/format.ts"]).not.toContain(old);
+  }
+  assertRun(run(root));
+  expect(contents(root)).toEqual(current);
+
+  const broken = sandbox("tool-renderer-modified");
+  assertRun(run(broken));
+  const format = join(broken, "view/format.ts");
+  writeFileSync(format, readFileSync(format, "utf8").replace("render: () => []", "render: () => [\"changed\"]"));
+  const before = contents(broken);
+  expect(run(broken).exitCode).not.toBe(0);
+  expect(contents(broken)).toEqual(before);
 });
 
 test("compact Todo UI migrates only complete previous sources and exact clear reinjection", () => {
@@ -231,52 +252,39 @@ realTest("actual status formatters use distinct geometry, muted completion, live
   for (const args of [{ action: "create", subject: "漢字 é very long subject" }, { action: "update", id: 9 },
     { action: "get", id: 900 }, { action: "delete", id: 9 }, { action: "list", status: "pending" }, { action: "clear" }, {}]) {
     const call = m.renderTodoCall(args, m.theme, state);
-    assertWidths(m, width => call.render(width));
-    if (args.id === 900) expect(text(m, call)).toContain("#900");
+    expect(call.render(40)).toEqual([]);
+    expect(call.render(80)).toEqual([]);
   }
 });
 
-realTest("actual tool slots keep compact results and errors readable with no native background shell", async () => {
+realTest("Todo uses the native Tool action row without a custom body", async () => {
   const m = await real();
   let definition: any;
   m.registerTodoTool({ registerTool(value: any) { definition = value; } });
   expect(definition.renderShell).toBe("self");
-  for (const status of ["pending", "in_progress", "completed", "deleted"]) {
-    const result = m.renderTodoResult({ details: { action: "update", params: { id: 2 }, tasks: [task(2, status)] } }, m.theme);
-    assertWidths(m, width => result.render(width));
-    expect(text(m, result)).toContain(`   ╰─ ${m.STATUS_GLYPH[status]}`);
-  }
-  const error = definition.renderResult({ content: [{ type: "text", text: "Invalid transition 漢字\x1b[41m\nretry" }] }, {}, m.theme, { isError: true });
-  assertWidths(m, width => error.render(width));
-  expect(text(m, error)).toContain("× Invalid transition 漢字 retry");
-  expect(error.render(80).join("\n")).toContain(m.theme.getFgAnsi("error"));
-  const fallback = m.renderTodoResult({}, m.theme);
-  expect(text(m, fallback)).toContain("╰─ ✓");
-  // Rendering defers color reads rather than retaining pre-colored Text data.
-  let color = "first";
-  const dynamic = { ...m.theme, fg: (_: string, value: string) => `${color}:${value}`, bold: (value: string) => value };
-  const call = m.renderTodoCall({ action: "create", subject: "subject" }, dynamic, { tasks: [] });
-  expect(text(m, call)).toContain("first:subject");
-  color = "second";
-  call.invalidate();
-  expect(text(m, call)).toContain("second:subject");
+  const call = m.renderTodoCall({ action: "create", subject: "漢字 full label" }, m.theme, { tasks: [] });
+  const result = m.renderTodoResult({ details: { action: "update", params: { id: 2 }, tasks: [task(2, "in_progress")] } }, m.theme);
+  expect(call.render(80)).toEqual([]);
+  expect(result.render(80)).toEqual([]);
+  expect(call.render(40)).toEqual([]);
+  expect(result.render(40)).toEqual([]);
 
-  // Exercise the actual host shell, including its error-context forwarding and
-  // native expand/invalidate calls, not just standalone formatter output.
   m.colors.setThemeInstance(m.theme);
   const { ToolExecutionComponent } = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/components/tool-execution.js")).href);
   const row = new ToolExecutionComponent("todo", "todo-ui-check", { action: "create", subject: "漢字 full label" },
     {}, definition, { requestRender() {} }, temp);
   row.updateResult({ content: [{ type: "text", text: "Rejected transition" }], isError: true });
-  assertWidths(m, width => row.render(width));
-  const collapsed = text(m, row);
-  expect(collapsed).toContain("   ▧ Todo + 漢字 full label");
-  expect(collapsed).toContain("   ╰─ × Rejected transition");
-  row.setExpanded(true);
-  row.invalidate();
-  expect(text(m, row)).toBe(collapsed);
-  const execution = (source: string) => source.slice(source.indexOf("\t\tasync execute("), source.indexOf("\n\t\t// renderCall reflects"));
-  expect(execution(readFileSync(join(m.root, "todo.ts"), "utf8"))).toBe(execution(m.before["todo.ts"]));
+  for (const width of [40, 80]) expect(row.render(width)).toEqual([]);
+  const { actionLines, TranscriptContainer } = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/components/transcript.js")).href);
+  const action = text(m, { render: () => actionLines(row, 80), invalidate() {} });
+  expect(action).toMatch(/Tool\s+todo/);
+  expect(action).not.toContain("漢字 full label");
+  const transcript = new TranscriptContainer(() => 1, () => Infinity);
+  transcript.addChild(row);
+  const transcriptOutput = text(m, transcript, 80);
+  expect(transcriptOutput).toMatch(/Tool\s+todo/);
+  expect(transcriptOutput).not.toContain("▧ Todo");
+  expect(transcriptOutput).not.toContain("漢字 full label");
 });
 
 realTest("TodoOverlay retains alignment, theme refresh, overflow, expansion, hiding, collapse and registration", async () => {
@@ -397,11 +405,8 @@ realTest("compact Todo previews share live host budgets and retain active work, 
   expect(m.todoGutter(79)).toBe(1);
   expect(m.todoGutter(80)).toBe(3);
   const tool = m.renderTodoCall({ action: "create", subject: "漢字 é" }, m.theme, state);
-  expect(text(m, tool, 40)).toMatch(/^ ▧ Todo/);
-  expect(text(m, tool, 80)).toMatch(/^   ▧ Todo/);
-  for (const width of [1, 2, 3, 4, 8]) {
-    for (const line of tool.render(width)) expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
-  }
+  expect(tool.render(40)).toEqual([]);
+  expect(tool.render(80)).toEqual([]);
 
   overlay.toggleCollapse();
   expect(render()).toHaveLength(1);
