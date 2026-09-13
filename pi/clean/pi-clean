@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run the pinned upstream Pi without personal resources or inherited credentials.
+# Run the pinned upstream Pi with shared authentication but isolated resources.
 set -euo pipefail
 
 # Resolve the ~/.local/bin symlink without requiring GNU readlink -f on macOS.
@@ -17,6 +17,15 @@ if [[ ! -f "$cli" ]]; then
 fi
 node="$(command -v node)"
 
+# Resolve the caller's auth location before replacing HOME and changing cwd.
+agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+if [[ "$agent_dir" == "~" ]]; then
+  agent_dir="$HOME"
+elif [[ "$agent_dir" == "~/"* ]]; then
+  agent_dir="$HOME/${agent_dir:2}"
+fi
+[[ "$agent_dir" = /* ]] || agent_dir="$(pwd -P)/$agent_dir"
+
 # Do not honor an inherited TMPDIR that could sit inside a configured project.
 run_dir="$(mktemp -d /tmp/pi-clean.XXXXXXXX)"
 trap 'rm -rf -- "$run_dir"' EXIT
@@ -31,7 +40,7 @@ cd "$run_dir/work"
 # host integration variables. Reuse Pi's managed binaries (fd/rg), even when
 # the caller's shell has not added its agent bin directory to PATH.
 env -i \
-  PATH="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/bin:$PATH" \
+  PATH="$agent_dir/bin:$PATH" \
   HOME="$run_dir/home" \
   USERPROFILE="$run_dir/home" \
   PWD="$run_dir/work" \
@@ -44,8 +53,9 @@ env -i \
   COLORTERM="${COLORTERM:-}" \
   LANG="${LANG:-en_US.UTF-8}" \
   PI_CODING_AGENT_DIR="$run_dir/agent" \
+  PI_CLEAN_AUTH_PATH="$agent_dir/auth.json" \
   PI_OFFLINE=1 \
   PI_TELEMETRY=0 \
-  "$node" "$cli" \
+  "$node" --import "$install_dir/auth-store.mjs" "$cli" \
     --no-session --no-extensions --no-skills --no-prompt-templates \
     --no-themes --no-context-files "$@"

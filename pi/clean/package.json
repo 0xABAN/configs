@@ -2,7 +2,7 @@
   "name": "pi-clean",
   "private": true,
   "scripts": {
-    "test": "node --test pi-clean.test.mjs"
+    "test": "node --test pi-clean.test.mjs auth-store.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2"
