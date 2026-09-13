@@ -242,10 +242,10 @@ The Pi 0.85.1 transcript patch adds `◆ You` / `● Pi` headers and compact
 geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
 action icons keep the teal accent. Speaker names retain the normal text color.
 Consecutive visible tool rows share a group; narration
-and custom messages remain in place. User messages use the theme's
-`userMessageBg` fill across the header and body, spanning the same shared
-viewport as the textarea without another gutter. They no longer add a cream
-separator. The existing input/footer are unchanged.
+and custom messages remain in place. Normal user messages inherit the terminal
+background rather than using a filled box. Each ends with a thin cream separator
+(`#dedec5`, the theme's `toolOutput` tone), spanning the same shared viewport as
+the textarea without another gutter. The existing input/footer are unchanged.
 
 Native tools and the installed pi-pretty formatters use compact rows, with error
 summaries kept visible. The existing tool-output expansion action restores their

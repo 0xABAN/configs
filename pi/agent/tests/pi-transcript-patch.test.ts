@@ -9,7 +9,8 @@ const patcher = fileURLToPath(new URL("../patches/pi-transcript.py", import.meta
 const { edits, module: modulePath } = describePatch<{ edits: Record<string, [string, string][]>; module: string }>(
   patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
 const previousLookup = describePatch<[string, string]>(patcher, "m['PRE_INTERCOM_LOOKUP']");
-const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
+const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_MODULE_SOURCE']");
+const previousBackgroundReset = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
 const temp = temporaryDirectory("pi-transcript-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -90,7 +91,6 @@ for (const helper of [
   "transcript-before-native-padding.js.inc",
   "transcript-before-inline-metrics.js.inc",
   "transcript-before-user-separator.js.inc",
-  "transcript-before-user-background.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -154,23 +154,22 @@ test("the installed pre-Intercom lookup migrates with exact helper guards and ba
   expect(readdirSync(backupRoot)).toHaveLength(2);
 });
 
-test("the installed pre-reset background helper migrates with an exact backup", () => {
-  const root = sandbox("pre-background-reset");
-  expect(run(root).exitCode).toBe(0);
-  const current = contents(root);
-  writeFileSync(join(root, modulePath), previousBackground);
-  const backupRoot = join(root, ".config/theme-backups");
-  const beforeBackups = readdirSync(backupRoot);
+for (const [name, previous] of [["simple-background", previousBackground], ["reset-background", previousBackgroundReset]] as const) {
+  test(`installed ${name} migrates to native user styling`, () => {
+    const root = sandbox(`remove-${name}`);
+    expect(run(root).exitCode).toBe(0);
+    const current = contents(root);
+    writeFileSync(join(root, modulePath), previous);
+    const backupRoot = join(root, ".config/theme-backups");
+    const beforeBackups = readdirSync(backupRoot);
 
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
-  expect(added).toHaveLength(1);
-  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previousBackground);
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  expect(readdirSync(backupRoot)).toHaveLength(beforeBackups.length + 1);
-});
+    expect(run(root).exitCode).toBe(0);
+    expect(contents(root)).toEqual(current);
+    const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
+    expect(added).toHaveLength(1);
+    expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
+  });
+}
 
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
@@ -270,8 +269,11 @@ realTest("only the Pi speaker icon uses warning yellow", async () => {
   expect(m.actionLines({ toolName: "read", args: { path: "a.ts" } }, 80)[0]).toContain(theme.fg("accent", "□"));
 });
 
-realTest("user messages use a live dark background without a cream separator", async () => {
+realTest("user separators use live cream color and the editor viewport without another gutter", async () => {
   const m = await real();
+  const previousPath = join(fixture, "dist/modes/interactive/components/transcript-before-separator.js");
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-user-separator.js.inc", import.meta.url), "utf8"));
+  const previous = await import(pathToFileURL(previousPath).href);
   let padding = 1;
   let height = 40;
   const app = host(m);
@@ -284,28 +286,18 @@ realTest("user messages use a live dark background without a cream separator", a
   const originalMessages = JSON.stringify(messages);
   app.renderSessionItems(messages);
   const children = [...app.chatContainer.children];
-  const background = m.colors.theme.getBgAnsi("userMessageBg");
-  const styledUser = new m.TranscriptContainer(() => 0, () => 40);
-  styledUser.addChild({ transcriptRole: "user", render: () => [`\x1b[1m◆ You\x1b[0m`] });
-  const styledRow = styledUser.render(20)[0];
-  expect(styledRow).toContain(`\x1b[0m${background}`);
-
-  const wideAnswer = app.chatContainer.render(120)
-    .find((line: string) => m.tui.stripTerminalSequences(line).includes("An answer"));
-  expect(wideAnswer).toBeDefined();
-  expect(wideAnswer).not.toContain(background);
+  const old = new previous.TranscriptContainer(() => padding, () => height);
+  for (const child of children) old.addChild(child);
 
   for (const [width, rows, gutter] of [[120, 40, 1], [40, 12, 1], [16, 12, 1], [4, 12, 1], [120, 40, 4]]) {
     height = rows;
     padding = gutter;
     const rendered = app.chatContainer.render(width);
-    const userLines = rendered.filter((line: string) => line.includes(background));
-    const userRows = app.chatContainer.children
-      .filter(child => child.transcriptRole === "user")
-      .reduce((total, child) => total + child.render(width).length, 0);
-    expect(userLines).toHaveLength(userRows);
-    expect(userLines.every((line: string) => m.tui.visibleWidth(line) === width)).toBe(true);
-    expect(rendered.some((line: string) => m.tui.stripTerminalSequences(line) === "─".repeat(width))).toBe(false);
+    const separator = m.colors.theme.fg("toolOutput", "─".repeat(width));
+    expect(separator).toContain("\x1b[38;2;222;222;197m");
+    expect(rendered.filter((line: string) => line === separator)).toHaveLength(2);
+    expect(rendered.at(-1)).toBe(separator); // Visible even before Pi responds.
+    expect(rendered.filter((line: string) => line !== separator)).toEqual(old.render(width));
     expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     expect(app.chatContainer.children).toEqual(children);
   }
@@ -314,9 +306,7 @@ realTest("user messages use a live dark background without a cream separator", a
   try {
     m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/woody.json", import.meta.url)), "truecolor"));
     app.chatContainer.invalidate();
-    const woodyBackground = m.colors.theme.getBgAnsi("userMessageBg");
-    const woodyHeader = app.chatContainer.render(90).find((line: string) => m.tui.stripTerminalSequences(line).includes("◆ You"));
-    expect(woodyHeader).toContain(woodyBackground);
+    expect(app.chatContainer.render(90).at(-1)).toBe(m.colors.theme.fg("toolOutput", "─".repeat(90)));
   } finally {
     m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
     app.chatContainer.invalidate();
@@ -351,12 +341,9 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   const text = transcript(m, live);
   expect(text.match(/● Pi/g)).toHaveLength(1);
   expect(text.match(/◆ You/g)).toHaveLength(1);
-  const rendered = live.chatContainer.render(90);
-  const userBackground = m.colors.theme.getBgAnsi("userMessageBg");
-  expect(rendered.some((line: string) => line.includes(userBackground)
-    && m.tui.stripTerminalSequences(line).includes("Trace authentication."))).toBe(true);
-  expect(text.split("\n").filter((line: string) => line === "─".repeat(90))).toHaveLength(0);
-  expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf("● Pi"));
+  expect(text.split("\n").filter((line: string) => line === "─".repeat(90))).toHaveLength(1);
+  expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf("─".repeat(90)));
+  expect(text.indexOf("─".repeat(90))).toBeLessThan(text.indexOf("● Pi"));
   expect(text).toContain("2 actions");
   expect(text).toContain("1 action");
   expect(text).toContain("├─ ✓ □ Read");
@@ -643,10 +630,12 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
       expect(text).toContain("You");
       expect(text).toContain("Read");
       expect(text).toContain("UNCHANGED FOOTER");
-      const background = m.colors.theme.getBgAnsi("userMessageBg");
-      expect(lines.some((line: string) => line.includes(background))).toBe(true);
-      expect(lines.map(m.tui.stripTerminalSequences)
-        .some((line: string) => line.trimStart().startsWith("──"))).toBe(false);
+      const inset = tui.getHorizontalInset(width);
+      const track = mode === "fullscreen" && scrollbar === "always" ? 1 : 0;
+      const separator = lines.map(m.tui.stripTerminalSequences).find((line: string) => line.trimStart().startsWith("──"));
+      // 0.85.1 paints the always-visible scrollbar even without overflowing content.
+      // Compare the transcript columns separately from that native track column.
+      expect(separator?.slice(0, width - inset - track)).toBe(" ".repeat(inset) + "─".repeat(width - 2 * inset - track));
       expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
   }

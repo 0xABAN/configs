@@ -27,21 +27,35 @@ PRE_TOOL_ROWS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-tool-r
 PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-native-padding.js.inc')
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
-PRE_USER_BACKGROUND_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-background.js.inc')
+# Existing installs may still have either background helper. Derive those exact
+# prior modules from the current separator source so removal remains guarded.
+_USER_BACKGROUND_IMPORTS = '''import { DynamicBorder } from "./dynamic-border.js";\n\nconst USER_SEPARATOR = new DynamicBorder(line => theme.fg("toolOutput", line));\n'''
+_USER_SEPARATOR_RENDER = '''            lines.push(...nativeLines);\n            if (child.transcriptRole === "pi") speaker = "pi";\n            else if (child.transcriptRole === "user") {\n                speaker = "user";\n                // Like the textarea, use the shared viewport without a second gutter.\n                lines.push(...USER_SEPARATOR.render(width));\n            }\n            else if (child.transcriptRole !== "tool") speaker = undefined;'''
+_USER_BACKGROUND_RENDER = '''            lines.push(...(child.transcriptRole === "user"\n                ? nativeLines.map(line => userMessageBackground(line, width))\n                : nativeLines));\n            if (child.transcriptRole === "pi") speaker = "pi";\n            else if (child.transcriptRole === "user") speaker = "user";\n            else if (child.transcriptRole !== "tool") speaker = undefined;'''
 _USER_BACKGROUND_HELPER = '''function userMessageBackground(line, width) {
+    return theme.bg("userMessageBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
+}
+'''
+_USER_BACKGROUND_RESET_HELPER = '''function userMessageBackground(line, width) {
     const background = theme.getBgAnsi("userMessageBg");
     const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
     // chalk.bold may emit a full reset; reopen the row background after it.
     return theme.bg("userMessageBg", padded.replaceAll("\\x1b[0m", `\\x1b[0m${background}`));
-}'''
-_PRE_USER_BACKGROUND_HELPER = '''function userMessageBackground(line, width) {
-    return theme.bg("userMessageBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
-}'''
-if MODULE_SOURCE.count(_USER_BACKGROUND_HELPER) != 1:
-    raise ValueError("transcript user background helper changed or duplicated")
-PRE_USER_BACKGROUND_RESET_MODULE_SOURCE = MODULE_SOURCE.replace(
-    _USER_BACKGROUND_HELPER, _PRE_USER_BACKGROUND_HELPER, 1,
-)
+}
+'''
+if MODULE_SOURCE.count(_USER_BACKGROUND_IMPORTS) != 1 or MODULE_SOURCE.count(_USER_SEPARATOR_RENDER) != 1:
+    raise ValueError("transcript separator source changed; inspect before migrating background removal")
+
+def _previous_background_module(helper):
+    source = MODULE_SOURCE.replace(_USER_BACKGROUND_IMPORTS, "", 1)
+    source = source.replace(_USER_SEPARATOR_RENDER, _USER_BACKGROUND_RENDER, 1)
+    marker = "\nexport function speakerHeader"
+    if source.count(marker) != 1:
+        raise ValueError("transcript speaker header anchor changed; inspect before migrating background removal")
+    return source.replace(marker, "\n" + helper + "\nexport function speakerHeader", 1)
+
+PRE_USER_BACKGROUND_MODULE_SOURCE = _previous_background_module(_USER_BACKGROUND_HELPER)
+PRE_USER_BACKGROUND_RESET_MODULE_SOURCE = _previous_background_module(_USER_BACKGROUND_RESET_HELPER)
 PRE_METRICS_EDITS = json.loads(read_payload('host/legacy/transcript-edits-before-metrics.json'))
 LEGACY_EDITS = json.loads(read_payload('host/legacy/transcript-edits-v1.json'))
 EDITS = {
@@ -214,7 +228,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         revisions = [
             (EDITS, (MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-                     PRE_USER_BACKGROUND_MODULE_SOURCE)),
+                     PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
         ]
@@ -245,8 +259,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         if sources.get(MODULE) in (
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-            PRE_USER_BACKGROUND_MODULE_SOURCE,
-            PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
+            PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
         ):
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:

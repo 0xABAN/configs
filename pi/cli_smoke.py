@@ -17,16 +17,6 @@ from agent.tests.support.intercom_fixture import write_fixture
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
-def theme_background_sequence(path: Path) -> str:
-    data = json.loads(path.read_text())
-    color = data["vars"].get(data["colors"]["userMessageBg"], data["colors"]["userMessageBg"])
-    match = re.fullmatch(r"#([0-9a-fA-F]{6})", color)
-    if not match:
-        raise ValueError(f"theme userMessageBg is not a hex color: {color}")
-    rgb = [str(int(match.group(1)[offset:offset + 2], 16)) for offset in (0, 2, 4)]
-    return f"{chr(27)}[48;2;{';'.join(rgb)}m"
-
-
 def smoke(sdk: Path, launcher: Path, config: Path, home: Path, output: Path) -> None:
     """Check host rendering with configured pi-pretty, Powerline and the real theme.
 
@@ -53,7 +43,6 @@ def smoke(sdk: Path, launcher: Path, config: Path, home: Path, output: Path) -> 
     pretty = home / ".pi/agent/npm/node_modules/@heyhuynhgiabuu/pi-pretty/src/index.ts"
     powerline = home / ".pi/agent/git/github.com/nicobailon/pi-powerline-footer/index.ts"
     theme = config / "pi/agent/themes/osaka-jade.json"
-    user_message_background = theme_background_sequence(theme)
     for path in (pretty, powerline, theme):
         if not path.is_file():
             raise RuntimeError(f"missing configured UI source: {path}")
@@ -129,11 +118,8 @@ export default function (pi) {
             checks = {
                 "user_header": bool(re.search(r"(?m)^ +◆ You", plain)),
                 "assistant_header": bool(re.search(r"(?m)^ +● Pi", plain)),
-                "user_message_background": any(
-                    user_message_background in line and "◆ You" in ANSI.sub("", line)
-                    for line in screen.splitlines()
-                ),
-                "no_cream_separator": not bool(re.search(r"(?m)^  ─{116}$", plain)),
+                "outer_inset_and_separator": bool(re.search(r"(?m)^  ─{116}$", plain)),
+                "cream_separator": bool(re.search(r"\x1b\[38;2;222;222;197m[^\n]*─{116}", screen)),
                 "powerline_footer": "Faux Model" in plain and "context" in plain and "↳ CUSTOM_HOST_PROMPT" in plain,
                 "offline_response": "OFFLINE_CUSTOM_HOST_RESPONSE" in (run / "response.json").read_text(),
                 "intercom_invocation": bool(re.search(r"✓ ⌇ Tool +intercom", plain)),
@@ -160,7 +146,7 @@ export default function (pi) {
             (output / "assertions.json").write_text(json.dumps(results, indent=2) + "\n")
             if not all(checks.values()):
                 raise RuntimeError(f"{mode} actual-CLI assertions failed: {checks}; see {run}")
-            print(f"{mode}: actual {launcher} rendered headers, dark user-message background, 2-column outer inset, Powerline, faux response and synthetic Intercom collapse/expansion")
+            print(f"{mode}: actual {launcher} rendered headers, cream separator, 2-column outer inset, Powerline, faux response and synthetic Intercom collapse/expansion")
         finally:
             subprocess.run(["tmux", "kill-session", "-t", target], check=False, capture_output=True)
 
