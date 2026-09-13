@@ -83,7 +83,7 @@ test("installer runs the Pi rendering patches and surfaces incompatible installa
     writeFileSync(join(patches, name), "raise SystemExit(23)\n");
     expect(run().exitCode).toBe(23);
   }
-});
+}, 15_000); // Ten separate installer processes can exceed Bun's 5s default under load.
 
 test("activity styling runs after legacy todo tweaks", () => {
   const { cwd, home, run } = sandbox("activity-order");
