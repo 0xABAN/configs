@@ -66,6 +66,9 @@ do
   link "$ROOT/pi/agent/$name" "$HOME/.pi/agent/$name"
 done
 
+# Keep the short command as a pointer to the single computer-use skill.
+link "$ROOT/pi/agent/prompts/use-computer.md" "$HOME/.pi/agent/prompts/use-computer.md"
+
 echo "== shared agent instructions =="
 backup "$HOME/AGENTS.md"
 link "$ROOT/pi/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
