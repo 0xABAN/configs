@@ -87,20 +87,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	function thinkingLabel(level: string): string {
 		const labels: Record<string, string> = {
-			off: "off",
 			minimal: "min",
-			low: "low",
 			medium: "med",
-			high: "high",
-			xhigh: "xhigh",
-			max: "max",
 		};
 		return `think:${labels[level] ?? level}`;
-	}
-
-	/** Use the same white→mid→beige gradient for every thinking level. */
-	function thinkingStatus(level: string, mid: [number, number, number]): string {
-		return shine(thinkingLabel(level), mid);
 	}
 
 	function updateStatus(ctx: ExtensionContext): void {
@@ -109,16 +99,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			"agent-mode",
 			shine(planModeEnabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
 		);
-		ctx.ui.setStatus("agent-thinking", thinkingStatus(ctx.thinkingLevel || "off", mid));
-	}
-
-	function uniqueToolNames(toolNames: string[]): string[] {
-		return [...new Set(toolNames)];
+		// Keep the mode gradient for every thinking level.
+		ctx.ui.setStatus("agent-thinking", shine(thinkingLabel(ctx.thinkingLevel || "off"), mid));
 	}
 
 	function withTodo(toolNames: string[]): string[] {
 		// keep rpiv-todo's tool available across mode switches
-		return uniqueToolNames([...toolNames, "todo"]);
+		return [...new Set([...toolNames, "todo"])];
 	}
 
 	function getPlanModeTools(activeToolNames: string[]): string[] {
@@ -197,11 +184,11 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	// Filter out stale plan mode context when not in plan mode
 	pi.on("context", async (event) => {
+		if (planModeEnabled) return;
 		return {
 			messages: event.messages.filter((m) => {
 				const msg = m as AgentMessage & { customType?: string };
-				if (!planModeEnabled && msg.customType === "plan-mode-context") return false;
-				if (planModeEnabled) return true;
+				if (msg.customType === "plan-mode-context") return false;
 				if (msg.role !== "user") return true;
 
 				const content = msg.content;
@@ -234,7 +221,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	pi.on("agent_end", async (event, ctx) => {
 		if (!planModeEnabled || !ctx.hasUI) return;
 
-		const lastAssistant = [...event.messages].reverse().find(isAssistantMessage);
+		const lastAssistant = event.messages.findLast(isAssistantMessage);
 		if (!lastAssistant) return;
 
 		const steps = extractPlanSteps(getTextContent(lastAssistant));
@@ -283,9 +270,9 @@ ${list}`,
 		}
 
 		const entries = ctx.sessionManager.getEntries();
-		const planModeEntry = entries
-			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "plan-mode")
-			.pop() as { data?: PlanModeState } | undefined;
+		const planModeEntry = entries.findLast(
+			(e: { type: string; customType?: string }) => e.type === "custom" && e.customType === "plan-mode",
+		) as { data?: PlanModeState } | undefined;
 
 		if (planModeEntry?.data) {
 			planModeEnabled = planModeEntry.data.enabled ?? planModeEnabled;

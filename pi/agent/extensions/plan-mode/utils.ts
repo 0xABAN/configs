@@ -109,11 +109,7 @@ export function extractPlanSteps(message: string): string[] {
 	const numberedPattern = /^\s*(\d+)[.)]\s+\*{0,2}([^*\n]+)/gm;
 
 	for (const match of planSection.matchAll(numberedPattern)) {
-		let text = match[2]
-			.trim()
-			.replace(/\*{1,2}$/, "")
-			.trim()
-			.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+		const text = match[2]
 			.replace(/`([^`]+)`/g, "$1")
 			.replace(/\s+/g, " ")
 			.trim();
