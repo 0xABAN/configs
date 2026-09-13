@@ -234,11 +234,12 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         ]
         # Accept earlier layouts with either known lookup, but still validate the
         # entire matching source set and helper before changing anything.
-        for revision, helpers in list(revisions):
+        variants = []
+        for revision, helpers in revisions:
             previous = {name: list(edits) for name, edits in revision.items()}
             previous[BASE + "interactive-mode.js"][2] = PRE_INTERCOM_LOOKUP
-            revisions.append((previous, helpers))
-        for previous_edits, helpers in revisions:
+            variants.extend(((revision, helpers), (previous, helpers)))
+        for previous_edits, helpers in variants:
             if sources.get(MODULE) not in helpers:
                 continue
             # Old host edits and their helper migrate together. Never repair a
