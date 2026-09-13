@@ -166,6 +166,7 @@ function real() {
     for (const [file, changes] of Object.entries(edits)) {
       let source = readFileSync(join(root, file), "utf8");
       for (const [old, replacement] of compactEdits[file] ?? []) source = source.replaceAll(replacement, old);
+      for (const [old, replacement] of toolRowEdits[file] ?? []) source = source.replaceAll(replacement, old);
       for (const [old, replacement] of changes) source = source.replaceAll(replacement, old);
       writeFileSync(join(root, file), source);
     }
