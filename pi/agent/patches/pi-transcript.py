@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Install the display-only transcript preview into Pi 0.84.2; restart to apply.
+"""Install the transcript and UI-only tool metrics into Pi 0.84.2; restart to apply.
 
-Keep native tools and session records intact. Refuse partial/unknown hosts before
-writing; back up every changed source and leave unrelated installed edits alone.
+Preserve native tool execution and model-visible output. Timings share the
+existing result-entry write, outside its message. Refuse partial/unknown hosts
+before writing; back up every changed source and leave unrelated installed edits alone.
 """
 import json
 from pathlib import Path
@@ -21,12 +22,14 @@ MODULE_SOURCE = read_payload('host/transcript.js.inc')
 LEGACY_MODULE_SOURCE = read_payload('host/legacy/transcript.js.inc')
 PRE_COMPACT_MODULE_SOURCE = read_payload('host/legacy/transcript-before-compact.js.inc')
 PRE_YELLOW_ICON_MODULE_SOURCE = read_payload('host/legacy/transcript-before-yellow-icon.js.inc')
+PRE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-metrics.js.inc')
+PRE_METRICS_EDITS = json.loads(read_payload('host/legacy/transcript-edits-before-metrics.json'))
 LEGACY_EDITS = json.loads(read_payload('host/legacy/transcript-edits-v1.json'))
 EDITS = {
     BASE + "interactive-mode.js": [
         ('import { UserMessageComponent } from "./components/user-message.js";',
          'import { UserMessageComponent } from "./components/user-message.js";\n'
-         'import { TranscriptContainer } from "./components/transcript.js"; // configs:pi-transcript-v1'),
+         'import { TranscriptContainer, startToolTiming, finishToolTiming, collectToolTimings } from "./components/transcript.js"; // configs:pi-transcript-v1'),
         ("        this.chatContainer = new Container();",
          "        this.chatContainer = new TranscriptContainer(() => this.outputPad, () => this.ui.terminal.rows);"),
         ('''    getRegisteredToolDefinition(toolName) {
@@ -44,6 +47,20 @@ EDITS = {
          "new UserMessageComponent(skillBlock.userMessage, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers(), message.timestamp)"),
         ("new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers())",
          "new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings(), this.outputPad, this.getMarkdownTransformers(), message.timestamp)"),
+        ("                component.markExecutionStarted();",
+         "                startToolTiming(component);\n                component.markExecutionStarted();"),
+        ("                    component.updateResult({ ...event.result, isError: event.isError });", '''                    const timing = finishToolTiming(component);
+                    if (timing) this.sessionManager.configsToolTimings.set(event.toolCallId, timing);
+                    component.updateResult({ ...event.result, isError: event.isError });'''),
+        ("        const renderedPendingTools = new Map();",
+         "        const renderedPendingTools = new Map();\n        const toolTimings = collectToolTimings(this.sessionManager.getBranch());"),
+        ('                this.pendingTools.clear();\n                this.ui.requestRender();\n                break;\n            case "agent_settled":',
+         '                this.pendingTools.clear();\n                this.sessionManager.configsToolTimings.clear();\n                this.ui.requestRender();\n                break;\n            case "agent_settled":'),
+        ("                    component.updateResult(message);", '''                    const timing = toolTimings.get(message.toolCallId);
+                    if (timing?.toolName === component.toolName) {
+                        component.transcriptDurationMs = timing.durationMs;
+                    }
+                    component.updateResult(message);'''),
     ],
     BASE + "components/user-message.js": [
         ('import { createMarkdownTransform } from "./markdown-transform.js";',
@@ -87,6 +104,44 @@ EDITS = {
     BASE + "components/tool-execution.js": [
         ("    contentBox;", '    transcriptRole = "tool"; // configs:pi-transcript-v1\n    contentBox;'),
     ],
+    "dist/core/session-manager.js": [
+        ("    leafId = null;", "    leafId = null;\n    configsToolTimings = new Map();"),
+        ("    newSession(options) {", "    newSession(options) {\n        this.configsToolTimings.clear();"),
+        ("    _buildIndex() {", "    _buildIndex() {\n        this.configsToolTimings.clear();"),
+        ("    branch(branchFromId) {", "    branch(branchFromId) {\n        this.configsToolTimings.clear();"),
+        ("    resetLeaf() {", "    resetLeaf() {\n        this.configsToolTimings.clear();"),
+        ('''            message,
+        };
+        this._appendEntry(entry);''', '''            message,
+        };
+        // UI timing belongs to the entry wrapper, not model-visible messages.
+        // Share the canonical result write: no independently failing metadata append.
+        const timing = message.role === "toolResult" ? this.configsToolTimings.get(message.toolCallId) : undefined;
+        if (timing && typeof timing.toolCallId === "string" && timing.toolCallId
+            && typeof timing.toolName === "string" && timing.toolName
+            && timing.toolCallId === message.toolCallId && timing.toolName === message.toolName
+            && Number.isFinite(timing.durationMs) && timing.durationMs >= 0) {
+            entry.configsToolTiming = {
+                toolCallId: timing.toolCallId, toolName: timing.toolName, durationMs: timing.durationMs,
+            };
+        }
+        this._appendEntry(entry);
+        if (message.role === "toolResult") this.configsToolTimings.delete(message.toolCallId);'''),
+    ],
+    "dist/core/tools/read.js": [
+        ('                            content = [{ type: "text", text: outputText }];', '''                            content = [{ type: "text", text: outputText }];
+                            // Count source lines actually returned, before continuation notices.
+                            details = { ...details, configsTranscript: { lines: truncation.outputLines } };'''),
+    ],
+    "dist/core/tools/write.js": [
+        ('                    details: undefined,', '''                    details: { configsTranscript: {
+                        lines: content.length === 0 ? 0 : content.split("\\n").length - Number(content.endsWith("\\n")),
+                    } },'''),
+    ],
+    "dist/core/tools/edit.js": [
+        ('                    details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine },',
+         '                    details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine, configsTranscript: { edits: edits.length } },'),
+    ],
 }
 
 
@@ -114,25 +169,29 @@ def source_state(sources: dict[str, str], replacements: dict) -> str:
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
-    """Accept complete current/original sources or an exact pre-compact revision."""
+    """Accept complete current/original sources or an exact supported revision."""
     try:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
-        if sources.get(MODULE) not in (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE):
-            raise current_error
-        # Old host edits and their helper migrate together. Never repair a mixed
-        # installation merely because one of its helper files is recognizable.
-        if source_state(sources, LEGACY_EDITS) != "patched":
-            raise current_error
-        original = dict(sources)
-        del original[MODULE]
-        for name, edits in LEGACY_EDITS.items():
-            for old, new in reversed(edits):
-                original[name] = original[name].replace(new, old, 1)
-        return patch_sources(original)
+        revisions = (
+            (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
+            (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
+        )
+        for previous_edits, helpers in revisions:
+            if sources.get(MODULE) not in helpers:
+                continue
+            # Old host edits and their helper migrate together. Never repair a
+            # mixed installation just because its helper is recognizable.
+            if source_state(sources, previous_edits) != "patched":
+                raise current_error
+            original = dict(sources)
+            del original[MODULE]
+            for name, edits in previous_edits.items():
+                for old, new in reversed(edits):
+                    original[name] = original[name].replace(new, old, 1)
+            return patch_sources(original)
+        raise current_error
     if state == "patched":
-        if sources.get(MODULE) == PRE_YELLOW_ICON_MODULE_SOURCE:
-            return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:
             raise ValueError("transcript module changed or missing; inspect before reapplying")
         return sources

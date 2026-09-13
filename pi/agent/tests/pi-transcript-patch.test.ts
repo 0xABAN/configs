@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { applySdkPatches, copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
 import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
@@ -31,15 +31,32 @@ function contents(root: string) {
 
 test("complete previous revisions migrate together with exact backups; mixed revisions refuse", () => {
   const legacyEdits = JSON.parse(readFileSync(new URL("../patches/payloads/host/legacy/transcript-edits-v1.json", import.meta.url), "utf8")) as typeof edits;
-  for (const helper of ["transcript.js.inc", "transcript-before-compact.js.inc"]) {
+  const preMetricsEdits = JSON.parse(readFileSync(new URL("../patches/payloads/host/legacy/transcript-edits-before-metrics.json", import.meta.url), "utf8")) as typeof edits;
+  const revisions = [
+    { changes: legacyEdits, helper: "transcript.js.inc" },
+    { changes: legacyEdits, helper: "transcript-before-compact.js.inc" },
+    { changes: preMetricsEdits, helper: "transcript-before-yellow-icon.js.inc" },
+    { changes: preMetricsEdits, helper: "transcript-before-metrics.js.inc" },
+  ];
+  for (const { changes, helper } of revisions) {
     const root = sandbox(helper);
-    for (const [file, changes] of Object.entries(legacyEdits)) {
+    for (const [file, changesForFile] of Object.entries(changes)) {
       let source = readFileSync(join(root, file), "utf8");
-      for (const [old, patched] of changes) source = source.replace(old, patched);
+      for (const [old, patched] of changesForFile) source = source.replace(old, patched);
       writeFileSync(join(root, file), source);
     }
     const legacy = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
     writeFileSync(join(root, modulePath), legacy);
+    // A recognizable old helper must not authorize a partially applied producer patch.
+    const producer = "dist/core/tools/read.js";
+    const source = readFileSync(join(root, producer), "utf8");
+    writeFileSync(join(root, producer), source.replace(...edits[producer][0]));
+    const mixed = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(mixed);
+    expect(existsSync(join(root, ".config/theme-backups"))).toBe(false);
+    writeFileSync(join(root, producer), source);
+
     const before = contents(root);
     expect(run(root).exitCode).toBe(0);
     const backups = join(root, ".config/theme-backups");
@@ -61,42 +78,6 @@ test("complete previous revisions migrate together with exact backups; mixed rev
       expect(readFileSync(join(root, modulePath), "utf8")).toBe(source);
       expect(readdirSync(backups)).toEqual(names);
     }
-  }
-});
-
-test("the previous icon helper migrates alone with an exact backup and refuses local edits", () => {
-  const root = sandbox("yellow-icon");
-  expect(run(root).exitCode).toBe(0);
-  const current = contents(root);
-  const previous = readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-yellow-icon.js.inc", import.meta.url), "utf8");
-  writeFileSync(join(root, modulePath), previous);
-  const backupRoot = join(root, ".config/theme-backups");
-  const originalBackups = readdirSync(backupRoot);
-
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  const backups = readdirSync(backupRoot);
-  const added = backups.filter(name => !originalBackups.includes(name));
-  expect(added).toHaveLength(1);
-  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
-  expect(JSON.parse(readFileSync(join(backupRoot, added[0], "added-files.json"), "utf8"))).toEqual([]);
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  expect(readdirSync(backupRoot)).toEqual(backups);
-
-  for (const state of ["local-helper-edit", "partial-host"]) {
-    const invalid = sandbox(state);
-    expect(run(invalid).exitCode).toBe(0);
-    writeFileSync(join(invalid, modulePath), previous + (state === "local-helper-edit" ? "\n// local edit" : ""));
-    if (state === "partial-host") {
-      const file = Object.keys(edits).at(-1)!;
-      const [old, patched] = edits[file][0];
-      writeFileSync(join(invalid, file), readFileSync(join(invalid, file), "utf8").replace(patched, old));
-    }
-    const before = contents(invalid);
-    expect(run(invalid).exitCode).not.toBe(0);
-    expect(contents(invalid)).toEqual(before);
-    expect(readdirSync(join(invalid, ".config/theme-backups"))).toHaveLength(1);
   }
 });
 
@@ -154,7 +135,7 @@ function real() {
     colors.setThemeInstance(colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
     return { ...await load("components/transcript.js"), ...await load("components/user-message.js"),
       ...await load("components/assistant-message.js"), ...await load("components/tool-execution.js"),
-      ...await load("interactive-mode.js"), tui, colors };
+      ...await load("interactive-mode.js"), SessionManager: (await load("../../core/session-manager.js")).SessionManager, tui, colors };
   })();
 }
 
@@ -164,18 +145,18 @@ const toolCall = (id: string, name: string, args: object) => ({ type: "toolCall"
 const result = (id: string, name: string, text: string, isError = false) => ({ role: "toolResult", toolCallId: id, toolName: name,
   content: [{ type: "text", text }], isError, timestamp });
 
-function host(m: any) {
+function host(m: any, sessionManager = m.SessionManager.inMemory(temp)) {
   const app = Object.create(m.InteractiveMode.prototype);
   Object.assign(app, {
     isInitialized: true, chatContainer: new m.TranscriptContainer(), pendingTools: new Map(),
     loadedResourcesContainer: new m.tui.Container(), toolOutputExpanded: false, outputPad: 1,
     hideThinkingBlock: true, hiddenThinkingLabel: "Thinking…", footer: { invalidate() {} },
     ui: { requestRender() {} }, runtimeHost: { session: { retryAttempt: 0,
-      sessionManager: { getCwd: () => temp },
-      settingsManager: { getShowCacheMissNotices: () => false, getShowImages: () => true, getImageWidthCells: () => 60 },
+      sessionManager,
+      settingsManager: { getShowCacheMissNotices: () => false, getShowImages: () => true, getImageWidthCells: () => 60, getShowTerminalProgress: () => false },
     } },
     getRegisteredToolDefinition: () => undefined, getMarkdownThemeWithSettings: () => m.colors.getMarkdownTheme(),
-    getMarkdownTransformers: () => [], updatePendingMessagesDisplay() {}, maybeShowCacheMissNotice() {}, showStatus() {},
+    getMarkdownTransformers: () => [], updatePendingMessagesDisplay() {}, maybeShowCacheMissNotice() {}, showStatus() {}, showError() {}, clearStatusIndicator() {},
   });
   return app;
 }
@@ -213,9 +194,10 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
     for (const item of results) {
       await live.handleEvent({ type: "tool_execution_start", toolCallId: item.toolCallId, toolName: item.toolName, args: {} });
       await live.handleEvent({ type: "tool_execution_end", toolCallId: item.toolCallId, result: item, isError: item.isError });
+      live.sessionManager.appendMessage(item);
     }
   }
-  const history = host(m);
+  const history = host(m, live.sessionManager);
   history.renderSessionItems(items);
   expect(transcript(m, live)).toBe(transcript(m, history));
   const text = transcript(m, live);
@@ -246,6 +228,204 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   live.renderSessionItems(items);
   live.chatContainer.invalidate();
   expect(transcript(m, live)).toBe(text);
+});
+
+realTest("parallel timings persist outside model context and replay from only the active branch", async () => {
+  const m = await real();
+  const manager = m.SessionManager.create(temp, join(temp, "timing-sessions"));
+  const app = host(m, manager);
+  const user = { role: "user", content: "Read both files.", timestamp };
+  const call = assistant([toolCall("a", "read", { path: "a.ts" }), toolCall("b", "read", { path: "b.ts" })]);
+  manager.appendMessage(user);
+  const branchPoint = manager.appendMessage(call);
+  const results = [
+    { ...result("a", "read", "one\ntwo\n"), details: { configsTranscript: { lines: 2 } } },
+    { ...result("b", "read", "three\n"), details: { configsTranscript: { lines: 1 } } },
+  ];
+
+  for (const id of ["a", "b"]) {
+    await app.handleEvent({ type: "tool_execution_start", toolCallId: id, toolName: "read", args: { path: `${id}.ts` } });
+  }
+  await app.handleEvent({ type: "tool_execution_update", toolCallId: "a", toolName: "read", partialResult: results[0] });
+  expect(manager.configsToolTimings.size).toBe(0);
+  const liveTools = new Map(app.pendingTools);
+  // Completion order differs from call/result-message order, as in parallel execution.
+  for (const item of [results[1], results[0]]) {
+    await app.handleEvent({ type: "tool_execution_end", toolCallId: item.toolCallId, toolName: "read", result: item, isError: false });
+  }
+  expect([...manager.configsToolTimings.keys()]).toEqual(["b", "a"]);
+  for (const item of results) manager.appendMessage(item);
+  expect(manager.configsToolTimings.size).toBe(0);
+  const timings = manager.getBranch().filter((entry: any) => entry.configsToolTiming);
+  expect(timings.map((entry: any) => entry.configsToolTiming.toolCallId)).toEqual(["a", "b"]);
+  expect(timings.every((entry: any) => Number.isFinite(entry.configsToolTiming.durationMs) && entry.configsToolTiming.durationMs >= 0)).toBe(true);
+  expect(manager.buildSessionContext().messages).toEqual([user, call, ...results]);
+
+  const reopened = m.SessionManager.open(manager.getSessionFile());
+  const replay = host(m, reopened);
+  replay.renderSessionEntries(reopened.buildContextEntries());
+  const replayTools = replay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool");
+  expect(replayTools).toHaveLength(2);
+  for (const component of replayTools) {
+    const live = liveTools.get(component.toolCallId);
+    expect(component.transcriptDurationMs).toBe(live.transcriptDurationMs);
+    for (const width of [90, 40, 24]) expect(m.actionLines(component, width)).toEqual(m.actionLines(live, width));
+  }
+  expect(transcript(m, replay)).not.toContain(m.TOOL_TIMING_FIELD);
+
+  // Message-only rebuilds have no entry-wrapper metadata of their own.
+  replay.chatContainer.clear();
+  replay.renderSessionItems([call, ...results]);
+  expect(replay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool")
+    .map((child: any) => child.transcriptDurationMs)).toEqual(replayTools.map((child: any) => child.transcriptDurationMs));
+
+  reopened.appendCompaction("Earlier context summarized", branchPoint, 1000);
+  replay.chatContainer.clear();
+  replay.renderSessionEntries(reopened.buildContextEntries());
+  expect(replay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool")
+    .map((child: any) => child.transcriptDurationMs)).toEqual(replayTools.map((child: any) => child.transcriptDurationMs));
+
+  // Pi 0.84.2 keeps entries via firstKeptEntryId; verify an actual compacted-file reopen.
+  const compactedManager = m.SessionManager.open(reopened.getSessionFile());
+  const compactedReplay = host(m, compactedManager);
+  compactedReplay.renderSessionEntries(compactedManager.buildContextEntries());
+  expect(compactedReplay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool")
+    .map((child: any) => child.transcriptDurationMs)).toEqual(replayTools.map((child: any) => child.transcriptDurationMs));
+
+  reopened.branch(branchPoint);
+  replay.chatContainer.clear();
+  replay.renderSessionEntries(reopened.buildContextEntries());
+  expect(replay.chatContainer.children.filter((child: any) => child.transcriptRole === "tool")
+    .every((child: any) => child.transcriptDurationMs === undefined)).toBe(true);
+});
+
+realTest("calls cancelled before starting never queue a timing", async () => {
+  const m = await real();
+  const queued = host(m);
+  const message = assistant([toolCall("queued", "read", { path: "queued.ts" })]);
+  await queued.handleEvent({ type: "message_start", message });
+  await queued.handleEvent({ type: "message_update", message });
+  const pending = queued.pendingTools.get("queued");
+  await queued.handleEvent({ type: "message_end", message: { ...message, stopReason: "aborted" } });
+  expect(pending.result.isError).toBe(true);
+  expect(pending.transcriptDurationMs).toBeUndefined();
+  expect(queued.sessionManager.configsToolTimings.size).toBe(0);
+});
+
+realTest("timing adds no independent writes or history nodes and shares the canonical result write", async () => {
+  const m = await real();
+  const directory = join(temp, "timing-single-write");
+  const manager = m.SessionManager.create(temp, directory);
+  const user = { role: "user", content: "Read a.ts", timestamp };
+  const call = assistant([toolCall("a", "read", { path: "a.ts" })]);
+  const output = { ...result("a", "read", "file content"), details: "custom scalar details stay intact" };
+  manager.appendMessage(user);
+  manager.appendMessage(call);
+  const originalEntries = manager.getEntries();
+  const originalLeaf = manager.getLeafId();
+  const originalFile = readFileSync(manager.getSessionFile(), "utf8");
+  const writes: any[] = [];
+  const persist = manager._persist;
+  manager._persist = function (entry: any) {
+    writes.push(entry);
+    return persist.call(this, entry);
+  };
+  const app = host(m, manager);
+  await app.handleEvent({ type: "tool_execution_start", toolCallId: "a", toolName: "read", args: { path: "a.ts" } });
+  // A timing observation must not touch disk, even when session storage is unavailable.
+  renameSync(directory, `${directory}-offline`);
+  try {
+    await app.handleEvent({ type: "tool_execution_end", toolCallId: "a", toolName: "read", result: output, isError: false });
+  } finally {
+    renameSync(`${directory}-offline`, directory);
+  }
+  expect(writes).toHaveLength(0);
+  expect(manager.getEntries()).toEqual(originalEntries);
+  expect(manager.getLeafId()).toBe(originalLeaf);
+  expect(readFileSync(manager.getSessionFile(), "utf8")).toBe(originalFile);
+  const id = manager.appendMessage(output);
+  expect(writes).toHaveLength(1);
+  expect(manager.getEntry(id).message).toBe(output);
+  expect(manager.getEntry(id).configsToolTiming.toolCallId).toBe("a");
+  expect(output.details).toBe("custom scalar details stay intact");
+  expect(manager.configsToolTimings.size).toBe(0);
+  const reopened = m.SessionManager.open(manager.getSessionFile());
+  expect(reopened.buildSessionContext().messages).toEqual([user, call, output]);
+  expect(m.collectToolTimings(reopened.getBranch()).size).toBe(1);
+
+  // Native canonical-write errors remain visible to the caller, never swallowed/retried.
+  const failing = m.SessionManager.inMemory(temp);
+  failing.configsToolTimings.set("a", { toolCallId: "a", toolName: "read", durationMs: 100 });
+  failing._persist = () => { throw new Error("canonical write failed"); };
+  expect(() => failing.appendMessage(output)).toThrow("canonical write failed");
+});
+
+realTest("pending timing queues clear on run and session boundaries; persisted branch copies retain metadata", async () => {
+  const m = await real();
+  const timing = { toolCallId: "a", toolName: "read", durationMs: 1250 };
+  const manager = m.SessionManager.create(temp, join(temp, "timing-boundaries"));
+  manager.appendMessage(assistant([toolCall("a", "read", { path: "a.ts" })]));
+  manager.configsToolTimings.set("a", timing);
+  const resultId = manager.appendMessage(result("a", "read", "ok"));
+  const savedFile = manager.getSessionFile();
+
+  const mutations = [
+    () => manager.createBranchedSession(resultId),
+    () => manager.setSessionFile(savedFile),
+    () => manager.branch(resultId),
+    () => manager.resetLeaf(),
+    () => manager.newSession(),
+  ];
+  for (const mutate of mutations) {
+    manager.configsToolTimings.set("abandoned", { ...timing, toolCallId: "abandoned" });
+    mutate();
+    expect(manager.configsToolTimings.size).toBe(0);
+  }
+  const original = m.SessionManager.open(savedFile);
+  const copiedFile = original.createBranchedSession(resultId);
+  const copied = m.SessionManager.open(copiedFile);
+  expect(m.collectToolTimings(copied.getBranch()).get("a")).toEqual(timing);
+
+  const memory = m.SessionManager.inMemory(temp);
+  const memoryId = memory.appendMessage({ role: "user", content: "branch", timestamp });
+  memory.configsToolTimings.set("a", timing);
+  memory.createBranchedSession(memoryId);
+  expect(memory.configsToolTimings.size).toBe(0);
+  const app = host(m, memory);
+  memory.configsToolTimings.set("abandoned", timing);
+  await app.handleEvent({ type: "agent_end" });
+  expect(memory.configsToolTimings.size).toBe(0);
+});
+
+realTest("session entries attach only valid matching primitive timing fields", async () => {
+  const m = await real();
+  const manager = m.SessionManager.inMemory(temp);
+  const timing = { toolCallId: "a", toolName: "read", durationMs: 100 };
+  for (const record of [null, { ...timing, toolCallId: "wrong" }, { ...timing, toolName: "edit" },
+    { ...timing, durationMs: -1 }, { ...timing, durationMs: Infinity }, { ...timing, durationMs: "100" }]) {
+    manager.configsToolTimings.set("a", record);
+    const id = manager.appendMessage(result("a", "read", "ok"));
+    expect(manager.getEntry(id).configsToolTiming).toBeUndefined();
+    expect(manager.configsToolTimings.size).toBe(0);
+  }
+  manager.configsToolTimings.set("a", { ...timing, extra: { notPersisted: true } });
+  const id = manager.appendMessage(result("a", "read", "ok"));
+  expect(manager.getEntry(id).configsToolTiming).toEqual(timing);
+  manager.configsToolTimings.set("a", timing);
+  const userId = manager.appendMessage({ role: "user", content: "No timing on users", toolCallId: "a", toolName: "read", timestamp });
+  expect(manager.getEntry(userId).configsToolTiming).toBeUndefined();
+});
+
+realTest("historical result timestamps never become inferred timings", async () => {
+  const m = await real();
+  const app = host(m);
+  app.renderSessionItems([
+    assistant([toolCall("old", "read", { path: "old.ts" })]),
+    { ...result("old", "read", "old content"), timestamp: timestamp + 10_000 },
+  ]);
+  const tool = app.chatContainer.children.find((child: any) => child.transcriptRole === "tool");
+  expect(tool.transcriptDurationMs).toBeUndefined();
+  expect(m.tui.stripTerminalSequences(m.actionLines(tool, 40)[0])).not.toMatch(/\d+(?:\.\d+)?s/);
 });
 
 realTest("partial calls, unsafe arguments, error-only turns and narrow Unicode rows stay readable", async () => {
