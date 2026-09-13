@@ -72,8 +72,24 @@ EDITS = {
 }
 
 
+UNSTAGED_EDIT = (
+    'indicators.push(applyColor(ctx.theme, "warning", `*${gitStatus.unstaged}`));',
+    'indicators.push(applyColor(ctx.theme, "#85877e", `*${gitStatus.unstaged}`));',
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Accept a wholly original or wholly patched set, never a partial patch."""
+    # Upgrade the count color independently of an already-installed layout.
+    # Keep warning colors elsewhere intact; validate everything before writing.
+    sources = dict(sources)
+    old_count, new_count = UNSTAGED_EDIT
+    segment = sources["segments.ts"]
+    if segment.count(new_count) == 0 and segment.count(old_count) == 1:
+        sources["segments.ts"] = segment.replace(old_count, new_count, 1)
+    elif segment.count(new_count) != 1 or segment.count(old_count) != 0:
+        raise ValueError("unstaged count anchor changed or duplicated")
+
     states = []
     for name, edits in EDITS.items():
         source = sources[name]

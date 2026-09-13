@@ -9,6 +9,7 @@ const describe = Bun.spawnSync(["python3", "-B", "-c", `
 import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('patcher',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+m.EDITS['segments.ts'].append(m.UNSTAGED_EDIT)
 print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER}))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
@@ -37,6 +38,20 @@ test("patch is repeatable and preserves existing changes", () => {
   expect(Object.values(patched).every(s => s.includes("// existing DJ patch"))).toBe(true);
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(patched);
+});
+
+test("existing layouts upgrade only the unstaged count color", () => {
+  const app = sandbox("count-color");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const [oldCount, newCount] = edits["segments.ts"].at(-1)!;
+  writeFileSync(join(app.dir, "segments.ts"), current["segments.ts"].replace(newCount, oldCount));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+  writeFileSync(join(app.dir, "segments.ts"), current["segments.ts"].replace(newCount, "unknown count renderer"));
+  const before = app.contents();
+  expect(app.run().exitCode).not.toBe(0);
+  expect(app.contents()).toEqual(before);
 });
 
 test("changed or partial anchors refuse all writes", () => {
@@ -83,6 +98,15 @@ test("context meter clamps fill and preserves unknown and approximate usage", ()
 
 // Exercise the actual installed renderer, not a second implementation of its packing.
 const installed = join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer/index.ts");
+test.skipIf(!existsSync(installed))("installed unstaged count uses sage without changing its label", () => {
+  const source = readFileSync(join(installed, "../segments.ts"), "utf8");
+  const count = source.split("\n").find(line => line.includes('`*${gitStatus.unstaged}`'))!;
+  const indicators: string[] = [];
+  new Function("indicators", "applyColor", "ctx", "gitStatus", count)(
+    indicators, (_theme: unknown, color: string, text: string) => `${color}:${text}`, { theme: {} }, { unstaged: 3 },
+  );
+  expect(indicators).toEqual(["#85877e:*3"]);
+});
 test.skipIf(!existsSync(installed))("installed layout preserves right alignment through narrow overflow", () => {
   const source = readFileSync(installed, "utf8");
   const start = source.indexOf("/** Render a single segment");
