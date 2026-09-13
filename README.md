@@ -115,6 +115,17 @@ DJ replaces the old `agent-dj.ts` copy. Use `/dj theme`, `/dj layout`, and `/dj 
 
 The installer patches the installed powerline package so below-editor rows stay **powerline → DJ → last prompt**, without DJ replacing the prompt. After updating/reinstalling powerline, run `python3 pi/agent/patches/powerline-dj.py` from this checkout, then `/reload`. The patch skips missing installs and refuses changed upstream code rather than guessing.
 
+The footer layout patch puts model/branch on the left and reported cost plus
+an opt-in five-cell context meter on the right. Mode/thinking retain their
+original gradients; they fit on the left when space permits and wrap to a
+second row on narrow panes. Subscription cost is the provider-reported
+estimate, not a subscription bill. Editor borders and DJ placement are unchanged.
+
+After a powerline update, run `python3 pi/agent/patches/powerline-layout.py`,
+then `/reload` in Pi. The installer also applies it. Changed or partial
+upstream anchors stop without writing; do not force the patch through an
+unreviewed update. Test with `bun test pi/agent/tests/powerline-layout-patch.test.ts`.
+
 ## Sync workflow
 
 Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `configs` update so new installs can find the referenced paths.

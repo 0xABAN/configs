@@ -75,12 +75,14 @@ test("dependency installation failure leaves existing config links untouched", (
   expect(readFileSync(join(home, ".zshrc"), "utf8")).toBe("original");
 });
 
-test("installer runs the powerline patch and surfaces an incompatible installation", () => {
-  const { cwd, run } = sandbox("powerline-patch");
-  const patches = join(cwd, "pi/agent/patches");
-  mkdirSync(patches);
-  writeFileSync(join(patches, "powerline-dj.py"), "raise SystemExit(23)\n");
-  expect(run().exitCode).toBe(23);
+test("installer runs the powerline patches and surfaces incompatible installations", () => {
+  for (const name of ["powerline-dj.py", "powerline-layout.py"]) {
+    const { cwd, run } = sandbox(name);
+    const patches = join(cwd, "pi/agent/patches");
+    mkdirSync(patches);
+    writeFileSync(join(patches, name), "raise SystemExit(23)\n");
+    expect(run().exitCode).toBe(23);
+  }
 });
 
 test("DJ has a single source and its legacy auto-discovered copy is removed", () => {

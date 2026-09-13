@@ -36,18 +36,21 @@
   "powerline": {
     "preset": "default",
     "placement": "below",
+    "separator": "dot",
     "disabledSegments": [
       "extension_statuses",
-      "git",
       "cache_read"
     ],
     "context": {
-      "format": "percent"
+      "format": "meter"
+    },
+    "cost": {
+      "subscriptionDisplay": "reported-cost"
     },
     "git": {
-      "showBranch": false,
+      "showBranch": true,
       "showStaged": false,
-      "showUnstaged": false,
+      "showUnstaged": true,
       "showUntracked": false
     },
     "customItems": [
@@ -67,16 +70,9 @@
       }
     ],
     "layout": {
-      "left": [
-        "custom:mode",
-        "model",
-        "custom:thinking",
-        "shell_mode",
-        "path",
-        "queue",
-        "context_pct",
-        "cost"
-      ]
+      "left": ["model", "git"],
+      "right": ["cost", "context_pct"],
+      "secondary": ["custom:mode", "custom:thinking", "shell_mode", "queue"]
     }
   },
   "skills": [
