@@ -46,7 +46,9 @@ activate it in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 1
+background-opacity = 0.65
+background-blur = 20
+background-opacity-cells = true
 ```
 
 Remove explicit background/foreground/selection overrides if they override
@@ -57,8 +59,9 @@ precedence over the shared Ghostty theme. Back up that file, then run
 alone does not reveal this override. The old Black Metal override is backed
 up locally in `~/.config/theme-backups/cmux-20260913-015205/`.
 
-Opacity 1 avoids wallpaper blending the hex colors. Reload cmux's
-configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
+Opacity 0.65 lets the backdrop show through, including colored terminal
+cells; blur keeps it soft. Use opacity 1 for unblended palette colors.
+Reload cmux's configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
 
 The original `woody` Pi and Neovim themes remain unchanged. The initial
