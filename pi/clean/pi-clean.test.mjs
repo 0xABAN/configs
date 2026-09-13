@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+
+// A fake Pi entry point reports exactly what the launcher passes to its child.
+// This checks isolation without loading real extensions or making model calls.
+test("isolates each run, forwards arguments, cleans up and preserves failures", () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-clean-test-"));
+  try {
+    const launcher = join(root, "pi-clean");
+    copyFileSync(new URL("./pi-clean", import.meta.url), launcher);
+    chmodSync(launcher, 0o755);
+    const cli = join(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+    mkdirSync(dirname(cli), { recursive: true });
+    writeFileSync(cli, `
+      console.log(JSON.stringify({ cwd: process.cwd(), env: process.env, args: process.argv.slice(2) }));
+      process.exit(process.argv.includes("--fail") ? 7 : 0);
+    `);
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    const link = join(bin, "pi-clean");
+    symlinkSync("../pi-clean", link);
+
+    const homes = new Set();
+    for (const fail of [false, true]) {
+      const args = ["-e", "/tmp/repro with spaces.ts", ...(fail ? ["--fail"] : [])];
+      const result = spawnSync(link, args, {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: "must-not-leak",
+          PI_CODING_AGENT_DIR: "/personal/config",
+          PI_PACKAGE_DIR: "/patched/pi",
+          PI_SESSION_ID: "personal-session",
+          NODE_OPTIONS: "--invalid-option-must-not-reach-node",
+        },
+      });
+      assert.equal(result.status, fail ? 7 : 0, result.stderr);
+      const report = JSON.parse(result.stdout);
+      assert.notEqual(report.cwd, root);
+      assert.equal(report.env.PWD, report.cwd);
+      assert.equal(report.env.PI_OFFLINE, "1");
+      assert.equal(report.env.PI_TELEMETRY, "0");
+      for (const name of ["OPENAI_API_KEY", "PI_PACKAGE_DIR", "PI_SESSION_ID", "NODE_OPTIONS"]) {
+        assert.equal(report.env[name], undefined, name);
+      }
+      const runDir = dirname(report.env.HOME);
+      for (const name of ["PI_CODING_AGENT_DIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "TMPDIR"]) {
+        assert.equal(dirname(report.env[name]), runDir, name);
+      }
+      assert.equal(existsSync(runDir), false, "temporary environment survives exit");
+      assert.deepEqual(report.args, [
+        "--no-session", "--no-extensions", "--no-skills", "--no-prompt-templates",
+        "--no-themes", "--no-context-files", ...args,
+      ]);
+      homes.add(report.env.HOME);
+    }
+    assert.equal(homes.size, 2, "runs must not share state");
+
+    rmSync(cli);
+    const missing = spawnSync(link, ["--version"], { encoding: "utf8" });
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /npm ci --ignore-scripts/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
