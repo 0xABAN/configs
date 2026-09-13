@@ -32,7 +32,10 @@ installed packages, and runtime locks out of commits.
 ## Rendering boundaries
 
 The host inset patch owns the outer viewport in regular and fullscreen modes.
-The transcript owns speaker headers and grouping of eligible native tool rows.
+The transcript owns speaker headers and tool invocation rows. Every call keeps a
+row, even when its renderer is silent. Built-in names retain their action labels;
+other names use `⌇ Tool <name>` without exposing arbitrary extension arguments.
+Custom cards, images, and expanded output stay intact below their invocation row.
 Package renderers own Todos and Agents; the host owns notification wrapping and
 native dialogs. Do not add a second outer margin to individual renderers.
 

@@ -78,7 +78,7 @@ function canCompact(component, nativeLines) {
     if (component.result?.content?.some(part => part.type === "image")) return false;
     if ((component.toolDefinition?.renderCall || component.toolDefinition?.renderResult)
         && component.toolDefinition.configsTranscriptCompact !== true) return false;
-    // Empty custom bodies still get an invocation row, but no invented result body.
+    // Respect renderers which intentionally hide a tool (including pi-pretty).
     return nativeLines.some(line => plain(line));
 }
 
@@ -95,7 +95,7 @@ function targetFor(component) {
         case "grep":
         case "find": return [plain(args.pattern), plain(args.path)].filter(Boolean).join(" · ");
         case "ls": return plain(args.path) || ".";
-        default: return "";
+        default: return plain(args.path ?? args.query ?? args.command ?? args.url ?? args.description);
     }
 }
 
@@ -137,16 +137,12 @@ function actionTitle(title, heading, component, width) {
 
 /** Return compact text only; expanded bodies always come from the native renderer. */
 export function actionLines(component, width) {
-    const nativeAction = Object.hasOwn(ACTIONS, component.toolName) ? ACTIONS[component.toolName] : undefined;
-    const [glyph, label] = nativeAction ?? ["⌇", "Tool"];
+    const [glyph, label] = ACTIONS[component.toolName] ?? ["⧉", plain(component.toolName) || "Tool"];
     const failed = component.result?.isError;
     const complete = component.result && !component.isPartial;
     const status = failed ? "×" : complete ? "✓" : component.executionStarted ? "◌" : "○";
     const color = failed ? "error" : complete ? "muted" : "accent";
-    // Generic rows identify the invocation without exposing arbitrary extension arguments.
-    const target = nativeAction
-        ? targetFor(component) || (component.argsComplete ? "" : "…")
-        : plain(component.toolName) || "unknown";
+    const target = targetFor(component) || (component.argsComplete ? "" : "…");
     const shownLabel = width < 60 ? label : label.padEnd(6);
     const heading = theme.fg(color, status) + " " + theme.fg("accent", glyph)
         + " " + theme.fg("muted", shownLabel);
@@ -220,11 +216,9 @@ export class TranscriptContainer extends Container {
                 child.transcriptTight = tight;
             }
             const nativeLines = child.render(width);
-            if (child.transcriptRole === "tool") {
-                // Every call keeps its row, even when its renderer is silent. Custom,
-                // image and expanded bodies stay intact immediately below that row.
+            if (canCompact(child, nativeLines)) {
                 actions.push(child);
-                if (canCompact(child, nativeLines)) continue;
+                continue;
             }
             if (!nativeLines.length) continue;
 

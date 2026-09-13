@@ -81,6 +81,42 @@ test("complete previous revisions migrate together with exact backups; mixed rev
   }
 });
 
+test("the previous metrics helper upgrades alone and refuses mixed or modified sources", () => {
+  const previous = readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-tool-rows.js.inc", import.meta.url), "utf8");
+  const root = sandbox("tool-rows");
+  expect(run(root).exitCode).toBe(0);
+  const current = contents(root);
+  writeFileSync(join(root, modulePath), previous);
+  const backupRoot = join(root, ".config/theme-backups");
+  const originalBackups = readdirSync(backupRoot);
+
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  const backups = readdirSync(backupRoot);
+  const added = backups.filter(name => !originalBackups.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
+  expect(JSON.parse(readFileSync(join(backupRoot, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  expect(readdirSync(backupRoot)).toEqual(backups);
+
+  for (const state of ["modified-helper", "partial-producer"]) {
+    const invalid = sandbox(state);
+    expect(run(invalid).exitCode).toBe(0);
+    writeFileSync(join(invalid, modulePath), previous + (state === "modified-helper" ? "\n// local edit" : ""));
+    if (state === "partial-producer") {
+      const file = "dist/core/tools/read.js";
+      const [old, patched] = edits[file][0];
+      writeFileSync(join(invalid, file), readFileSync(join(invalid, file), "utf8").replace(patched, old));
+    }
+    const before = contents(invalid);
+    expect(run(invalid).exitCode).not.toBe(0);
+    expect(contents(invalid)).toEqual(before);
+    expect(readdirSync(join(invalid, ".config/theme-backups"))).toHaveLength(1);
+  }
+});
+
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
   const before = contents(root);
@@ -494,7 +530,7 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
   }
 });
 
-realTest("builtin-name overrides stay native unless their known formatter source opts in", async () => {
+realTest("builtin-name overrides keep native cards beneath their invocation unless their formatter opts in", async () => {
   const m = await real();
   const app = host(m);
   const renderCall = () => new m.tui.Text("CUSTOM CALL CARD", 0, 0);
@@ -512,8 +548,10 @@ realTest("builtin-name overrides stay native unless their known formatter source
       app.chatContainer.clear();
       app.chatContainer.addChild(component);
       if (owner === "project-extension") {
-        expect(transcript(m, app)).not.toContain("1 action");
+        expect(transcript(m, app)).toContain("1 action");
         expect(transcript(m, app)).toContain("CUSTOM");
+        const native = component.render(90);
+        expect(app.chatContainer.render(90).slice(-native.length)).toEqual(native);
       } else {
         expect(transcript(m, app)).toContain("1 action");
         component.setExpanded(true);
@@ -533,18 +571,20 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   app.chatContainer.addChild(card);
   expect(transcript(m, app)).toContain("CUSTOM NOTICE");
   expect(transcript(m, app)).toContain("CUSTOM INTERACTIVE CARD");
-  expect(transcript(m, app)).not.toContain("1 action");
+  expect(transcript(m, app)).toContain("1 action");
+  expect(transcript(m, app)).toMatch(/⌇ Tool\s+workflow/);
+  expect(transcript(m, app).indexOf("Tool")).toBeLessThan(transcript(m, app).indexOf("CUSTOM INTERACTIVE CARD"));
   const hidden = new m.ToolExecutionComponent("read", "hidden", {}, {}, {
     renderShell: "self", renderCall: () => ({ render: () => [], invalidate() {} }),
   }, app.ui, temp);
   app.chatContainer.addChild(hidden);
-  expect(transcript(m, app)).not.toContain("Read");
+  expect(transcript(m, app)).toContain("Read");
 
   const image = new m.ToolExecutionComponent("read", "image", { path: "test.png" }, { showImages: false }, undefined, app.ui, temp);
   image.updateResult({ content: [{ type: "image", data: "AA==", mimeType: "image/png" }], isError: false });
   app.chatContainer.addChild(image);
   expect(app.chatContainer.render(90).join("\n")).toContain(image.render(90).join("\n"));
-  expect(transcript(m, app)).not.toContain("1 action");
+  expect(transcript(m, app)).toContain("2 actions");
 
   const contexts: any[] = [];
   const transform = (text: string, context: any) => { contexts.push(context); return text.replace("user text", "TRANSFORMED"); };
@@ -554,6 +594,68 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   expect(rendered).toContain("\x1b]133;A\x07");
   expect(contexts[0].messageType).toBe("user");
   expect(contexts[0].availableWidth).toBeLessThan(80);
+});
+
+realTest("silent tools retain named invocation rows through execution, expansion, resize and replay", async () => {
+  const m = await real();
+  const definition = {
+    renderShell: "self",
+    renderCall: () => new m.tui.Text("", 0, 0),
+    renderResult: () => new m.tui.Text("", 0, 0),
+  };
+  const app = host(m);
+  app.getRegisteredToolDefinition = () => definition;
+  const call = assistant([
+    toolCall("s", "mcpScript", { query: "DO_NOT_ECHO_ARGUMENTS" }),
+    toolCall("f", "quiet_tool", {}),
+  ]);
+  app.sessionManager.appendMessage(call);
+  await app.handleEvent({ type: "message_start", message: call });
+  await app.handleEvent({ type: "message_update", message: call });
+  await app.handleEvent({ type: "message_end", message: call });
+  expect(transcript(m, app)).toMatch(/○ ⌇ Tool\s+mcpScript/);
+  expect(transcript(m, app)).toContain("2 actions");
+
+  const results = [result("s", "mcpScript", "HIDDEN_RESULT"), result("f", "quiet_tool", "Permission denied", true)];
+  for (const item of results) {
+    const event = { toolCallId: item.toolCallId, toolName: item.toolName };
+    await app.handleEvent({ type: "tool_execution_start", ...event, args: {} });
+    expect(transcript(m, app)).toMatch(new RegExp(`◌ ⌇ Tool\\s+${item.toolName}`));
+    await app.handleEvent({ type: "tool_execution_update", ...event, partialResult: { content: [{ type: "text", text: "PARTIAL_RESULT" }] } });
+    expect(transcript(m, app)).toMatch(new RegExp(`◌ ⌇ Tool\\s+${item.toolName}`));
+    await app.handleEvent({ type: "tool_execution_end", ...event, result: item, isError: item.isError });
+    app.sessionManager.appendMessage(item);
+  }
+  const finished = transcript(m, app);
+  expect(finished).toMatch(/✓ ⌇ Tool\s+mcpScript/);
+  expect(finished).toMatch(/× ⌇ Tool\s+quiet_tool/);
+  expect(finished).toContain("Permission denied");
+  expect(finished).not.toContain("HIDDEN_RESULT");
+  expect(finished).not.toContain("DO_NOT_ECHO_ARGUMENTS");
+
+  const children = [...app.chatContainer.children];
+  for (const expanded of [true, false]) {
+    app.setToolsExpanded(expanded);
+    for (const width of [40, 70, 120, 70, 40, 90]) {
+      const rendered = app.chatContainer.render(width);
+      const text = rendered.map(m.tui.stripTerminalSequences).join("\n");
+      expect(text).toMatch(/⌇ Tool\s+mcpScript/);
+      expect(text).toMatch(/⌇ Tool\s+quiet_tool/);
+      expect(text).toContain("2 actions");
+      expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+      expect(app.chatContainer.children).toEqual(children);
+    }
+  }
+  expect(transcript(m, app)).toBe(finished);
+  const replay = host(m, app.sessionManager);
+  replay.getRegisteredToolDefinition = () => definition;
+  replay.renderSessionItems([call, ...results]);
+  expect(transcript(m, replay)).toBe(finished);
+
+  // Generic rows identify the registered tool, never infer labels from arbitrary arguments.
+  const line = m.actionLines({ toolName: "constructor", args: { path: "DO_NOT_ECHO_ARGUMENTS" } }, 90)[0];
+  expect(m.tui.stripTerminalSequences(line)).toMatch(/⌇ Tool\s+constructor/);
+  expect(line).not.toContain("DO_NOT_ECHO_ARGUMENTS");
 });
 
 realTest("wide transcript output changes only the Pi icon color across error-row combinations", async () => {
