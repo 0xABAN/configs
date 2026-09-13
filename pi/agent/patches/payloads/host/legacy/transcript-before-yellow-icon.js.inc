@@ -27,8 +27,7 @@ export function transcriptPadding(base, width) {
 
 export function speakerHeader(name, timestamp, padding, width) {
     const glyph = name === "You" ? "◆" : "●";
-    const color = name === "Pi" ? "warning" : "accent";
-    let text = theme.fg(color, glyph) + " " + theme.bold(theme.fg("text", name));
+    let text = theme.fg("accent", glyph) + " " + theme.bold(theme.fg("text", name));
     if (Number.isFinite(timestamp) && Number.isFinite(new Date(timestamp).getTime())) {
         const time = new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         text += theme.fg("dim", ` · ${time}`);

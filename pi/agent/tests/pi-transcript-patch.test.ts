@@ -64,6 +64,42 @@ test("complete previous revisions migrate together with exact backups; mixed rev
   }
 });
 
+test("the previous icon helper migrates alone with an exact backup and refuses local edits", () => {
+  const root = sandbox("yellow-icon");
+  expect(run(root).exitCode).toBe(0);
+  const current = contents(root);
+  const previous = readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-yellow-icon.js.inc", import.meta.url), "utf8");
+  writeFileSync(join(root, modulePath), previous);
+  const backupRoot = join(root, ".config/theme-backups");
+  const originalBackups = readdirSync(backupRoot);
+
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  const backups = readdirSync(backupRoot);
+  const added = backups.filter(name => !originalBackups.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previous);
+  expect(JSON.parse(readFileSync(join(backupRoot, added[0], "added-files.json"), "utf8"))).toEqual([]);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  expect(readdirSync(backupRoot)).toEqual(backups);
+
+  for (const state of ["local-helper-edit", "partial-host"]) {
+    const invalid = sandbox(state);
+    expect(run(invalid).exitCode).toBe(0);
+    writeFileSync(join(invalid, modulePath), previous + (state === "local-helper-edit" ? "\n// local edit" : ""));
+    if (state === "partial-host") {
+      const file = Object.keys(edits).at(-1)!;
+      const [old, patched] = edits[file][0];
+      writeFileSync(join(invalid, file), readFileSync(join(invalid, file), "utf8").replace(patched, old));
+    }
+    const before = contents(invalid);
+    expect(run(invalid).exitCode).not.toBe(0);
+    expect(contents(invalid)).toEqual(before);
+    expect(readdirSync(join(invalid, ".config/theme-backups"))).toHaveLength(1);
+  }
+});
+
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
   const before = contents(root);
@@ -147,6 +183,16 @@ function host(m: any) {
 function transcript(m: any, app: any, width = 90) {
   return app.chatContainer.render(width).map(m.tui.stripTerminalSequences).join("\n");
 }
+
+realTest("only the Pi speaker icon uses warning yellow", async () => {
+  const m = await real();
+  const theme = m.colors.theme;
+  const header = m.speakerHeader("Pi", undefined, 1, 80);
+  expect(header).toContain(theme.fg("warning", "●"));
+  expect(header).toContain(theme.bold(theme.fg("text", "Pi")));
+  expect(m.speakerHeader("You", undefined, 1, 80)).toContain(theme.fg("accent", "◆"));
+  expect(m.actionLines({ toolName: "read", args: { path: "a.ts" } }, 80)[0]).toContain(theme.fg("accent", "□"));
+});
 
 realTest("real streaming and replay share Pi/You headers, grouped actions and narration boundaries", async () => {
   const m = await real();
@@ -330,7 +376,7 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   expect(contexts[0].availableWidth).toBeLessThan(80);
 });
 
-realTest("wide transcript output matches the previous helper across error-row combinations", async () => {
+realTest("wide transcript output changes only the Pi icon color across error-row combinations", async () => {
   const m = await real();
   const previousPath = join(fixture, "dist/modes/interactive/components/transcript-previous.js");
   writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8"));
@@ -348,7 +394,11 @@ realTest("wide transcript output matches the previous helper across error-row co
         current.addChild(component());
         old.addChild(component());
       }
-      for (const width of [80, 90, 120, 160]) expect(current.render(width)).toEqual(old.render(width));
+      for (const width of [80, 90, 120, 160]) {
+        const withPreviousIcon = current.render(width).map((line: string) =>
+          line.replace(m.colors.theme.fg("warning", "●"), m.colors.theme.fg("accent", "●")));
+        expect(withPreviousIcon).toEqual(old.render(width));
+      }
     }
   }
 });

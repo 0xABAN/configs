@@ -199,7 +199,9 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 ### Transcript preview
 
 The Pi 0.84.2 transcript patch adds `◆ You` / `● Pi` headers and compact
-geometric action trees. Consecutive visible tool rows share a group; narration
+geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
+action icons keep the teal accent. Speaker names retain the normal text color.
+Consecutive visible tool rows share a group; narration
 and custom messages remain in place. Normal user messages inherit the terminal
 background rather than using a filled box. The existing input/footer are unchanged.
 
