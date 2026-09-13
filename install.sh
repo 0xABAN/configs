@@ -47,6 +47,9 @@ link() {
 echo "== zsh =="
 link "$ROOT/zsh/.zshrc" "$HOME/.zshrc"
 
+echo "== terminal theme =="
+link "$ROOT/ghostty/themes/osaka-jade" "$HOME/.config/ghostty/themes/osaka-jade"
+
 echo "== nvim =="
 mkdir -p "$HOME/.config"
 link "$ROOT/nvim" "$HOME/.config/nvim"

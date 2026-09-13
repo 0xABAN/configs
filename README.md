@@ -6,7 +6,8 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 
 ```
 zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
-nvim/                 → ~/.config/nvim  (AstroNvim v6 template + woody)
+nvim/                 → ~/.config/nvim  (AstroNvim v6 + osaka-jade)
+ghostty/themes/       → ~/.config/ghostty/themes/ (osaka-jade for cmux)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   AGENTS.md           → ~/.pi/agent/AGENTS.md + ~/.codex/AGENTS.md
   mcp.json.example    → copy to mcp.json locally (secrets)
@@ -25,6 +26,39 @@ chmod +x install.sh
 ```
 
 Existing files are renamed `*.bak.<timestamp>` before linking. The installer also removes `~/AGENTS.md` (backing up a regular file first) so Pi loads only the shared global file and repository instructions.
+
+## Colors
+
+`osaka-jade` uses [CLIAMP's original core palette](https://github.com/bjarneo/cliamp/blob/main/theme/themes/osaka-jade.toml):
+background `#111c18`, text `#C1C497`, bright cream `#F7E8B2`, jade
+`#509475`, green `#86c994`, yellow `#e5c736`, and red `#FF5345`.
+Supporting shades and ANSI colors come from the
+[original Osaka Jade terminal theme](https://github.com/Justikun/omarchy-osaka-jade-theme/blob/main/ghostyy.conf).
+Like the reference screenshot, jade and cream dominate; red/yellow mark
+errors and warnings. No extra theme plugins are required.
+
+Pi and Neovim select it by default. The installer links the terminal theme;
+activate it in `~/.config/ghostty/config` (also used by cmux):
+
+```ini
+theme = osaka-jade
+background-opacity = 1
+```
+
+Remove explicit background/foreground/selection overrides if they override
+the theme. Opacity 1 avoids wallpaper blending the hex colors. Reload cmux's
+configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
+(or run `:colorscheme osaka-jade`) for existing sessions.
+
+The original `woody` Pi and Neovim themes remain unchanged. The initial
+switch also saved active settings under
+`~/.config/theme-backups/woody-20260913-014121/` on this machine, including
+Ghostty/cmux settings, Pi settings, and Neovim UI/cursor configuration.
+Restore those files to recover the previous appearance, or select `woody`
+in Pi and Neovim to switch just their palettes.
+
+Checks: `nvim --headless -u NONE -l nvim/tests/osaka-jade.lua` and
+`ghostty +validate-config` after terminal activation.
 
 ## Shell navigation
 
