@@ -126,6 +126,9 @@ After install, set `LEETCODE_SESSION` (and any other keys) in `mcp.json`, or exp
 
 ## Pi extensions
 
+See the [Pi maintenance guide](pi/README.md) for code ownership, patch contracts,
+and test setup.
+
 Extension code lives in [pi-extensions](https://github.com/0xABAN/pi-extensions), not in a second copy here. Pi settings reference its top-level `inline-skills/` and `dj/` packages under `~/dev/pi-extensions`.
 
 `./install.sh` clones that repository when missing, validates both packages, and installs dependencies from its lockfile without running package scripts. It never pulls over existing work; missing packages or failed dependency installation stop before changing config links. Edit extensions in that checkout, then `/reload` in Pi. Other existing extensions remain under `pi/agent/extensions`.
