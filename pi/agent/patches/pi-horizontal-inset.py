@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from patch_support import (
+    read_payload,
     discover_pi_root as discover_root,
     backup_sources,
     write_sources,
@@ -20,17 +21,7 @@ from patch_support import (
 TUI = "node_modules/@earendil-works/pi-tui/dist/"
 EDITS = {
     TUI + "tui.js": [
-        ("    resetRenderState() { }", '''    // configs:pi-horizontal-inset-v1
-    getHorizontalInset(width = this.terminal.columns) {
-        return width < 16 ? 0 : Math.max(1, Math.floor(width * 0.02));
-    }
-    insetLines(lines, width) {
-        const padding = " ".repeat(this.getHorizontalInset(width));
-        // Empty image-reservation rows must remain empty. Never slice image or
-        // cursor escape payloads here; components already receive the inner width.
-        return lines.map((line) => line ? padding + line : line);
-    }
-    resetRenderState() { }'''),
+        ("    resetRenderState() { }", read_payload('host/viewport-inset.js.inc')),
         ("return entry.options.visible(this.terminal.columns, this.terminal.rows);",
          "return entry.options.visible(this.terminal.columns - 2 * this.getHorizontalInset(), this.terminal.rows);"),
         ('''    resolveOverlayLayout(options, overlayHeight, termWidth, termHeight) {
@@ -45,23 +36,7 @@ EDITS = {
         let newLines = this.insetLines(this.render(width - 2 * this.getHorizontalInset(width)), width);'''),
     ],
     TUI + "tui-alt-screen.js": [
-        ('''    getMountedRoots() {''', '''    // configs:pi-horizontal-inset-v1
-    renderInsetLayout(root, width, height) {
-        const inset = this.getHorizontalInset(width);
-        const frame = renderLayoutFrame(root, width - 2 * inset, height, () => this.requestRender());
-        // Paint at x=0 first: native Kitty cropping depends on the full-width fast
-        // path. Then move screen-space boxes, leaving scrollContentLines local.
-        const translate = (box) => {
-            box.rect.x += inset;
-            box.clip.x += inset;
-            for (const child of box.children) translate(child);
-        };
-        translate(frame.root);
-        frame.width = width;
-        frame.lines = this.insetLines(frame.lines, width);
-        return frame;
-    }
-    getMountedRoots() {'''),
+        ('''    getMountedRoots() {''', read_payload('host/inset-layout.js.inc')),
         ('''            const documentLines = this.render(width).map((line) => line.replace(OSC133_ZONE_PREFIX, ""));''', '''            const documentLines = this.insetLines(
                 this.render(width - 2 * this.getHorizontalInset(width)).map((line) => line.replace(OSC133_ZONE_PREFIX, "")), width);'''),
         ('''        const flashLines = this.flashes.render(width).slice(-height);''', '''        const inset = this.getHorizontalInset(width);
@@ -73,18 +48,8 @@ EDITS = {
 }
 
 
-# Migrate the complete earlier inset without adding another copy of its methods.
-LEGACY_INSET = EDITS[TUI + "tui.js"][0][1]
-EDITS[TUI + "tui.js"][0] = (EDITS[TUI + "tui.js"][0][0], LEGACY_INSET.replace(
-    "        return lines.map((line) => line ? padding + line : line);",
-    r'''        return lines.map((line) => {
-            if (!line) return line;
-            // OSC 133 prompt starts must stay at column zero: Ghostty otherwise
-            // advances to a fresh line, leaving the old editor border behind.
-            const markers = line.match(/^(?:\x1b\]133;[ABC](?:\x07|\x1b\\))+/)?.[0] ?? "";
-            return markers + padding + line.slice(markers.length);
-        });''',
-))
+# Exact earlier spelling is accepted only through the existing guarded migration.
+LEGACY_INSET = read_payload('host/legacy/viewport-inset.js.inc')
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:

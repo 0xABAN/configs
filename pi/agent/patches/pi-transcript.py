@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from patch_support import (
+    read_payload,
     discover_pi_root as discover_root,
     backup_sources,
     write_sources,
@@ -16,7 +17,7 @@ from patch_support import (
 
 BASE = "dist/modes/interactive/"
 MODULE = BASE + "components/transcript.js"
-MODULE_SOURCE = Path(__file__).with_name("transcript.js.inc").read_text()
+MODULE_SOURCE = read_payload('host/transcript.js.inc')
 EDITS = {
     BASE + "interactive-mode.js": [
         ('import { UserMessageComponent } from "./components/user-message.js";',

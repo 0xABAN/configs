@@ -6,43 +6,19 @@ partial/changed upstream anchors instead of guessing. Re-run after updates.
 """
 from pathlib import Path
 
+from patch_support import read_payload
 
-ALIGN = '''// configs:powerline-layout-v1
-/** Keep ANSI-aware left/right groups at opposite edges, including overflow rows. */
-function buildAlignedContent(
-  parts: { content: string; right: boolean }[],
-  style: StatusLineSeparatorStyle,
-  width: number,
-): string {
-  const left = buildContentFromParts(parts.filter(p => !p.right).map(p => p.content), style);
-  const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);
-  if (!right) return left;
-  const gap = width - visibleWidth(left) - visibleWidth(right);
-  // Existing packing is conservative. Fall back rather than exceed tiny widths.
-  if (gap < 0) return buildContentFromParts(parts.map(p => p.content), style);
-  return left + " ".repeat(gap) + right;
-}
 
-'''
-LEGACY_ALIGN = ALIGN
-ALIGN = ALIGN.replace(
-    "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
+# Current output is readable on its own; only legacy variants are derived.
+ALIGN = read_payload('powerline/aligned-content.ts.inc') + "\n"
+LEGACY_ALIGN = ALIGN.replace(
     'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style, "");',
+    'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);',
 )
 
-METER = '''// configs:powerline-meter-v1
-/** Clamp the five-cell gauge, but retain the reported percentage and approximation. */
-function contextMeter(percent: number | null, approximate: boolean): string {
-  if (percent === null || !Number.isFinite(percent)) return "[-----] ? context";
-  const filled = Math.round(Math.max(0, Math.min(100, percent)) / 20);
-  return `[${"▰".repeat(filled)}${"▱".repeat(5 - filled)}] ${approximate ? "~" : ""}${Math.round(percent)}% context`;
-}
+METER = read_payload('powerline/context-meter.ts.inc') + "\n"
+LEGACY_METER = METER.replace('return "● [-----]', 'return "[-----]').replace('return `● [${', 'return `[${')
 
-'''
-
-# The ball belongs to the meter's text, so the segment colors both together.
-LEGACY_METER = METER
-METER = METER.replace('return "[-----]', 'return "● [-----]').replace('return `[${', 'return `● [${')
 
 EDITS = {
     "index.ts": [

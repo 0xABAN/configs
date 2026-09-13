@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import re
 
-from patch_support import backup_sources, write_sources
+from patch_support import read_payload, backup_sources, write_sources
 
 
 # Older gray-patch runs duplicated this identical ternary on every replay.
@@ -21,30 +21,7 @@ SUBJECT_PATTERN = re.compile(
     r't\.status === "completed" \|\| t\.status === "deleted" \? "dim" : "thinkingText";'
 )
 
-LAYOUT = '''// configs:rpiv-todo-ui-v1
-/** Match the transcript body gutter; leave room for text in narrow panes. */
-export function todoGutter(width: number): number {
-	return Math.min(3, Math.max(0, Math.floor((width - 2) / 2)));
-}
-
-/** Self-shell tools wrap rather than discard details, without painting a box. */
-function todoText(content: () => string): Component {
-	return {
-		render(width) {
-			if (width <= 0) return [];
-			return new Text(content(), todoGutter(width), 0).render(width)
-				.map(line => truncateToWidth(line, width, ""));
-		},
-		invalidate() {}, // Content and theme tokens are read afresh on every render.
-	};
-}
-
-/** Native notifications own the gutter, including wrapped continuation lines. */
-export function formatCommandHeading(label: string, theme: Theme): string {
-	const title = sanitizeTerminalText(label).replace(/^─+\\s*|\\s*─+$/g, "");
-	return `${theme.fg("accent", "◇")} ${theme.fg("muted", title)}`;
-}
-'''
+LAYOUT = read_payload('todo/format-layout.ts.inc')
 
 # Match exactly what the legacy injector installs, without owning its backend.
 # Only notification expressions below change; no persistence code is copied here.
@@ -156,25 +133,7 @@ EDITS = {
 		text += ` ${theme.fg("muted", formatStatusLabel(args.status))}`;
 	}
 	return new Text(text, 0, 0);
-}''', '''): Component {
-	return todoText(() => {
-		const glyph = ACTION_GLYPH[args.action] ?? sanitizeTerminalText(args.action ?? "");
-		let text = theme.fg("accent", "▧") + theme.fg("muted", " Todo ") + theme.fg("accent", glyph);
-
-		if (args.action === "create" && args.subject) {
-			text += ` ${theme.fg("toolOutput", sanitizeTerminalText(args.subject))}`;
-		} else if (
-			(args.action === "update" || args.action === "get" || args.action === "delete") &&
-			args.id !== undefined
-		) {
-			const subject = selectTaskSubjectById(state, args.id);
-			text += ` ${theme.fg("toolOutput", subject ? sanitizeTerminalText(subject) : `#${args.id}`)}`;
-		} else if (args.action === "list" && args.status) {
-			text += ` ${theme.fg("muted", formatStatusLabel(args.status))}`;
-		}
-		return text;
-	});
-}'''),
+}''', read_payload('todo/tool-call.ts.inc')),
         ('''export function renderTodoResult(result: { details?: unknown }, theme: Theme): Text {
 	const details = result.details as TaskDetails | undefined;
 	let status: TaskStatus | undefined;
@@ -200,45 +159,7 @@ EDITS = {
 		return new Text(theme.fg(STATUS_COLOR[status], `${STATUS_GLYPH[status]} ${formatStatusLabel(status)}`), 0, 0);
 	}
 	return new Text(theme.fg("success", "✓"), 0, 0);
-}''', '''export function renderTodoResult(
-	result: { details?: unknown; content?: { type: string; text?: string }[] },
-	theme: Theme,
-	isError = false,
-): Component {
-	return todoText(() => {
-		const branch = theme.fg("dim", "╰─ ");
-		if (isError) {
-			const message = result.content?.filter(item => item.type === "text")
-				.map(item => sanitizeTerminalText(item.text ?? "")).join(" ") || "Todo failed";
-			return branch + theme.fg("error", `× ${message}`);
-		}
-
-		const details = result.details as TaskDetails | undefined;
-		let status: TaskStatus | undefined;
-		if (details) {
-			const params = details.params as TaskMutationParams;
-			switch (details.action) {
-				case "create":
-					status = details.tasks[details.tasks.length - 1]?.status;
-					break;
-				case "update":
-					status = params.status ?? details.tasks.find((t) => t.id === params.id)?.status;
-					break;
-				case "delete":
-					status = details.tasks.find((t) => t.id === params.id)?.status;
-					break;
-				case "list":
-				case "get":
-				case "clear":
-					break;
-			}
-		}
-		if (status) {
-			return branch + theme.fg(STATUS_COLOR[status], `${STATUS_GLYPH[status]} ${formatStatusLabel(status)}`);
-		}
-		return branch + theme.fg("muted", STATUS_GLYPH.completed);
-	});
-}'''),
+}''', read_payload('todo/tool-result.ts.inc')),
     ],
     "todo-overlay.ts": [
         ('import { formatOverlayTaskLine } from "./view/format.js";',

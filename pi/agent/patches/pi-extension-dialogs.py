@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from patch_support import (
+    read_payload,
     discover_pi_root as discover_root,
     backup_sources,
     write_sources,
@@ -16,7 +17,7 @@ from patch_support import (
 
 BASE = "dist/modes/interactive/components/"
 MODULE = BASE + "extension-dialogs.js"
-MODULE_SOURCE = Path(__file__).with_name("extension-dialogs.js.inc").read_text()
+MODULE_SOURCE = read_payload('host/extension-dialogs.js.inc')
 MARKER = "// configs:pi-extension-dialogs-v1"
 COMMON = [
     ('import { DynamicBorder } from "./dynamic-border.js";',

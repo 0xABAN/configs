@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from patch_support import (
+    read_payload,
     discover_pi_root as discover_root,
     backup_sources,
     write_sources,
@@ -15,31 +16,7 @@ from patch_support import (
 
 HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/activity-notice.js"
-SOURCE = '''// configs:pi-activity-notices-v1
-import { Text, truncateToWidth } from "@earendil-works/pi-tui";
-
-/** Keep wrapped notices aligned while retaining native status coalescing. */
-export class ActivityNotice {
-    constructor(text, getPadding) {
-        this.content = new Text(text, 0, 0);
-        this.getPadding = getPadding;
-    }
-    setText(text) {
-        this.content.setText(text);
-    }
-    invalidate() {
-        this.content.invalidate();
-    }
-    render(width) {
-        if (width <= 0) return [];
-        const padding = Math.min(Math.max(0, this.getPadding()), Math.max(0, Math.floor((width - 2) / 2)));
-        const gutter = " ".repeat(padding);
-        const innerWidth = width - padding * 2;
-        return this.content.render(innerWidth)
-            .map(line => gutter + truncateToWidth(line, innerWidth, "") + gutter);
-    }
-}
-'''
+SOURCE = read_payload('host/activity-notice.js.inc')
 EDITS = [
     ('import { CustomEntryComponent } from "./components/custom-entry.js";',
      'import { CustomEntryComponent } from "./components/custom-entry.js";\n'

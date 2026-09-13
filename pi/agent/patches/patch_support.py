@@ -12,6 +12,11 @@ import subprocess
 import tempfile
 
 
+def read_payload(name: str) -> str:
+    """Read owned renderer source verbatim; whitespace is part of patch identity."""
+    return (Path(__file__).with_name("payloads") / name).read_text()
+
+
 def discover_pi_root() -> Path | None:
     """Honor the existing SDK override before asking the active npm installation."""
     if os.environ.get("PI_SDK_ROOT"):

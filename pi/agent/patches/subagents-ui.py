@@ -8,10 +8,10 @@ import json
 import os
 from pathlib import Path
 
-from patch_support import backup_sources, write_sources, replace_counted
+from patch_support import read_payload, backup_sources, write_sources, replace_counted
 
 MODULE = "src/ui/agent-chrome.ts"
-MODULE_SOURCE = Path(__file__).with_name("subagents-ui.ts.inc").read_text()
+MODULE_SOURCE = read_payload('subagents/subagents-ui.ts.inc')
 MARKER = "// configs:subagents-ui-v1"
 
 # (original, replacement, expected occurrences). Counts are deliberate guards,
