@@ -35,9 +35,25 @@ test("session restore uses the last plan state", async () => {
     { type: "custom", customType: "unrelated", data: { enabled: false } },
   ]);
   await app.event("session_start");
+  expect(app.states).toHaveLength(0);
   expect(app.tools()).toContain("special");
   await app.toggle();
   expect(app.tools()).toEqual(["read", "special", "todo"]);
+});
+
+test("Execute explicitly disables plan mode even if it changed while the dialog was open", async () => {
+  const app = harness();
+  await app.toggle();
+  app.ctx.ui.select = async () => {
+    await app.toggle();
+    return "Execute the plan";
+  };
+  await app.event("agent_end", { messages: [
+    { role: "assistant", content: [{ type: "text", text: "Plan:\n1. Inspect source" }] },
+  ] });
+  expect(app.states.map(state => state.enabled)).toEqual([true, false, false]);
+  expect(app.tools()).toEqual(["read", "bash", "edit", "write", "custom", "todo"]);
+  expect(app.messages).toHaveLength(1);
 });
 
 test("plan extraction keeps existing Markdown and acceptance behavior", () => {

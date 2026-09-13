@@ -15,6 +15,7 @@ import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
 import { extractPlanSteps, isSafeCommand } from "./utils.ts";
+import { formatPlanStatus } from "./status.ts";
 
 function isAssistantMessage(m: AgentMessage): m is AssistantMessage {
 	return m.role === "assistant" && Array.isArray(m.content);
@@ -48,59 +49,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		default: false,
 	});
 
-	/** White → mid → light beige. Build mid = blue-cyan; plan mid = purple. */
-	function shine(text: string, mid: [number, number, number]): string {
-		const stops: [number, number, number][] = [
-			[255, 255, 255], // white
-			mid,
-			[243, 238, 223], // light beige (#f3eedf)
-		];
-		const chars = [...text];
-		const paint = chars.filter((c) => c !== " ");
-		const n = Math.max(paint.length - 1, 1);
-		let i = 0;
-		let out = "";
-		for (const ch of chars) {
-			if (ch === " ") {
-				out += ch;
-				continue;
-			}
-			const t = i / n;
-			const seg = Math.min(Math.floor(t * (stops.length - 1)), stops.length - 2);
-			const local = t * (stops.length - 1) - seg;
-			const a = stops[seg]!;
-			const b = stops[seg + 1]!;
-			const r = Math.round(a[0] + (b[0] - a[0]) * local);
-			const g = Math.round(a[1] + (b[1] - a[1]) * local);
-			const bl = Math.round(a[2] + (b[2] - a[2]) * local);
-			out += `\x1b[38;2;${r};${g};${bl}m${ch}`;
-			i++;
-		}
-		return `${out}\x1b[0m`;
-	}
-
-	function modeMid(): [number, number, number] {
-		return planModeEnabled
-			? [196, 160, 230] // pastel purple (plan)
-			: [218, 235, 232]; // pale teal (build, #daebe8)
-	}
-
-	function thinkingLabel(level: string): string {
-		const labels: Record<string, string> = {
-			minimal: "min",
-			medium: "med",
-		};
-		return `think:${labels[level] ?? level}`;
-	}
-
 	function updateStatus(ctx: ExtensionContext): void {
-		const mid = modeMid();
-		ctx.ui.setStatus(
-			"agent-mode",
-			shine(planModeEnabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
-		);
-		// Keep the mode gradient for every thinking level.
-		ctx.ui.setStatus("agent-thinking", shine(thinkingLabel(ctx.thinkingLevel || "off"), mid));
+		const status = formatPlanStatus(planModeEnabled, ctx.thinkingLevel);
+		ctx.ui.setStatus("agent-mode", status.mode);
+		ctx.ui.setStatus("agent-thinking", status.thinking);
 	}
 
 	function withTodo(toolNames: string[]): string[] {
@@ -141,8 +93,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		});
 	}
 
-	function togglePlanMode(ctx: ExtensionContext): void {
-		planModeEnabled = !planModeEnabled;
+	function setPlanMode(enabled: boolean, ctx: ExtensionContext): void {
+		planModeEnabled = enabled;
 
 		if (planModeEnabled) {
 			enablePlanModeTools();
@@ -155,18 +107,18 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	pi.registerCommand("plan", {
 		description: "Toggle plan mode (read-only exploration)",
-		handler: async (_args, ctx) => togglePlanMode(ctx),
+		handler: async (_args, ctx) => setPlanMode(!planModeEnabled, ctx),
 	});
 
 	pi.registerShortcut("shift+tab", {
 		description: "Toggle plan mode",
-		handler: async (ctx) => togglePlanMode(ctx),
+		handler: async (ctx) => setPlanMode(!planModeEnabled, ctx),
 	});
 
 	// Keep Ctrl+Alt+P as a backup (doesn't steal thinking cycle)
 	pi.registerShortcut(Key.ctrlAlt("p"), {
 		description: "Toggle plan mode",
-		handler: async (ctx) => togglePlanMode(ctx),
+		handler: async (ctx) => setPlanMode(!planModeEnabled, ctx),
 	});
 
 	// Block destructive bash in plan mode
@@ -234,10 +186,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		]);
 
 		if (choice?.startsWith("Execute")) {
-			planModeEnabled = false;
-			restoreNormalModeTools();
-			updateStatus(ctx);
-			persistState();
+			setPlanMode(false, ctx);
 
 			const list = steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
 			pi.sendMessage(
