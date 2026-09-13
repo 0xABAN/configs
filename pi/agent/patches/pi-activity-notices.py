@@ -18,6 +18,16 @@ HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/activity-notice.js"
 SOURCE = read_payload('host/activity-notice.js.inc')
 LEGACY_SOURCE = read_payload('host/legacy/activity-notice.js.inc')
+PACKAGE_UPDATE_NOTICE = r'''    showPackageUpdateNotification(packages) {
+        const action = theme.fg("accent", `${APP_NAME} update --extensions`);
+        const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
+        const packageLines = packages.map((pkg) => `- ${pkg}`).join("\n");
+        this.chatContainer.addChild(new Spacer(1));
+        this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
+        this.chatContainer.addChild(new Text(`${theme.bold(theme.fg("warning", "Package Updates Available"))}\n${updateInstruction}\n${theme.fg("muted", "Packages:")}\n${packageLines}`, 1, 0));
+        this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
+        this.ui.requestRender();
+    }'''
 EDITS = [
     ('import { CustomEntryComponent } from "./components/custom-entry.js";',
      'import { CustomEntryComponent } from "./components/custom-entry.js";\n'
@@ -28,6 +38,7 @@ EDITS = [
      'new ActivityNotice(theme.fg("error", `Error: ${errorMessage}`), () => this.outputPad + 2)'),
     ('new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0)',
      'new ActivityNotice(theme.fg("warning", `Warning: ${warningMessage}`), () => this.outputPad + 2)'),
+    (PACKAGE_UPDATE_NOTICE, PACKAGE_UPDATE_NOTICE.replace('"warning"', '"toolOutput"')),
 ]
 
 
@@ -45,6 +56,12 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             states.append("original")
         else:
             raise ValueError(f"notification anchor changed or duplicated: {old[:70]}")
+    # Migrate the complete previous notice patch; unknown helpers still refuse.
+    if states == ["patched"] * (len(EDITS) - 1) + ["original"]:
+        if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
+            raise ValueError("notification helper changed or missing")
+        old, new = EDITS[-1]
+        return {**sources, HOST: source.replace(old, new, 1), MODULE: SOURCE}
     if len(set(states)) != 1:
         raise ValueError("partial notification patch; inspect before reapplying")
     if states[0] == "patched":

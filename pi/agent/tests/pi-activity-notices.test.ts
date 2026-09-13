@@ -113,6 +113,18 @@ realTest("native notices align every wrapped line and preserve coalescing, warni
   expect(app.chatContainer.children).toHaveLength(6);
   app.showExtensionNotify("new status after error", "info");
   expect(app.chatContainer.children).toHaveLength(8);
+  // Package updates are informational; reuse cream without recoloring warnings.
+  app.chatContainer = new tui.Container();
+  app.showPackageUpdateNotification(["fixture-package"]);
+  const updateLines = app.chatContainer.render(100);
+  const heading = updateLines.find((line: string) => line.includes("Package Updates Available"));
+  expect(heading).toContain(colors.theme.getFgAnsi("toolOutput"));
+  const borders = updateLines.filter((line: string) => /^─+$/.test(tui.stripTerminalSequences(line).trim()));
+  expect(borders).toHaveLength(2);
+  for (const line of borders) expect(line).toContain(colors.theme.getFgAnsi("toolOutput"));
+  expect(updateLines.join("\n")).not.toContain(colors.theme.getFgAnsi("warning"));
+  expect(updateLines.map(tui.stripTerminalSequences).join("\n")).toContain("fixture-package");
+
   // The added import/notice anchors must coexist with the existing transcript patch.
   const transcript = Bun.spawnSync(["python3", "-B", fileURLToPath(new URL("../patches/pi-transcript.py", import.meta.url))], {
     env: { ...process.env, PI_SDK_ROOT: root, HOME: root },
