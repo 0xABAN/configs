@@ -1,33 +1,10 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-
-mock.module("@earendil-works/pi-tui", () => ({
-	Key: { ctrlAlt: (key: string) => `ctrl+alt+${key}` },
-}));
-
-const { default: planMode } = await import("../extensions/plan-mode/index.ts");
+import { planModeHarness } from "./support/plan-mode-harness";
 
 test("mode and thinking share softened build and purple plan gradients", async () => {
-	const handlers = new Map<string, Function>();
-	const commands = new Map<string, { handler: Function }>();
-	const statuses = new Map<string, string>();
-	const ctx = {
-		hasUI: true,
-		thinkingLevel: "medium",
-		ui: { setStatus: (key: string, value: string) => statuses.set(key, value) },
-		sessionManager: { getEntries: () => [] },
-	};
-
-	planMode({
-		registerFlag() {},
-		registerShortcut() {},
-		registerCommand: (name: string, command: { handler: Function }) => commands.set(name, command),
-		on: (name: string, handler: Function) => handlers.set(name, handler),
-		getFlag: () => false,
-		getActiveTools: () => ["read", "bash", "edit", "write"],
-		setActiveTools() {},
-		appendEntry() {},
-	} as never);
+	const app = planModeHarness([], ["read", "bash", "edit", "write"]);
+	const { statuses, ctx } = app;
 
 	function check(key: string, label: string, first: string, last: string) {
 		const rendered = statuses.get(key)!;
@@ -40,19 +17,19 @@ test("mode and thinking share softened build and purple plan gradients", async (
 		return colors;
 	}
 
-	await handlers.get("session_start")!({}, ctx);
+	await app.event("session_start");
 	check("agent-mode", "\uF121  build mode", "255;255;255", "243;238;223");
 	const build = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
 	expect(build[4]).toBe("218;235;232");
 
-	await commands.get("plan")!.handler("", ctx);
+	await app.toggle();
 	check("agent-mode", "\uF022  plan mode", "255;255;255", "243;238;223");
 	const plan = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
 	expect(plan[4]).toBe("196;160;230");
 
 	for (const level of ["off", "minimal", "low", "high", "xhigh", "max"]) {
 		ctx.thinkingLevel = level;
-		await handlers.get("thinking_level_select")!({}, ctx);
+		await app.event("thinking_level_select");
 		check("agent-thinking", `think:${level === "minimal" ? "min" : level}`, "255;255;255", "243;238;223");
 	}
 

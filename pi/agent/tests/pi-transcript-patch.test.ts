@@ -1,15 +1,16 @@
-import { afterAll, expect, test } from "bun:test";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { applySdkPatches, copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-transcript.py", import.meta.url));
-const described = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({'edits':m['EDITS'],'module':m['MODULE']}))", patcher]);
-if (described.exitCode) throw new Error(described.stderr.toString());
-const { edits, module: modulePath } = JSON.parse(described.stdout.toString()) as { edits: Record<string, [string, string][]>; module: string };
-const temp = mkdtempSync(join(tmpdir(), "pi-transcript-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const { edits, module: modulePath } = describePatch<{ edits: Record<string, [string, string][]>; module: string }>(
+  patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
+const temp = temporaryDirectory("pi-transcript-");
+const sdk = process.env.PI_SDK_ROOT;
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: root, HOME: root } });
 
 function sandbox(name: string) {
@@ -67,32 +68,12 @@ test("partial hosts, changed modules, duplicate anchors and wrong versions refus
   expect(run(join(temp, "absent")).exitCode).toBe(0);
 });
 
-// Exercise actual Pi components in an isolated copy, never mutate the live SDK.
-const sdk = process.env.PI_SDK_ROOT;
-const isolated = process.env.CONFIGS_TRANSCRIPT_TEST_CHILD === "1";
-
-// Other extension tests mock the bare pi-tui import process-wide. Test the real
-// host in its own process, rather than replacing anybody else's module mocks.
-function realTest(name: string, run: () => Promise<void>) {
-  if (!sdk || isolated) test.skipIf(!sdk)(name, run);
-}
-if (sdk && !isolated) {
-  test("real transcript host checks pass in an isolated process", () => {
-    const child = Bun.spawnSync([process.execPath, "test", import.meta.path], {
-      env: { ...process.env, CONFIGS_TRANSCRIPT_TEST_CHILD: "1" }, timeout: 30_000,
-    });
-    if (child.exitCode) throw new Error(child.stderr.toString() + child.stdout.toString());
-    expect(child.stderr.toString()).toContain("7 pass");
-  });
-}
 const fixture = join(temp, "real-sdk");
 let loaded: Promise<any> | undefined;
 function real() {
   return loaded ??= (async () => {
-    mkdirSync(fixture);
-    cpSync(join(sdk!, "dist"), join(fixture, "dist"), { recursive: true });
-    copyFileSync(join(sdk!, "package.json"), join(fixture, "package.json"));
-    symlinkSync(join(sdk!, "node_modules"), join(fixture, "node_modules"));
+    copySdk(sdk!, fixture);
+    applySdkPatches(fixture, ["pi-horizontal-inset"]);
     // Make repeat runs work after the preview is installed, using the guarded anchors.
     for (const [file, changes] of Object.entries(edits)) {
       let source = readFileSync(join(fixture, file), "utf8");
@@ -103,7 +84,7 @@ function real() {
     const result = run(fixture);
     if (result.exitCode) throw new Error(result.stderr.toString());
     const load = (file: string) => import(pathToFileURL(join(fixture, "dist/modes/interactive", file)).href);
-    const tui = await import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+    const tui = await import(pathToFileURL(join(fixture, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
     const colors = await load("theme/theme.js");
     colors.setThemeInstance(colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
     return { ...await load("components/transcript.js"), ...await load("components/user-message.js"),

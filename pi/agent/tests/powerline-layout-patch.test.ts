@@ -1,27 +1,28 @@
-import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { copyPowerline, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-layout.py", import.meta.url));
-const describe = Bun.spawnSync(["python3", "-B", "-c", `
-import importlib.util,json,sys
-spec=importlib.util.spec_from_file_location('patcher',sys.argv[1])
-m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-m.EDITS['segments.ts'].append(m.UNSTAGED_EDIT)
-m.EDITS['index.ts'].append(m.SEPARATOR_JOIN_EDIT)
-m.EDITS['index.ts'].append(m.SEPARATOR_ARGUMENT_EDIT)
-m.EDITS['index.ts'].append(m.SEPARATOR_EDIT)
-print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER,'legacyAlign':m.LEGACY_ALIGN,'legacySeparator':m.LEGACY_SEPARATOR,'legacyMeter':m.LEGACY_METER}))
-`, patcher]);
-if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const { edits, align, meter, legacyAlign, legacySeparator, legacyMeter } = JSON.parse(describe.stdout.toString()) as {
+const { edits, align, meter, legacyAlign, legacySeparator, legacyMeter } = describePatch<{
   edits: Record<string, [string, string][]>; align: string; meter: string;
   legacyAlign: string; legacySeparator: string; legacyMeter: string;
-};
-const root = mkdtempSync(join(tmpdir(), "powerline-layout-"));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+}>(patcher, "{'edits':m['EDITS'],'align':m['ALIGN'],'meter':m['METER'],'legacyAlign':m['LEGACY_ALIGN'],'legacySeparator':m['LEGACY_SEPARATOR'],'legacyMeter':m['LEGACY_METER']}", `
+m['EDITS']['segments.ts'].append(m['UNSTAGED_EDIT'])
+m['EDITS']['index.ts'].extend([m['SEPARATOR_JOIN_EDIT'], m['SEPARATOR_ARGUMENT_EDIT'], m['SEPARATOR_EDIT']])
+`);
+const root = temporaryDirectory("powerline-layout-");
+const packageSource = process.env.PI_POWERLINE_ROOT ?? join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path,
+  !!process.env.PI_SDK_ROOT && existsSync(packageSource));
+let fixture: string | undefined;
+function source(file: string) {
+  fixture ??= copyPowerline(join(root, "real"), packageSource, Object.keys(edits), patcher);
+  return readFileSync(join(fixture, file), "utf8");
+}
 
 function sandbox(name: string) {
   const home = join(root, name);
@@ -148,33 +149,32 @@ test("context meter clamps fill and preserves unknown and approximate usage", ()
   expect(meter(NaN, false)).toBe("● [-----] ? context");
 });
 
-// Exercise the actual installed renderer, not a second implementation of its packing.
-const installed = join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer/index.ts");
-test.skipIf(!existsSync(installed))("configured chevron uses the requested glyph without changing other styles", () => {
+// Exercise checkout-patched package sources, not a second implementation of packing.
+realTest("configured chevron uses the requested glyph without changing other styles", () => {
   const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
   expect(settings.powerline.separator).toBe("chevron");
-  const source = readFileSync(installed, "utf8");
-  const start = source.indexOf("function buildContentFromParts(");
-  const end = source.indexOf("\n}\n", start) + 2;
+  const text = source("index.ts");
+  const start = text.indexOf("function buildContentFromParts(");
+  const end = text.indexOf("\n}\n", start) + 2;
   const render = new Function("getSeparator", "getFgAnsiCode", "ansi",
-    transpiler.transformSync(source.slice(start, end)) + "\nreturn buildContentFromParts;")(
+    transpiler.transformSync(text.slice(start, end)) + "\nreturn buildContentFromParts;")(
     (style: string) => ({ left: style === "chevron" ? "›" : "·" }), () => "", { reset: "" },
   );
   expect(render(["model", "main"], settings.powerline.separator)).toBe(" model ❯ main ");
   expect(render(["model", "main"], "dot")).toBe(" model · main ");
 });
 
-test.skipIf(!existsSync(installed))("ball and meter share the real context segment color at every threshold", () => {
-  const source = readFileSync(join(installed, "../segments.ts"), "utf8");
-  const start = source.indexOf("// configs:powerline-meter-v1");
-  const end = source.indexOf("const contextTotalSegment", start);
+realTest("ball and meter share the real context segment color at every threshold", () => {
+  const text = source("segments.ts");
+  const start = text.indexOf("// configs:powerline-meter-v1");
+  const end = text.indexOf("const contextTotalSegment", start);
   const codes = {
     context: "\x1b[38;2;67;145;135m",
     contextWarn: "\x1b[38;2;199;183;119m",
     contextError: "\x1b[38;2;199;131;124m",
   };
   const segment = new Function("getIcons", "color", "withIcon", "formatTokens",
-    transpiler.transformSync(source.slice(start, end)) + "\nreturn contextPctSegment;")(
+    transpiler.transformSync(text.slice(start, end)) + "\nreturn contextPctSegment;")(
     () => ({}), (_ctx: unknown, name: keyof typeof codes, text: string) => `${codes[name]}${text}\x1b[0m`,
     (_icon: string, text: string) => text, String,
   );
@@ -192,22 +192,21 @@ test.skipIf(!existsSync(installed))("ball and meter share the real context segme
   }
 });
 
-test.skipIf(!existsSync(installed))("installed unstaged count uses sage without changing its label", () => {
-  const source = readFileSync(join(installed, "../segments.ts"), "utf8");
-  const count = source.split("\n").find(line => line.includes('`*${gitStatus.unstaged}`'))!;
+realTest("patched unstaged count uses sage without changing its label", () => {
+  const count = source("segments.ts").split("\n").find(line => line.includes('`*${gitStatus.unstaged}`'))!;
   const indicators: string[] = [];
   new Function("indicators", "applyColor", "ctx", "gitStatus", count)(
     indicators, (_theme: unknown, color: string, text: string) => `${color}:${text}`, { theme: {} }, { unstaged: 3 },
   );
   expect(indicators).toEqual(["#85877e:*3"]);
 });
-test.skipIf(!existsSync(installed))("installed layout preserves right alignment through narrow overflow", () => {
-  const source = readFileSync(installed, "utf8");
-  const start = source.indexOf("/** Render a single segment");
-  const end = source.indexOf("// Extension\n", start);
+realTest("patched layout preserves right alignment through narrow overflow", () => {
+  const text = source("index.ts");
+  const start = text.indexOf("/** Render a single segment");
+  const end = text.indexOf("// Extension\n", start);
   expect(start).toBeGreaterThan(0);
   expect(end).toBeGreaterThan(start);
-  const js = transpiler.transformSync(source.slice(start, end));
+  const js = transpiler.transformSync(text.slice(start, end));
   const config = { separator: "dot" };
   const compute = new Function("config", "renderSegment", "visibleWidth", "getSeparator", "getFgAnsiCode", "ansi", "mergeSegmentsWithCustomItems",
     js + "\nreturn computeResponsiveLayout;")(

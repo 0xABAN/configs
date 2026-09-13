@@ -1,31 +1,6 @@
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { extractPlanSteps } from "../extensions/plan-mode/utils.ts";
-
-mock.module("@earendil-works/pi-tui", () => ({ Key: { ctrlAlt: (key: string) => `ctrl+alt+${key}` } }));
-const { default: planMode } = await import("../extensions/plan-mode/index.ts");
-
-function harness(entries: unknown[] = []) {
-  const handlers = new Map<string, Function>();
-  const commands = new Map<string, { handler: Function }>();
-  const messages: any[] = [];
-  const states: any[] = [];
-  let activeTools = ["read", "write", "custom", "todo"];
-  const ctx = {
-    hasUI: true, thinkingLevel: "medium", sessionManager: { getEntries: () => entries },
-    ui: { setStatus() {}, select: async () => "Execute the plan" },
-  };
-  planMode({
-    on: (name: string, handler: Function) => handlers.set(name, handler),
-    registerCommand: (name: string, command: { handler: Function }) => commands.set(name, command),
-    registerFlag() {}, registerShortcut() {}, getFlag: () => false,
-    getActiveTools: () => activeTools, setActiveTools: (tools: string[]) => { activeTools = tools; },
-    appendEntry: (_name: string, state: any) => states.push(state),
-    sendMessage: (message: any) => messages.push(message),
-  } as never);
-  return { ctx, messages, states, tools: () => activeTools,
-    event: (name: string, event: any = {}) => handlers.get(name)!(event, ctx),
-    toggle: () => commands.get("plan")!.handler("", ctx) };
-}
+import { planModeHarness as harness } from "./support/plan-mode-harness";
 
 test("mode transitions preserve custom tools and only filter inactive plan context", async () => {
   const app = harness();

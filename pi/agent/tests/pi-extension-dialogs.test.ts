@@ -1,24 +1,19 @@
-import { afterAll, expect, mock, test } from "bun:test";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterAll, expect, mock } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { checkProcess as check, copySdk, describePatch, patchModule, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-extension-dialogs.py", import.meta.url));
 const sdk = process.env.PI_SDK_ROOT;
-const child = process.env.CONFIGS_DIALOGS_TEST_CHILD === "1";
-const temp = mkdtempSync(join(tmpdir(), "pi-extension-dialogs-test-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const described = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({'edits':m['EDITS'],'module':m['MODULE'],'marker':m['MARKER']}))", patcher]);
-if (described.exitCode) throw new Error(described.stderr.toString());
-const { edits, module: modulePath, marker } = JSON.parse(described.stdout.toString()) as {
+const { child, unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
+const temp = temporaryDirectory("pi-extension-dialogs-test-");
+const { edits, module: modulePath, marker } = describePatch<{
   edits: Record<string, [string, string, number][]>; module: string; marker: string;
-};
+}>(patcher, "{'edits':m['EDITS'],'module':m['MODULE'],'marker':m['MARKER']}");
 const files = Object.keys(edits);
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: root, HOME: root } });
-function check(result: ReturnType<typeof run>) {
-  if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-}
 function sandbox(name: string) {
   const root = join(temp, name);
   mkdirSync(root, { recursive: true });
@@ -78,41 +73,23 @@ test("partial, incompatible, duplicate and changed-helper installations refuse a
   expect(existsSync(absent)).toBe(false);
 });
 
-// Other test files mock bare pi-tui process-wide. Keep these native checks isolated.
-if (sdk && !child) {
-  test("real selector/input/editor checks pass in an isolated process", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.path], {
-      env: { ...process.env, CONFIGS_DIALOGS_TEST_CHILD: "1", PI_CODING_AGENT_DIR: join(temp, "agent") }, timeout: 30_000,
-    });
-    if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-    expect(result.stderr.toString()).toContain("0 fail");
-  });
-}
-function realTest(name: string, run: () => Promise<void>) {
-  if (child) test(name, run);
-}
-
 const fixture = join(temp, "sdk");
 let loaded: Promise<any> | undefined;
 let externalResult: { status: string; content?: string } | Error = { status: "complete", content: "edited outside" };
 const externalCalls: any[] = [];
 function real() {
   return loaded ??= (async () => {
-    mkdirSync(fixture);
-    cpSync(join(sdk!, "dist"), join(fixture, "dist"), { recursive: true });
-    copyFileSync(join(sdk!, "package.json"), join(fixture, "package.json"));
-    symlinkSync(join(sdk!, "node_modules"), join(fixture, "node_modules"));
+    copySdk(sdk!, fixture);
     // Work on original fixtures whether the live host is original or patched.
-    const normalize = Bun.spawnSync(["python3", "-B", "-c", `
-import runpy,pathlib,sys
-m=runpy.run_path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+    const normalize = patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
 s={n:(root/n).read_text() for n in m['EDITS']}
 if (root/m['MODULE']).exists(): s[m['MODULE']]=(root/m['MODULE']).read_text()
 m['patch_sources'](s)
 if all(s[n].startswith(m['MARKER']) for n in m['EDITS']):
  for n in m['EDITS']: (root/n).write_text(m['transform'](n,s[n].removeprefix(m['MARKER']+'\\n'),True))
  (root/m['MODULE']).unlink()
-`, patcher, fixture]);
+`, [fixture]);
     check(normalize);
     const originals = contents(fixture);
     check(run(fixture));
@@ -126,7 +103,7 @@ if all(s[n].startswith(m['MARKER']) for n in m['EDITS']):
       },
     }));
     const load = (file: string) => import(pathToFileURL(join(fixture, "dist/modes/interactive", file)).href);
-    const tui = await import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+    const tui = await import(pathToFileURL(join(fixture, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
     const { KEYBINDINGS } = await import(pathToFileURL(join(fixture, "dist/core/keybindings.js")).href);
     tui.setKeybindings(new tui.KeybindingsManager(KEYBINDINGS));
     const colors = await load("theme/theme.js");

@@ -1,38 +1,57 @@
-import { afterAll, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { afterAll, expect } from "bun:test";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { applySdkPatches, checkProcess as check, copyPackageSources, copySdk, describePatch, patchModule, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/subagents-ui.py", import.meta.url));
 const pkg = process.env.PI_SUBAGENTS_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/@tintinweb/pi-subagents");
-const sdk = process.env.PI_SDK_ROOT;
-const temp = mkdtempSync(join(tmpdir(), "subagents-ui-test-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const descriptor = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({'files':list(m['EDITS']),'module':m['MODULE']}))", patcher]);
-if (descriptor.exitCode) throw new Error(descriptor.stderr.toString());
-const { files, module: modulePath } = JSON.parse(descriptor.stdout.toString()) as { files: string[]; module: string };
+const sdkSource = process.env.PI_SDK_ROOT;
+const temp = temporaryDirectory("subagents-ui-test-");
+const sdk = join(temp, "sdk");
+const { child, unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdkSource && existsSync(pkg));
+// Some replacements introduce later anchors. Build minimal counted seams in
+// patch order, then reverse them; guard fixtures need no installed package.
+const { sources, module: modulePath } = describePatch<{ sources: Record<string, string>; module: string }>(
+  patcher, "{'sources':sources,'module':m['MODULE']}", `
+sources = {}
+for name, edits in m['EDITS'].items():
+    source = ''
+    for old, new, count in edits:
+        missing = count - source.count(old)
+        assert missing >= 0, (name, old)
+        source += '\\n' + (old + '\\n') * missing
+        source = source.replace(old, new)
+    sources[name] = m['transform'](name, source, True)
+    assert m['transform'](name, sources[name]) == source
+`);
+const files = Object.keys(sources);
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SUBAGENTS_ROOT: root, HOME: root } });
-const check = (result: ReturnType<typeof run>) => {
-  if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-};
-
-function sandbox(name: string) {
+function sandbox(name: string, native = false) {
   const root = join(temp, name);
   mkdirSync(root, { recursive: true });
-  cpSync(join(pkg, "src"), join(root, "src"), { recursive: true });
-  cpSync(join(pkg, "package.json"), join(root, "package.json"));
+  if (!native) {
+    for (const [file, source] of Object.entries(sources)) {
+      mkdirSync(dirname(join(root, file)), { recursive: true });
+      writeFileSync(join(root, file), source);
+    }
+    writeFileSync(join(root, "package.json"), '{"version":"0.19.0","type":"module"}');
+    return root;
+  }
+  copyPackageSources(join(pkg, "src"), join(root, "src"));
+  copyFileSync(join(pkg, "package.json"), join(root, "package.json"));
   // Normalize only a complete, validated installation. Live sources stay read-only.
-  const result = Bun.spawnSync(["python3", "-B", "-c", `
-import runpy,pathlib,sys
-m=runpy.run_path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+  const result = patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
 s={n:(root/n).read_text() for n in m['EDITS']}
 if (root/m['MODULE']).exists(): s[m['MODULE']]=(root/m['MODULE']).read_text()
 m['patch_sources'](s)
 if all(v.startswith(m['MARKER']) for n,v in s.items() if n in m['EDITS']):
  for n in m['EDITS']: (root/n).write_text(m['transform'](n,s[n].removeprefix(m['MARKER']+'\\n'),True))
  (root/m['MODULE']).unlink()
-`, patcher, root]);
+`, [root]);
   check(result);
   return root;
 }
@@ -41,7 +60,6 @@ function contents(root: string) {
   return Object.fromEntries([...files, modulePath].map(file => [file,
     existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null]));
 }
-const installedTest = test.skipIf(!existsSync(join(pkg, "src/index.ts")));
 
 test("absent installation is skipped without creating it", () => {
   const root = join(temp, "absent");
@@ -49,7 +67,7 @@ test("absent installation is skipped without creating it", () => {
   expect(existsSync(root)).toBe(false);
 });
 
-installedTest("validate all sources before writes; exact backups, unrelated edits and repeatability", () => {
+test("validate all sources before writes; exact backups, unrelated edits and repeatability", () => {
   const root = sandbox("backup");
   writeFileSync(join(root, "src/index.ts"), readFileSync(join(root, "src/index.ts"), "utf8") + "\n// unrelated local edit\n");
   const before = contents(root);
@@ -67,7 +85,7 @@ installedTest("validate all sources before writes; exact backups, unrelated edit
   expect(readdirSync(join(root, ".config/theme-backups"))).toEqual(backups);
 });
 
-installedTest("unknown versions, changed/duplicate anchors and partial installations refuse before writes", () => {
+test("unknown versions, changed/duplicate anchors and partial installations refuse before writes", () => {
   for (const mode of ["version", "changed", "duplicate", "partial", "missing-helper", "changed-helper", "unexpected-helper", "residual-original"]) {
     const root = sandbox(mode);
     if (mode === "version") writeFileSync(join(root, "package.json"), '{"version":"0.20.0"}');
@@ -88,25 +106,12 @@ installedTest("unknown versions, changed/duplicate anchors and partial installat
   }
 });
 
-// Isolate real SDK resolution from other test files' process-wide pi-tui mocks.
-const child = process.env.CONFIGS_SUBAGENTS_UI_CHILD === "1";
-if (sdk && existsSync(pkg) && !child) {
-  test("actual subagent surfaces pass with real Pi components in an isolated process", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.path], {
-      env: { ...process.env, CONFIGS_SUBAGENTS_UI_CHILD: "1", PI_CODING_AGENT_DIR: join(temp, "agent") }, timeout: 60_000,
-    });
-    if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-    expect(result.stderr.toString()).toContain("0 fail");
-  });
-}
-function realTest(name: string, callback: () => Promise<void>) {
-  if (child) test(name, callback);
-}
-
 let loaded: Promise<any> | undefined;
 function real() {
   return loaded ??= (async () => {
-    const root = sandbox("real");
+    copySdk(sdkSource!, sdk);
+    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript"]);
+    const root = sandbox("real", true);
     check(run(root));
     // Package dependencies remain read-only. Resolve SDK peers to Pi's own copy.
     const modules = join(root, "node_modules");

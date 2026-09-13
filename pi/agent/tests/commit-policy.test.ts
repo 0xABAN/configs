@@ -1,13 +1,12 @@
 import { expect, test } from "bun:test";
 
 test("injects the Angular commit policy once per active session", async () => {
-	const extension = await import("../extensions/commit-policy").catch(() => undefined);
-	expect(extension).toBeDefined();
+	const extension = await import("../extensions/commit-policy");
 
 	const handlers = new Map<string, Function>();
 	const entries: unknown[] = [];
 	const messages: Array<{ customType: string; content: string; display: boolean }> = [];
-	extension!.default({
+	extension.default({
 		on(event: string, handler: Function) {
 			handlers.set(event, handler);
 		},

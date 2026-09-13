@@ -1,25 +1,27 @@
-import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { copyPowerline, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const describe = Bun.spawnSync(["python3", "-B", "-c", `
-import runpy,json,sys
-patch = runpy.run_path(sys.argv[1])
-edits = patch['EDITS']
-edits['index.ts'].append(patch['PROMPT_EDIT'])
-print(json.dumps({'edits': edits, 'border': patch['BORDER_EDIT'], 'legacyPrompt': patch['LEGACY_PROMPT']}))
-`, patcher]);
-if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const { edits, border, legacyPrompt } = JSON.parse(describe.stdout.toString()) as {
+const { edits, border, legacyPrompt } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
   legacyPrompt: string;
-};
-const root = mkdtempSync(join(tmpdir(), "powerline-editor-"));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyPrompt':m['LEGACY_PROMPT']}",
+  "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
+const root = temporaryDirectory("powerline-editor-");
+const sdk = process.env.PI_SDK_ROOT;
+const installed = process.env.PI_POWERLINE_ROOT ?? join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk && existsSync(installed));
+let fixture: string | undefined;
+function source(file: string) {
+  fixture ??= copyPowerline(join(root, "real"), installed, Object.keys(edits), patcher);
+  return readFileSync(join(fixture, file), "utf8");
+}
 
 function sandbox(name: string) {
   const home = join(root, name);
@@ -107,10 +109,7 @@ test("partial or unknown editor sources fail before any write", () => {
   }
 });
 
-// Opt-in integration tests use the actual installed host/editor, not a geometry mock.
-// PI_SDK_ROOT=/path/to/@earendil-works/pi-coding-agent bun test <this file>
-const sdk = process.env.PI_SDK_ROOT;
-const installed = join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
+// Opt-in native checks retain the real editor, but use checkout-patched wrapper sources.
 const transpiler = new Bun.Transpiler({ loader: "ts" });
 const marker = "\x1b_pi:c\x07";
 const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").replaceAll(marker, "");
@@ -119,7 +118,7 @@ async function host() {
   return import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
 }
 
-test.skipIf(!sdk)("real package resolver preserves editor ownership order", async () => {
+realTest("real package resolver preserves editor ownership order", async () => {
   const { DefaultPackageManager } = await import(pathToFileURL(join(sdk!, "dist/core/package-manager.js")).href);
   const { SettingsManager } = await import(pathToFileURL(join(sdk!, "dist/core/settings-manager.js")).href);
   const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
@@ -141,15 +140,15 @@ test.skipIf(!sdk)("real package resolver preserves editor ownership order", asyn
   expect(paths[1]).toContain("pi-powerline-footer");
 });
 
-test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrolling, completion and paste", async () => {
+realTest("real editor fills the shared viewport through wrapping, scrolling, completion and paste", async () => {
   const { Editor, visibleWidth, truncateToWidth } = await host();
-  const source = readFileSync(join(installed, "index.ts"), "utf8");
-  const start = source.indexOf("      // configs:powerline-editor-v1");
+  const text = source("index.ts");
+  const start = text.indexOf("      // configs:powerline-editor-v1");
   expect(start).toBeGreaterThan(0);
-  const end = source.indexOf("\n      return editor;", start);
+  const end = text.indexOf("\n      return editor;", start);
   const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
     "footerDataRef", "visibleWidth", "truncateToWidth",
-    transpiler.transformSync(source.slice(start, end)) + "\nreturn editor;");
+    transpiler.transformSync(text.slice(start, end)) + "\nreturn editor;");
   const statuses = new Map([
     ["agent-mode", "\u001b[36mbuild mode\u001b[0m"],
     ["agent-thinking", "\u001b[36mthink:med\u001b[0m"],
@@ -217,13 +216,13 @@ test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrol
   expect(editor.render(40).join("")).toContain(marker);
 });
 
-test.skipIf(!sdk)("bash ghost text preserves padded cursor and avoids overwriting wrapped input", async () => {
+realTest("bash ghost text preserves padded cursor and avoids overwriting wrapped input", async () => {
   const { Editor, visibleWidth, truncateToWidth } = await host();
-  const source = readFileSync(join(installed, "bash-mode/editor.ts"), "utf8");
-  const start = source.indexOf("  render(width: number): string[] {");
-  const end = source.indexOf("  private isShellCompletionContext", start);
+  const text = source("bash-mode/editor.ts");
+  const start = text.indexOf("  render(width: number): string[] {");
+  const end = text.indexOf("  private isShellCompletionContext", start);
   const TestEditor = new Function("Editor", "visibleWidth", "truncateToWidth", transpiler.transformSync(
-    `class TestEditor extends Editor { ghost = { value: 'echo hello' }; isShellCompletionContext() { return true; }\n${source.slice(start, end)}\n}`,
+    `class TestEditor extends Editor { ghost = { value: 'echo hello' }; isShellCompletionContext() { return true; }\n${text.slice(start, end)}\n}`,
   ) + "\nreturn TestEditor;")(Editor, visibleWidth, truncateToWidth);
   const editor = new TestEditor({ terminal: { rows: 30 }, requestRender() {} }, { borderColor: (s: string) => s }, { paddingX: 1 });
   editor.focused = true;

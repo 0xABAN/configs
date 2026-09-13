@@ -1,25 +1,24 @@
-import { afterAll, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { applySdkPatches, checkProcess as assertRun, copyPackageSources, copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = process.env.RPIV_TODO_UI_TEST_PATCHER ?? fileURLToPath(new URL("../patches/rpiv-todo-ui.py", import.meta.url));
 const legacy = join(dirname(patcher), "rpiv-todo-gray.py");
-const temp = mkdtempSync(join(tmpdir(), "rpiv-todo-ui-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const described = Bun.spawnSync(["python3", "-B", "-c",
-  "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps(m['EDITS']))", patcher]);
-if (described.exitCode) throw new Error(described.stderr.toString());
-const edits = JSON.parse(described.stdout.toString()) as Record<string, [string, string][]>;
+const temp = temporaryDirectory("rpiv-todo-ui-");
+const installed = process.env.RPIV_TODO_TEST_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo");
+const sdkSource = process.env.PI_SDK_ROOT;
+const sdk = join(temp, "sdk");
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdkSource && existsSync(installed), { FORCE_COLOR: "1" });
+const edits = describePatch<Record<string, [string, string][]>>(patcher, "m['EDITS']");
 const files = Object.keys(edits);
 const run = (root: string, home = root) => Bun.spawnSync(["python3", "-B", patcher], {
   env: { ...process.env, HOME: home, RPIV_TODO_ROOT: root },
 });
 const contents = (root: string) => Object.fromEntries(files.map(file => [file, readFileSync(join(root, file), "utf8")]));
-function assertRun(result: ReturnType<typeof run>) {
-  if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-}
 function sandbox(name: string) {
   const root = join(temp, name);
   mkdirSync(root);
@@ -80,26 +79,14 @@ test("Todo UI refuses wrong versions, missing/duplicate/modified anchors and mix
   expect(run(join(temp, "absent")).exitCode).toBe(0);
 });
 
-// Other tests mock bare pi-tui globally. Actual formatters run in a clean child.
-const installed = process.env.RPIV_TODO_TEST_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo");
-const sdk = process.env.PI_SDK_ROOT;
-const child = process.env.CONFIGS_TODO_UI_TEST_CHILD === "1";
-if (sdk && existsSync(installed) && !child) {
-  test("actual Todo renderers and widget contracts pass in isolation", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.path], {
-      env: { ...process.env, CONFIGS_TODO_UI_TEST_CHILD: "1", FORCE_COLOR: "1" }, timeout: 30_000,
-    });
-    assertRun(result);
-    expect(result.stderr.toString()).toContain("7 pass");
-  });
-}
-const realTest = child && sdk && existsSync(installed) ? test : test.skip;
 let loaded: Promise<any> | undefined;
 function real() {
   return loaded ??= (async () => {
+    copySdk(sdkSource!, sdk);
+    applySdkPatches(sdk, ["pi-horizontal-inset", "pi-transcript", "pi-activity-notices"]);
     const home = join(temp, "real");
     const root = join(home, ".pi/agent/npm/node_modules/@juicesharp/rpiv-todo");
-    cpSync(installed, root, { recursive: true });
+    copyPackageSources(installed, root);
     // Normalize our complete patch in the COPY so the suite remains replayable.
     for (const [file, changes] of Object.entries(edits)) {
       let source = readFileSync(join(root, file), "utf8");

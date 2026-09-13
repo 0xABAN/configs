@@ -1,15 +1,16 @@
-import { afterAll, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-activity-notices.py", import.meta.url));
-const described = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({k:m[k] for k in ['HOST','MODULE','EDITS']}))", patcher]);
-if (described.exitCode) throw new Error(described.stderr.toString());
-const { HOST, MODULE, EDITS } = JSON.parse(described.stdout.toString()) as { HOST: string; MODULE: string; EDITS: [string, string][] };
-const temp = mkdtempSync(join(tmpdir(), "pi-activity-notices-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const { HOST, MODULE, EDITS } = describePatch<{ HOST: string; MODULE: string; EDITS: [string, string][] }>(
+  patcher, "{k:m[k] for k in ['HOST','MODULE','EDITS']}");
+const temp = temporaryDirectory("pi-activity-notices-");
+const sdk = process.env.PI_SDK_ROOT;
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: root, HOME: root } });
 const contents = (root: string) => [HOST, MODULE].map(file => existsSync(join(root, file)) ? readFileSync(join(root, file), "utf8") : null);
 function fixture(name: string) {
@@ -55,27 +56,13 @@ test("notices reject partial, duplicate and changed sources without writes", () 
   expect(run(join(temp, "absent")).exitCode).toBe(0);
 });
 
-const sdk = process.env.PI_SDK_ROOT;
-const child = process.env.CONFIGS_NOTICES_TEST_CHILD === "1";
-if (sdk && !child) {
-  test("native notification methods pass in an isolated host", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.path], {
-      env: { ...process.env, CONFIGS_NOTICES_TEST_CHILD: "1" }, timeout: 30_000,
-    });
-    if (result.exitCode) throw new Error(result.stderr.toString() + result.stdout.toString());
-    expect(result.stderr.toString()).toContain("3 pass");
-  });
-}
-const realTest = sdk && child ? test : test.skip;
 realTest("native notices align every wrapped line and preserve coalescing, warnings and errors", async () => {
   const root = join(temp, "real");
-  cpSync(join(sdk!, "dist"), join(root, "dist"), { recursive: true });
-  cpSync(join(sdk!, "package.json"), join(root, "package.json"));
-  symlinkSync(join(sdk!, "node_modules"), join(root, "node_modules"));
+  copySdk(sdk!, root);
   const result = run(root);
   if (result.exitCode) throw new Error(result.stderr.toString());
   const { InteractiveMode } = await import(pathToFileURL(join(root, HOST)).href);
-  const tui = await import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+  const tui = await import(pathToFileURL(join(root, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
   const colors = await import(pathToFileURL(join(root, "dist/modes/interactive/theme/theme.js")).href);
   colors.setThemeInstance(colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
   const app = Object.create(InteractiveMode.prototype);

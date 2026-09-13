@@ -1,17 +1,17 @@
-import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect } from "bun:test";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { applySdkPatches, copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
+import { nativeSuite } from "./support/native-suite";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-horizontal-inset.py", import.meta.url));
-const describe = Bun.spawnSync(["python3", "-B", "-c", "import runpy,json,sys; m=runpy.run_path(sys.argv[1]); print(json.dumps({'edits':m['EDITS'],'legacyInset':m['LEGACY_INSET']}))", patcher]);
-if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const { edits, legacyInset } = JSON.parse(describe.stdout.toString()) as {
+const { edits, legacyInset } = describePatch<{
   edits: Record<string, [string, string][]>; legacyInset: string;
-};
-const temp = mkdtempSync(join(tmpdir(), "pi-horizontal-inset-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+}>(patcher, "{'edits':m['EDITS'],'legacyInset':m['LEGACY_INSET']}");
+const temp = temporaryDirectory("pi-horizontal-inset-");
+const sdk = process.env.PI_SDK_ROOT;
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
 
 function sandbox(name: string) {
   const root = join(temp, name);
@@ -87,11 +87,17 @@ test("prompt markers precede the inset so Ghostty does not advance an extra row"
   expect(frame.insetLines(["", image, "plain"], 100)).toEqual(["", "  " + image, "  plain"]);
 });
 
-// Opt in to real-host rendering; these tests never patch the installation.
-// PI_SDK_ROOT=/path/to/pi-coding-agent bun test <this file>
-const sdk = process.env.PI_SDK_ROOT;
-const dist = sdk && join(sdk, "node_modules/@earendil-works/pi-tui/dist");
-const load = (file: string) => import(pathToFileURL(join(dist!, file)).href);
+// Native checks import disposable sources with this checkout's inset applied.
+let fixture: string | undefined;
+function nativeRoot() {
+  if (!fixture) {
+    fixture = join(temp, "sdk");
+    copySdk(sdk!, fixture);
+    applySdkPatches(fixture, ["pi-horizontal-inset"]);
+  }
+  return fixture;
+}
+const load = (file: string) => import(pathToFileURL(join(nativeRoot(), "node_modules/@earendil-works/pi-tui/dist", file)).href);
 const margin = (width: number) => width < 16 ? 0 : Math.max(1, Math.floor(width * 0.02));
 const marker = "\x1b_pi:c\x07";
 
@@ -111,7 +117,7 @@ function component(render: (width: number) => string[]) {
   return { render, invalidate() {} };
 }
 
-test.skipIf(!sdk)("both real render roots share wrapping, footer boundaries, resize and Unicode cursor positions", async () => {
+realTest("both real render roots share wrapping, footer boundaries, resize and Unicode cursor positions", async () => {
   const { stripTerminalSequences, visibleWidth } = await load("utils.js");
   for (const mode of ["regular", "fullscreen"] as const) {
     const app = await renderer(mode);
@@ -138,7 +144,7 @@ test.skipIf(!sdk)("both real render roots share wrapping, footer boundaries, res
   }
 });
 
-test.skipIf(!sdk)("overlays clamp absolute, percent and anchored layouts inside the same boundary", async () => {
+realTest("overlays clamp absolute, percent and anchored layouts inside the same boundary", async () => {
   const { stripTerminalSequences } = await load("utils.js");
   for (const mode of ["regular", "fullscreen"] as const) {
     const app = await renderer(mode);
@@ -166,7 +172,7 @@ test.skipIf(!sdk)("overlays clamp absolute, percent and anchored layouts inside 
   }
 });
 
-test.skipIf(!sdk)("fullscreen layout, mouse selection, scrollbar, search and flashes use physical coordinates", async () => {
+realTest("fullscreen layout, mouse selection, scrollbar, search and flashes use physical coordinates", async () => {
   const { ScrollView } = await load("components/scroll-view.js");
   const { VStack } = await load("components/v-stack.js");
   const { getScrollViewBox, getScrollViewsAt, getScrollbarGeometry } = await load("layout.js");
@@ -202,7 +208,7 @@ test.skipIf(!sdk)("fullscreen layout, mouse selection, scrollbar, search and fla
   expect(stripTerminalSequences(app.lines()[9]).indexOf("R")).toBe(97);
 });
 
-test.skipIf(!sdk)("fresh Pi composition root keeps the inset across regular/fullscreen switches", () => {
+realTest("fresh Pi composition root keeps the inset across regular/fullscreen switches", () => {
   const result = Bun.spawnSync(["node", "--input-type=module", "--eval", `
     import assert from 'node:assert/strict';
     const root = process.env.PI_SDK_ROOT;
@@ -230,12 +236,12 @@ test.skipIf(!sdk)("fresh Pi composition root keeps the inset across regular/full
       assert.ok(line.startsWith('  ' + 'x'.repeat(96)));
     }
     console.log('fresh Pi mode-switch smoke passed');
-  `], { env: process.env, timeout: 30_000 });
+  `], { env: { ...process.env, PI_SDK_ROOT: nativeRoot() }, timeout: 30_000 });
   if (result.exitCode !== 0) throw new Error(result.stderr.toString());
   expect(result.stdout.toString()).toContain("fresh Pi mode-switch smoke passed");
 });
 
-test.skipIf(!sdk)("fullscreen exit transcript uses the same inset without altering image bytes", async () => {
+realTest("fullscreen exit transcript uses the same inset without altering image bytes", async () => {
   const app = await renderer("fullscreen");
   const payload = "\x1b]1337;File=inline=1:YWJj\x07";
   let receivedWidth = 0;
@@ -246,7 +252,7 @@ test.skipIf(!sdk)("fullscreen exit transcript uses the same inset without alteri
   expect(app.terminal.writes.join("")).toContain("  " + payload);
 });
 
-test.skipIf(!sdk)("image reservation, payload, Kitty crop and cached placement survive inset", async () => {
+realTest("image reservation, payload, Kitty crop and cached placement survive inset", async () => {
   const { registerKittyImageMetadata, getKittyImageMetadata } = await load("terminal-image.js");
   const { ScrollView } = await load("components/scroll-view.js");
   const payload = "\x1b_Ga=T,f=100,i=991,c=4,r=3,C=1;YWJj\x1b\\";
