@@ -2,9 +2,6 @@
 // Display only: native components still own execution, expansion, images and state.
 import { Container, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { theme } from "../theme/theme.js";
-import { DynamicBorder } from "./dynamic-border.js";
-
-const USER_SEPARATOR = new DynamicBorder(line => theme.fg("toolOutput", line));
 
 const ACTIONS = {
     read: ["□", "Read"],
@@ -249,11 +246,7 @@ export class TranscriptContainer extends Container {
             flushActions();
             lines.push(...nativeLines);
             if (child.transcriptRole === "pi") speaker = "pi";
-            else if (child.transcriptRole === "user") {
-                speaker = "user";
-                // Like the textarea, use the shared viewport without a second gutter.
-                lines.push(...USER_SEPARATOR.render(width));
-            }
+            else if (child.transcriptRole === "user") speaker = "user";
             else if (child.transcriptRole !== "tool") speaker = undefined;
         }
         flushActions();

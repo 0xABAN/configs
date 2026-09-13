@@ -85,6 +85,7 @@ for (const helper of [
   "transcript-before-tool-rows.js.inc",
   "transcript-before-native-padding.js.inc",
   "transcript-before-inline-metrics.js.inc",
+  "transcript-before-user-separator.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -217,6 +218,50 @@ realTest("only the Pi speaker icon uses warning yellow", async () => {
   expect(m.actionLines({ toolName: "read", args: { path: "a.ts" } }, 80)[0]).toContain(theme.fg("accent", "□"));
 });
 
+realTest("user separators use live cream color and the editor viewport without another gutter", async () => {
+  const m = await real();
+  const previousPath = join(fixture, "dist/modes/interactive/components/transcript-before-separator.js");
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-user-separator.js.inc", import.meta.url), "utf8"));
+  const previous = await import(pathToFileURL(previousPath).href);
+  let padding = 1;
+  let height = 40;
+  const app = host(m);
+  app.chatContainer = new m.TranscriptContainer(() => padding, () => height);
+  const messages = [
+    { role: "user", content: "A question with 界🙂 and wrapping. ".repeat(3), timestamp },
+    assistant([{ type: "text", text: "An answer." }]),
+    { role: "user", content: "A follow-up question.", timestamp },
+  ];
+  const originalMessages = JSON.stringify(messages);
+  app.renderSessionItems(messages);
+  const children = [...app.chatContainer.children];
+  const old = new previous.TranscriptContainer(() => padding, () => height);
+  for (const child of children) old.addChild(child);
+
+  for (const [width, rows, gutter] of [[120, 40, 1], [40, 12, 1], [16, 12, 1], [4, 12, 1], [120, 40, 4]]) {
+    height = rows;
+    padding = gutter;
+    const rendered = app.chatContainer.render(width);
+    const separator = m.colors.theme.fg("toolOutput", "─".repeat(width));
+    expect(separator).toContain("\x1b[38;2;222;222;197m");
+    expect(rendered.filter((line: string) => line === separator)).toHaveLength(2);
+    expect(rendered.at(-1)).toBe(separator); // Visible even before Pi responds.
+    expect(rendered.filter((line: string) => line !== separator)).toEqual(old.render(width));
+    expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+    expect(app.chatContainer.children).toEqual(children);
+  }
+  expect(JSON.stringify(messages)).toBe(originalMessages);
+
+  try {
+    m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/woody.json", import.meta.url)), "truecolor"));
+    app.chatContainer.invalidate();
+    expect(app.chatContainer.render(90).at(-1)).toBe(m.colors.theme.fg("toolOutput", "─".repeat(90)));
+  } finally {
+    m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
+    app.chatContainer.invalidate();
+  }
+});
+
 realTest("real streaming and replay share Pi/You headers, grouped actions and narration boundaries", async () => {
   const m = await real();
   const user = { role: "user", content: "Trace authentication.", timestamp };
@@ -245,6 +290,9 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   const text = transcript(m, live);
   expect(text.match(/● Pi/g)).toHaveLength(1);
   expect(text.match(/◆ You/g)).toHaveLength(1);
+  expect(text.split("\n").filter((line: string) => line === "─".repeat(90))).toHaveLength(1);
+  expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf("─".repeat(90)));
+  expect(text.indexOf("─".repeat(90))).toBeLessThan(text.indexOf("● Pi"));
   expect(text).toContain("2 actions");
   expect(text).toContain("1 action");
   expect(text).toContain("├─ ✓ □ Read");
@@ -499,7 +547,7 @@ realTest("partial calls, unsafe arguments, error-only turns and narrow Unicode r
 
 realTest("regular and fullscreen hosts render the same transcript inside the existing inset", async () => {
   const m = await real();
-  for (const mode of ["regular", "fullscreen"] as const) {
+  for (const [mode, scrollbar] of [["regular", "hidden"], ["fullscreen", "auto"], ["fullscreen", "always"]] as const) {
     const app = host(m);
     app.renderSessionItems([
       { role: "user", content: "Inspect session.ts", timestamp },
@@ -518,7 +566,7 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
     } else {
       tui.altScreenActive = true;
       tui.setLayoutRoot(new m.tui.VStack([
-        { component: new m.tui.ScrollView(app.chatContainer, { scrollbar: "always" }), basis: 0, grow: 1 },
+        { component: new m.tui.ScrollView(app.chatContainer, { scrollbar }), basis: 0, grow: 1 },
         { component: footer, basis: 1 },
       ]));
     }
@@ -531,6 +579,11 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
       expect(text).toContain("You");
       expect(text).toContain("Read");
       expect(text).toContain("UNCHANGED FOOTER");
+      const inset = tui.getHorizontalInset(width);
+      const track = mode === "fullscreen" && scrollbar === "always" ? 1 : 0;
+      const separator = lines.map(m.tui.stripTerminalSequences).find((line: string) => line.trimStart().startsWith("──"));
+      // The editor uses this full viewport too; an explicit scrollbar keeps its native column.
+      expect(separator?.trimEnd()).toBe(" ".repeat(inset) + "─".repeat(width - 2 * inset - track));
       expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
   }
