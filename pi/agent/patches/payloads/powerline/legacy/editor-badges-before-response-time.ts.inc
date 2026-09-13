@@ -14,13 +14,13 @@
         const badgeBudget = boxWidth - hintWidth - 9;
 
         const primary = [mode, thinking].filter(Boolean).join(" ❯ ");
-        const responseTime = statuses?.get("agent-response-time") ?? "";
+        const throughput = statuses?.get("agent-tps") ?? "";
         // Warm beige on deep jade keeps the filled badge readable (5.16:1 contrast).
-        const responseBadge = responseTime
-          ? ansi.getBgAnsi(50, 109, 101) + ansi.getFgAnsi(243, 238, 223) + ` ${responseTime} ` + ansi.reset
+        const tps = throughput
+          ? ansi.getBgAnsi(50, 109, 101) + ansi.getFgAnsi(243, 238, 223) + ` ${throughput} ` + ansi.reset
           : "";
-        let badges = [responseBadge, primary].filter(Boolean).join("   ");
-        // Drop response time, then thinking; never abbreviate the mode or its icon.
+        let badges = [tps, primary].filter(Boolean).join("   ");
+        // Drop throughput, then thinking; never abbreviate the mode or its icon.
         if (visibleWidth(badges) > badgeBudget) badges = primary;
         if (visibleWidth(badges) > badgeBudget) badges = mode;
 

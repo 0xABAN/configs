@@ -129,6 +129,7 @@ PRE_CENTERED_SCROLL_BORDER = read_payload("powerline/legacy/editor-badges-before
 PRE_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-tps.ts.inc").rstrip("\n")
 PRE_LEADING_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-leading-tps.ts.inc").rstrip("\n")
 PRE_FULL_MODE_BORDER = read_payload("powerline/legacy/editor-badges-before-full-mode.ts.inc").rstrip("\n")
+PRE_RESPONSE_TIME_BORDER = read_payload("powerline/legacy/editor-badges-before-response-time.ts.inc").rstrip("\n")
 BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
     "SelectList, sliceByColumn, truncateToWidth,",
@@ -145,7 +146,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     index = sources["index.ts"]
     compact_borders = (
         new_border, PRE_CENTERED_SCROLL_BORDER, PRE_TPS_BORDER,
-        PRE_LEADING_TPS_BORDER, PRE_FULL_MODE_BORDER,
+        PRE_LEADING_TPS_BORDER, PRE_FULL_MODE_BORDER, PRE_RESPONSE_TIME_BORDER,
     )
     compact_count = sum(index.count(border) for border in compact_borders)
     if compact_count > 1 or (compact_count == 1) != (BADGE_IMPORT[1] in index):

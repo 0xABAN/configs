@@ -168,9 +168,10 @@ DJ replaces the old `agent-dj.ts` copy. Use `/dj theme`, `/dj layout`, and `/dj 
 The installer patches the installed powerline package so below-editor rows stay **powerline → DJ → last prompt**, without DJ replacing the prompt. After updating/reinstalling powerline, run `python3 pi/agent/patches/powerline-dj.py` from this checkout, then `/reload`. The patch skips missing installs and refuses changed upstream code rather than guessing.
 
 The footer layout patch puts model/branch on the left and reported cost plus
-an opt-in five-cell context meter on the right. Mode/effort and TPS live in the
-input's top border, not duplicated in the footer. The labels read `  build mode`
-and the prefixed effort, such as `think:xhigh`. Mode icons and names stay intact
+an opt-in five-cell context meter on the right. Mode/effort and response time
+live in the input's top border, not duplicated in the footer. The labels read
+`  build mode` and the prefixed effort, such as `think:xhigh`. Mode icons and
+names stay intact
 even in compact panes.
 The build gradient runs white → pale teal (`#daebe8`) → light beige;
 plan keeps its purple midpoint.
@@ -195,24 +196,25 @@ The editor patch adds the rounded `╭╮╰╯` frame without a second outer in
 It reserves space before text wrapping and keeps scroll indicators,
 completion rows, paste handling, and hardware cursor markers. Tiny terminals
 fall back to the host editor. Mode/effort labels interrupt the top border near
-the right corner. A warm-beige-on-deep-teal TPS badge comes first, with three
-spaces before `  build mode ❯ think:xhigh` and no chevron beside TPS. TPS yields
-first when space is tight, then thinking. If the complete mode label still
-cannot fit, the border keeps the scroll hint without any badges. Working
+the right corner. A warm-beige-on-deep-teal response-time badge comes first,
+with three spaces before `  build mode ❯ think:xhigh` and no chevron beside
+it. Response time yields first when space is tight, then thinking. If the
+complete mode label still cannot fit, the border keeps the scroll hint without
+any badges. Working
 status stays outside the box, within the shared viewport. Keep **pi-pretty before
 powerline** in `settings.json`'s packages list: both install an editor during
 `session_start`, and Pi awaits those handlers in package order. Powerline must
 run last to retain the framed editor and bash controls; pretty's output
 formatters remain active.
 
-TPS shows the latest completed main-model response, using reported output tokens
-(including reasoning) divided by observed response time. Timing starts before
-provider I/O, so it includes local request preparation and first-token wait,
-but excludes tool execution. This is response throughput, not pure decoding
-speed. The last reading stays between responses; missing usage shows `— TPS`.
-Errors/cancellations do not replace a valid reading. Reload, new sessions and
-tree navigation reset it; no timings are inferred from history or persisted.
-The badge is display-only, not a clickable control. Run `/reload` after updating
+Response time shows the latest completed main-model response's observed wall
+clock duration. Timing starts before provider I/O, so it includes local request
+preparation and first-token wait, but excludes tool execution. It is formatted
+compactly as seconds, then minutes and seconds, then hours and minutes, such as
+`0.8s`, `1m 05s`, or `2h 03m`. The last reading stays between responses;
+errors and cancellations do not replace it. Reload, new sessions and tree
+navigation reset it; no timings are inferred from history or persisted. The
+badge is display-only, not a clickable control. Run `/reload` after updating
 these local extensions and the guarded powerline editor patch.
 
 The host patch targets **Pi 0.85.1**; review it before upgrading Pi. To replay

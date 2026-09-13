@@ -108,6 +108,7 @@ for (const helper of [
   "editor-badges-before-tps.ts.inc",
   "editor-badges-before-leading-tps.ts.inc",
   "editor-badges-before-full-mode.ts.inc",
+  "editor-badges-before-response-time.ts.inc",
 ]) {
   test(`${helper} migrates exactly; partial or modified predecessors refuse writes`, () => {
     const app = sandbox(helper);
@@ -125,7 +126,10 @@ for (const helper of [
     for (const mode of ["missing-import", "modified-payload", "duplicate-payload", "mixed-payload", "partial-frame"]) {
       let index = previous;
       if (mode === "missing-import") index = index.replace(badgeImport[1], badgeImport[0]);
-      if (mode === "modified-payload") index = index.replace("const compact = width < 80", "const compact = width < 81");
+      if (mode === "modified-payload") index = previousBorder.includes("const compact = width < 80")
+        ? index.replace("const compact = width < 80", "const compact = width < 81")
+        : index.replace("const throughput = statuses?.get(\"agent-tps\") ?? \"\";",
+          "const throughput = statuses?.get(\"agent-tps\") ?? \"modified\";");
       if (mode === "duplicate-payload") index += previousBorder;
       if (mode === "mixed-payload") index += border[1];
       writeFileSync(join(app.dir, "index.ts"), index);
@@ -278,18 +282,18 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText("");
   expect(editor.render(80)[0]).toBe(top);
   statuses.set("agent-thinking", formatPlanStatus(false, "xhigh").thinking);
-  statuses.set("agent-tps", "42.1 TPS");
+  statuses.set("agent-response-time", "1m 05s");
   for (const width of [80, 120]) {
     const row = editor.render(width)[0];
     expect(plain(row)).toEndWith(" build mode ❯ think:xhigh ──╮");
-    const paintedTps = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 42.1 TPS \x1b[0m";
-    expect(row).toContain(paintedTps + "   " + statuses.get("agent-mode"));
+    const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
+    expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);
     expect(visibleWidth(row)).toBe(width);
   }
-  statuses.set("agent-tps", "— TPS");
-  expect(plain(editor.render(80)[0])).toContain(" — TPS    \uF121  build mode ❯ think:xhigh");
-  statuses.set("agent-tps", "42.1 TPS");
+  statuses.set("agent-response-time", "—");
+  expect(plain(editor.render(80)[0])).toContain(" —    \uF121  build mode ❯ think:xhigh");
+  statuses.set("agent-response-time", "1m 05s");
   editor.setText("界🙂".repeat(1000));
   for (const width of [40, 55, 80]) {
     const rows = editor.render(width);
@@ -299,11 +303,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     expect(row.includes("think:")).toBe(width > 40);
     const hint = plain(Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset)).match(/↑ \d+ more/)![0];
     expect(row).toContain(hint);
-    expect(row.includes(" 42.1 TPS "), `width ${width}: ${row}`).toBe(width >= 80);
+    expect(row.includes(" 1m 05s "), `width ${width}: ${row}`).toBe(width >= 80);
     expect(rows.every((line: string) => visibleWidth(line) <= width)).toBe(true);
     expect(rows.join("").split(marker)).toHaveLength(2);
   }
-  statuses.delete("agent-tps");
+  statuses.delete("agent-response-time");
   editor.setText("");
   const plan = formatPlanStatus(true, "high");
   statuses.set("agent-mode", plan.mode);
