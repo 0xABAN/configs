@@ -1,7 +1,8 @@
 # pi-clean
 
-Run official Pi **0.84.2**, the version used in the initial bug reports, without
-changing the normal `pi` installation. The npm lockfile pins its dependencies.
+Run official Pi **0.85.1** independently of the normal `pi` installation. The npm
+lockfile pins its dependencies. The initial bug-report recordings used 0.84.2;
+the paste/cut/submit/yank bug was also reproduced interactively on 0.85.1.
 
 ## Install
 
