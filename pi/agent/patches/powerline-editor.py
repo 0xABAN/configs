@@ -108,7 +108,7 @@ BORDER_EDIT = (
     r'''        // Read live extension statuses, retaining their original gradient bytes.
         const statuses = footerDataRef?.getExtensionStatuses();
         const badges = ["agent-mode", "agent-thinking"]
-          .map((key) => statuses?.get(key)).filter(Boolean).join(" · ");
+          .map((key) => statuses?.get(key)).filter(Boolean).join(" ❯ ");
         const badgeWidth = visibleWidth(badges);
         const topBorder = bc("╭───") + lines[0];
         const hintWidth = visibleWidth(lines[0].replace(/\x1b\[[0-9;]*m/g, "").replace(/─+$/, ""));
@@ -129,7 +129,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # Canonicalize the optional border upgrade before validating the base frame.
     # The final result restores it below, so replay leaves installed bytes intact.
     old_border, new_border = BORDER_EDIT
-    sources["index.ts"] = sources["index.ts"].replace(new_border, old_border)
+    legacy_border = new_border.replace('join(" ❯ ")', 'join(" · ")')
+    sources["index.ts"] = sources["index.ts"].replace(legacy_border, old_border).replace(new_border, old_border)
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
     # Validate it separately, still before any file is written.

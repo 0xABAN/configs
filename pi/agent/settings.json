@@ -36,7 +36,7 @@
   "powerline": {
     "preset": "default",
     "placement": "below",
-    "separator": "dot",
+    "separator": "chevron",
     "disabledSegments": [
       "extension_statuses",
       "cache_read"

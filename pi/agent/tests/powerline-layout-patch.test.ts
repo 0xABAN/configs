@@ -10,6 +10,7 @@ import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('patcher',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 m.EDITS['segments.ts'].append(m.UNSTAGED_EDIT)
+m.EDITS['index.ts'].append(m.SEPARATOR_EDIT)
 print(json.dumps({'edits':m.EDITS,'align':m.ALIGN,'meter':m.METER}))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
@@ -52,6 +53,16 @@ test("existing layouts upgrade only the unstaged count color", () => {
   const before = app.contents();
   expect(app.run().exitCode).not.toBe(0);
   expect(app.contents()).toEqual(before);
+});
+
+test("existing layouts upgrade their chevron renderer", () => {
+  const app = sandbox("chevron");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const [oldSeparator, newSeparator] = edits["index.ts"].at(-1)!;
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(newSeparator, oldSeparator));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
 });
 
 test("changed or partial anchors refuse all writes", () => {
@@ -98,6 +109,20 @@ test("context meter clamps fill and preserves unknown and approximate usage", ()
 
 // Exercise the actual installed renderer, not a second implementation of its packing.
 const installed = join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer/index.ts");
+test.skipIf(!existsSync(installed))("configured chevron uses the requested glyph without changing other styles", () => {
+  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
+  expect(settings.powerline.separator).toBe("chevron");
+  const source = readFileSync(installed, "utf8");
+  const start = source.indexOf("function buildContentFromParts(");
+  const end = source.indexOf("\n}\n", start) + 2;
+  const render = new Function("getSeparator", "getFgAnsiCode", "ansi",
+    transpiler.transformSync(source.slice(start, end)) + "\nreturn buildContentFromParts;")(
+    (style: string) => ({ left: style === "chevron" ? "›" : "·" }), () => "", { reset: "" },
+  );
+  expect(render(["model", "main"], settings.powerline.separator)).toBe(" model ❯ main ");
+  expect(render(["model", "main"], "dot")).toBe(" model · main ");
+});
+
 test.skipIf(!existsSync(installed))("installed unstaged count uses sage without changing its label", () => {
   const source = readFileSync(join(installed, "../segments.ts"), "utf8");
   const count = source.split("\n").find(line => line.includes('`*${gitStatus.unstaged}`'))!;

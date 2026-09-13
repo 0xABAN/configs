@@ -78,17 +78,23 @@ UNSTAGED_EDIT = (
 )
 
 
+SEPARATOR_EDIT = (
+    'const sep = separatorDef.left;',
+    'const sep = separatorStyle === "chevron" ? "❯" : separatorDef.left;',
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Accept a wholly original or wholly patched set, never a partial patch."""
-    # Upgrade the count color independently of an already-installed layout.
-    # Keep warning colors elsewhere intact; validate everything before writing.
+    # Small appearance upgrades also apply over an already-installed layout.
+    # Keep other warning colors and separator styles intact.
     sources = dict(sources)
-    old_count, new_count = UNSTAGED_EDIT
-    segment = sources["segments.ts"]
-    if segment.count(new_count) == 0 and segment.count(old_count) == 1:
-        sources["segments.ts"] = segment.replace(old_count, new_count, 1)
-    elif segment.count(new_count) != 1 or segment.count(old_count) != 0:
-        raise ValueError("unstaged count anchor changed or duplicated")
+    for name, (old, new) in [("segments.ts", UNSTAGED_EDIT), ("index.ts", SEPARATOR_EDIT)]:
+        source = sources[name]
+        if source.count(new) == 0 and source.count(old) == 1:
+            sources[name] = source.replace(old, new, 1)
+        elif source.count(new) != 1 or source.count(old) != 0:
+            raise ValueError(f"{name}: appearance anchor changed or duplicated")
 
     states = []
     for name, edits in EDITS.items():

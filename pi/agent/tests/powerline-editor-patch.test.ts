@@ -89,9 +89,11 @@ test("existing plain border upgrades without disturbing other source", () => {
   const app = sandbox("legacy-border");
   expect(app.run().exitCode).toBe(0);
   const current = app.contents();
-  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(border[1], border[0]));
-  expect(app.run().exitCode).toBe(0);
-  expect(app.contents()).toEqual(current);
+  for (const previous of [border[0], border[1].replace('join(" ❯ ")', 'join(" · ")')]) {
+    writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(border[1], previous));
+    expect(app.run().exitCode).toBe(0);
+    expect(app.contents()).toEqual(current);
+  }
 });
 
 test("partial or unknown editor sources fail before any write", () => {
@@ -185,14 +187,14 @@ test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrol
   }
   editor.setText("");
   const top = editor.render(80)[0];
-  expect(plain(top)).toEndWith(" build mode · think:med ──╮");
+  expect(plain(top)).toEndWith(" build mode ❯ think:med ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
   expect(top).toContain(statuses.get("agent-thinking")!);
   expect(visibleWidth(top)).toBe(80);
   expect(plain(editor.render(16)[0])).not.toContain("build mode");
   statuses.set("agent-mode", "plan mode");
   statuses.set("agent-thinking", "think:high");
-  expect(plain(editor.render(80)[0])).toEndWith(" plan mode · think:high ──╮");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ think:high ──╮");
   editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(9).every((s: string) => visibleWidth(s) <= 9)).toBe(true);
   expect(plain(editor.render(80)[0])).toContain("↑");
