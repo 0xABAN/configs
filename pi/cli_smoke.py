@@ -17,6 +17,21 @@ from agent.tests.support.intercom_fixture import write_fixture
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+def capture_screen(target):
+    screen = subprocess.check_output(["tmux", "capture-pane", "-t", target, "-p", "-e", "-S", "-500"], text=True)
+    return screen, ANSI.sub("", screen)
+
+
+def wait_for_screen(target, timeout, ready, failure):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        screen, plain = capture_screen(target)
+        if ready(screen, plain):
+            return screen, plain
+        time.sleep(0.1)
+    raise RuntimeError(failure)
+
+
 def smoke(sdk: Path, launcher: Path, config: Path, home: Path, output: Path) -> None:
     """Check host rendering with configured pi-pretty, Powerline and the real theme.
 
@@ -81,36 +96,27 @@ export default function (pi) {
         subprocess.run(["tmux", "new-session", "-d", "-s", target, "-x", "120", "-y", "36", "-c", str(work),
                         shlex.join(command) + "; exec /bin/sh"], check=True)
         try:
-            deadline = time.monotonic() + 40
             sent = False
-            while time.monotonic() < deadline:
-                screen = subprocess.check_output(["tmux", "capture-pane", "-t", target, "-p", "-e", "-S", "-500"], text=True)
+            def response_ready(screen, plain):
+                nonlocal sent
                 (run / "response-screen.ansi").write_text(screen)
-                plain = ANSI.sub("", screen)
                 (run / "response-screen.txt").write_text(plain)
                 if "Failed to load extension" in plain or "Error loading extension" in plain:
                     raise RuntimeError(f"extension startup failed: {run}")
                 if (run / "ready").exists() and not sent:
                     subprocess.run(["tmux", "send-keys", "-t", target, "CUSTOM_HOST_PROMPT", "Enter"], check=True)
                     sent = True
-                if (run / "response.json").exists() and "OFFLINE_CUSTOM_HOST_RESPONSE" in plain:
-                    break
-                time.sleep(0.1)
-            else:
-                raise RuntimeError(f"no rendered offline response: {run}")
+                return (run / "response.json").exists() and "OFFLINE_CUSTOM_HOST_RESPONSE" in plain
+
+            screen, plain = wait_for_screen(target, 40, response_ready, f"no rendered offline response: {run}")
 
             # Add a synthetic incoming message only after the faux turn has settled.
             # The actual native command/tool pipeline is used, never orphan results.
             subprocess.run(["tmux", "send-keys", "-t", target, "/intercom-fixture", "Enter"], check=True)
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline:
-                screen = subprocess.check_output(["tmux", "capture-pane", "-t", target, "-p", "-e", "-S", "-500"], text=True)
-                plain = ANSI.sub("", screen)
-                if "INTERCOM_PREVIEW" in plain:
-                    break
-                time.sleep(0.1)
-            else:
-                raise RuntimeError(f"incoming Intercom fixture did not render: {run}")
+            screen, plain = wait_for_screen(
+                target, 10, lambda _screen, plain: "INTERCOM_PREVIEW" in plain,
+                f"incoming Intercom fixture did not render: {run}",
+            )
             (run / "intercom-collapsed.ansi").write_text(screen)
             (run / "intercom-collapsed.txt").write_text(plain)
 
@@ -130,13 +136,11 @@ export default function (pi) {
                 "intercom_model_content_hidden": "INTERCOM_MODEL_CONTENT" not in plain,
             }
             subprocess.run(["tmux", "send-keys", "-t", target, "C-o"], check=True)
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline:
-                expanded = subprocess.check_output(["tmux", "capture-pane", "-t", target, "-p", "-e", "-S", "-500"], text=True)
-                expanded_plain = ANSI.sub("", expanded)
-                if "INTERCOM_ATTACHMENT" in expanded_plain and "INTERCOM_EXPANDED_DETAIL" in expanded_plain:
-                    break
-                time.sleep(0.1)
+            expanded, expanded_plain = wait_for_screen(
+                target, 10,
+                lambda _screen, plain: "INTERCOM_ATTACHMENT" in plain and "INTERCOM_EXPANDED_DETAIL" in plain,
+                f"incoming Intercom fixture did not expand: {run}",
+            )
             (run / "intercom-expanded.ansi").write_text(expanded)
             (run / "intercom-expanded.txt").write_text(expanded_plain)
             checks["intercom_expanded"] = all(text in expanded_plain for text in (
