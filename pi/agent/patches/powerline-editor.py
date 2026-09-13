@@ -99,9 +99,33 @@ PROMPT_EDIT = (
 )
 
 
+BORDER_EDIT = (
+    '''        result.push(inset + bc("╭───") + lines[0] + bc("╮"));''',
+    r'''        // Read live extension statuses, retaining their original gradient bytes.
+        const statuses = footerDataRef?.getExtensionStatuses();
+        const badges = ["agent-mode", "agent-thinking"]
+          .map((key) => statuses?.get(key)).filter(Boolean).join(" · ");
+        const badgeWidth = visibleWidth(badges);
+        const topBorder = bc("╭───") + lines[0];
+        const hintWidth = visibleWidth(lines[0].replace(/\x1b\[[0-9;]*m/g, "").replace(/─+$/, ""));
+        // Keep the complete scroll hint and corners on narrow panes; never clip badges.
+        if (badges && badgeWidth + hintWidth + 9 <= boxWidth) {
+          result.push(inset + truncateToWidth(topBorder, boxWidth - badgeWidth - 5, "")
+            + " " + badges + " " + bc("──╮"));
+        } else {
+          result.push(inset + topBorder + bc("╮"));
+        }''',
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
     sources = dict(sources)
+
+    # Canonicalize the optional border upgrade before validating the base frame.
+    # The final result restores it below, so replay leaves installed bytes intact.
+    old_border, new_border = BORDER_EDIT
+    sources["index.ts"] = sources["index.ts"].replace(new_border, old_border)
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
     # Validate it separately, still before any file is written.
@@ -130,13 +154,13 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
                 raise ValueError(f"{name}: editor anchor changed or duplicated: {old[:70]}")
     if len(set(states)) != 1:
         raise ValueError("partial editor patch; inspect before reapplying")
-    if states[0] == "patched":
-        return sources
-    result = {}
-    for name, source in sources.items():
-        for old, new in EDITS[name]:
-            source = source.replace(old, new, 1)
-        result[name] = source
+    result = dict(sources)
+    if states[0] == "original":
+        for name, source in sources.items():
+            for old, new in EDITS[name]:
+                source = source.replace(old, new, 1)
+            result[name] = source
+    result["index.ts"] = result["index.ts"].replace(old_border, new_border, 1)
     return result
 
 

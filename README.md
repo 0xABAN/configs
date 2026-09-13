@@ -117,9 +117,9 @@ DJ replaces the old `agent-dj.ts` copy. Use `/dj theme`, `/dj layout`, and `/dj 
 The installer patches the installed powerline package so below-editor rows stay **powerline → DJ → last prompt**, without DJ replacing the prompt. After updating/reinstalling powerline, run `python3 pi/agent/patches/powerline-dj.py` from this checkout, then `/reload`. The patch skips missing installs and refuses changed upstream code rather than guessing.
 
 The footer layout patch puts model/branch on the left and reported cost plus
-an opt-in five-cell context meter on the right. Mode/thinking retain their
-original gradients; they fit on the left when space permits and wrap to a
-second row on narrow panes. Subscription cost is the provider-reported
+an opt-in five-cell context meter on the right. Mode/thinking live in the
+input's top border, right-aligned with their original gradients, not duplicated
+in the footer. Subscription cost is the provider-reported
 estimate, not a subscription bill. DJ placement is unchanged.
 
 After a powerline update, run `python3 pi/agent/patches/powerline-layout.py`,
@@ -137,8 +137,10 @@ are not reflowed.
 The editor patch adds the rounded `╭╮╰╯` frame without a second outer inset.
 It reserves space before text wrapping and keeps scroll indicators,
 completion rows, paste handling, and hardware cursor markers. Tiny terminals
-fall back to the host editor. Working status and mode/thinking labels remain
-outside the box, within the shared viewport. Keep **pi-pretty before
+fall back to the host editor. Mode/thinking labels interrupt the top border
+near the right corner; when they cannot fit alongside the scroll hint, the
+border keeps the hint and omits the labels. Working status stays outside the
+box, within the shared viewport. Keep **pi-pretty before
 powerline** in `settings.json`'s packages list: both install an editor during
 `session_start`, and Pi awaits those handlers in package order. Powerline must
 run last to retain the framed editor and bash controls; pretty's output

@@ -72,7 +72,7 @@
     "layout": {
       "left": ["model", "git"],
       "right": ["cost", "context_pct"],
-      "secondary": ["custom:mode", "custom:thinking", "shell_mode", "queue"]
+      "secondary": ["shell_mode", "queue"]
     }
   },
   "skills": [

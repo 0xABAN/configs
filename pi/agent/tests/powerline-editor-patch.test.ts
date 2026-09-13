@@ -10,10 +10,13 @@ import runpy,json,sys
 patch = runpy.run_path(sys.argv[1])
 edits = patch['EDITS']
 edits['index.ts'].append(patch['PROMPT_EDIT'])
-print(json.dumps(edits))
+print(json.dumps({'edits': edits, 'border': patch['BORDER_EDIT']}))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
-const edits = JSON.parse(describe.stdout.toString()) as Record<string, [string, string][]>;
+const { edits, border } = JSON.parse(describe.stdout.toString()) as {
+  edits: Record<string, [string, string][]>;
+  border: [string, string];
+};
 const root = mkdtempSync(join(tmpdir(), "powerline-editor-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -40,6 +43,8 @@ test("powerline owns the final editor after pi-pretty installs its prompt", () =
   const powerline = packages.findIndex((source: string) => source.includes("nicobailon/pi-powerline-footer"));
   expect(pretty).toBeGreaterThanOrEqual(0);
   expect(powerline).toBeGreaterThan(pretty);
+  expect(Object.values(settings.powerline.layout).flat()).not.toContain("custom:mode");
+  expect(Object.values(settings.powerline.layout).flat()).not.toContain("custom:thinking");
 });
 
 test("editor patch is idempotent and preserves unrelated changes", () => {
@@ -75,6 +80,15 @@ test("existing framed prompt upgrades to a diamond and rejects unknown prompts",
   const before = app.contents();
   expect(app.run().exitCode).not.toBe(0);
   expect(app.contents()).toEqual(before);
+});
+
+test("existing plain border upgrades without disturbing other source", () => {
+  const app = sandbox("legacy-border");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(border[1], border[0]));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
 });
 
 test("partial or unknown editor sources fail before any write", () => {
@@ -122,21 +136,28 @@ test.skipIf(!sdk)("real package resolver preserves editor ownership order", asyn
 });
 
 test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrolling, completion and paste", async () => {
-  const { Editor, visibleWidth } = await host();
+  const { Editor, visibleWidth, truncateToWidth } = await host();
   const source = readFileSync(join(installed, "index.ts"), "utf8");
   const start = source.indexOf("      // configs:powerline-editor-v1");
   expect(start).toBeGreaterThan(0);
   const end = source.indexOf("\n      return editor;", start);
   const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
+    "footerDataRef", "visibleWidth", "truncateToWidth",
     transpiler.transformSync(source.slice(start, end)) + "\nreturn editor;");
+  const statuses = new Map([
+    ["agent-mode", "\u001b[36mbuild mode\u001b[0m"],
+    ["agent-thinking", "\u001b[36mthink:med\u001b[0m"],
+  ]);
+  const footer = { getExtensionStatuses: () => statuses };
   const tui = { terminal: { rows: 20 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
-    tui, () => "\x1b[38;2;95;168;118m", { reset: "\x1b[0m", getFgAnsi: () => "" }, false, () => false, () => "+");
+    tui, () => "\x1b[38;2;95;168;118m", { reset: "\x1b[0m", getFgAnsi: () => "" }, false, () => false, () => "+", footer, visibleWidth, truncateToWidth);
   editor.focused = true;
   expect(editor.render(80)[1]).toContain("\x1b[38;2;95;168;118m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
     const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
-      tui, () => "", { reset: "", getFgAnsi: () => "" }, bashMode, () => captureMode, () => "+");
+      tui, () => "", { reset: "", getFgAnsi: () => "" }, bashMode, () => captureMode, () => "+",
+      undefined, visibleWidth, truncateToWidth);
     expect(plain(special.render(80)[1])).toStartWith(`│ ${glyph} `);
   }
 
@@ -153,6 +174,17 @@ test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrol
       expect(editor.getText()).toBe(text);
     }
   }
+  editor.setText("");
+  const top = editor.render(80)[0];
+  expect(plain(top)).toEndWith(" build mode · think:med ──╮");
+  expect(top).toContain(statuses.get("agent-mode")!);
+  expect(top).toContain(statuses.get("agent-thinking")!);
+  expect(visibleWidth(top)).toBe(80);
+  expect(plain(editor.render(16)[0])).not.toContain("build mode");
+  statuses.set("agent-mode", "plan mode");
+  statuses.set("agent-thinking", "think:high");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode · think:high ──╮");
+  editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(9).every((s: string) => visibleWidth(s) <= 9)).toBe(true);
   expect(plain(editor.render(80)[0])).toContain("↑");
 
