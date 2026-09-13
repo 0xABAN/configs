@@ -18,8 +18,12 @@ from patch_support import (
 BASE = "dist/modes/interactive/components/"
 MODULE = BASE + "extension-dialogs.js"
 MODULE_SOURCE = read_payload('host/extension-dialogs.js.inc')
-LEGACY_MODULE_SOURCE = read_payload('host/legacy/extension-dialogs.js.inc')
-MARKER = "// configs:pi-extension-dialogs-v1"
+LEGACY_MODULE_SOURCES = (
+    read_payload('host/legacy/extension-dialogs.js.inc'),
+    read_payload('host/legacy/extension-dialogs-before-compact.js.inc'),
+)
+LEGACY_MARKER = "// configs:pi-extension-dialogs-v1"
+MARKER = "// configs:pi-extension-dialogs-v2"
 COMMON = [
     ('import { DynamicBorder } from "./dynamic-border.js";',
      'import { DialogBorder, DialogText, dialogHeading, ExtensionDialogContainer } from "./extension-dialogs.js";', 1),
@@ -69,28 +73,50 @@ EDITS = {
 }
 
 
-def transform(name: str, source: str, reverse: bool = False) -> str:
+# Both earlier helpers used the same component edits. Keep that source contract
+# separate: a new helper paired with old constructors is a partial installation.
+LEGACY_EDITS = {name: edits.copy() for name, edits in EDITS.items()}
+for name, edits in EDITS.items():
+    rows = "() => tui.terminal.rows" if name.endswith("extension-editor.js") else "() => opts?.tui?.terminal.rows"
+    edits.append(('        super();', f'        super({rows});', 1))
+EDITS[BASE + "extension-editor.js"].append((
+    'this.addChild(new DialogText(hint));',
+    '''this.addChild(new DialogText(hint, () =>
+            keyHint("tui.select.confirm", "submit") + "  " + keyHint("tui.select.cancel", "cancel") + "\\n" +
+            keyHint("tui.input.newLine", "newline") + "  " + keyHint("app.editor.external", "editor")));''',
+    1,
+))
+
+
+def transform(name: str, source: str, reverse: bool = False, *, legacy: bool = False) -> str:
     return replace_counted(
-        source, EDITS[name], f"{name}: changed/duplicate dialog anchor", reverse=reverse,
+        source, (LEGACY_EDITS if legacy else EDITS)[name],
+        f"{name}: changed/duplicate dialog anchor", reverse=reverse,
     )
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
-    states = [sources[name].count(MARKER) for name in EDITS]
-    if any(count not in (0, 1) for count in states) or len(set(states)) != 1:
+    states = [(sources[name].count(MARKER), sources[name].count(LEGACY_MARKER)) for name in EDITS]
+    if len(set(states)) != 1 or states[0] not in ((0, 0), (1, 0), (0, 1)):
         raise ValueError("partial or duplicated native dialog patch")
-    if states[0] == 1:
-        if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE):
+    if states[0] != (0, 0):
+        legacy = states[0] == (0, 1)
+        marker = LEGACY_MARKER if legacy else MARKER
+        helpers = LEGACY_MODULE_SOURCES if legacy else (MODULE_SOURCE,)
+        if sources.get(MODULE) not in helpers:
             raise ValueError("native dialog helper changed or missing")
+        result = dict(sources)
         for name in EDITS:
-            if not sources[name].startswith(MARKER + "\n"):
+            if not sources[name].startswith(marker + "\n"):
                 raise ValueError(f"{name}: native dialog marker moved")
-            source = sources[name].removeprefix(MARKER + "\n")
-            original = transform(name, source, reverse=True)
-            if transform(name, original) != source:
+            source = sources[name].removeprefix(marker + "\n")
+            original = transform(name, source, reverse=True, legacy=legacy)
+            if transform(name, original, legacy=legacy) != source:
                 raise ValueError(f"{name}: inconsistent native dialog patch")
-        # Only a fully validated installation may upgrade its exact older helper.
-        return {**sources, MODULE: MODULE_SOURCE}
+            result[name] = MARKER + "\n" + transform(name, original)
+        # Upgrade only after every component and its exact helper validate.
+        result[MODULE] = MODULE_SOURCE
+        return result
     if MODULE in sources:
         raise ValueError("unexpected native dialog helper alongside original sources")
     result = {name: MARKER + "\n" + transform(name, sources[name]) for name in EDITS}
