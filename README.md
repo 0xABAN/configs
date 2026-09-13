@@ -119,12 +119,28 @@ The footer layout patch puts model/branch on the left and reported cost plus
 an opt-in five-cell context meter on the right. Mode/thinking retain their
 original gradients; they fit on the left when space permits and wrap to a
 second row on narrow panes. Subscription cost is the provider-reported
-estimate, not a subscription bill. Editor borders and DJ placement are unchanged.
+estimate, not a subscription bill. DJ placement is unchanged.
 
 After a powerline update, run `python3 pi/agent/patches/powerline-layout.py`,
 then `/reload` in Pi. The installer also applies it. Changed or partial
 upstream anchors stop without writing; do not force the patch through an
 unreviewed update. Test with `bun test pi/agent/tests/powerline-layout-patch.test.ts`.
+
+The editor patch adds a centered, rounded `╭╮╰╯` frame with a 4% horizontal
+inset (at least two columns). It reserves space before text wrapping and
+keeps scroll indicators, completion rows, paste handling, and hardware cursor
+markers. Tiny terminals fall back to the host editor. Working status and
+mode/thinking labels remain outside the box; no competing editor is installed.
+
+Reapply with `python3 pi/agent/patches/powerline-editor.py`, then `/reload`.
+The installer runs it after the footer patches. Its row-boundary hook follows
+the current Pi host's layout contract, so rerun the real-editor integration
+checks after a Pi update:
+
+```sh
+PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
+  bun test pi/agent/tests/powerline-editor-patch.test.ts
+```
 
 ## Sync workflow
 

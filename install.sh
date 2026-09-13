@@ -100,6 +100,11 @@ if [[ -f "$ROOT/pi/agent/patches/powerline-layout.py" ]]; then
   python3 "$ROOT/pi/agent/patches/powerline-layout.py"
 fi
 
+# Frame the existing editor without replacing its input/autocomplete owner.
+if [[ -f "$ROOT/pi/agent/patches/powerline-editor.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/powerline-editor.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true

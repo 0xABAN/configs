@@ -1,0 +1,129 @@
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
+const describe = Bun.spawnSync(["python3", "-B", "-c", `
+import runpy,json,sys
+print(json.dumps(runpy.run_path(sys.argv[1])['EDITS']))
+`, patcher]);
+if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
+const edits = JSON.parse(describe.stdout.toString()) as Record<string, [string, string][]>;
+const root = mkdtempSync(join(tmpdir(), "powerline-editor-"));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+function sandbox(name: string) {
+  const home = join(root, name);
+  const dir = join(home, ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
+  for (const [file, replacements] of Object.entries(edits)) {
+    const path = join(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, replacements.map(([old]) => old).join("\n") + "\n// preserve footer layout\n");
+  }
+  return {
+    dir,
+    contents: () => Object.fromEntries(Object.keys(edits).map(file => [file, readFileSync(join(dir, file), "utf8")])),
+    run: () => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, HOME: home } }),
+  };
+}
+
+test("editor patch is idempotent and preserves unrelated changes", () => {
+  const app = sandbox("valid");
+  expect(app.run().exitCode).toBe(0);
+  const patched = app.contents();
+  expect(patched["index.ts"]).toContain("// preserve footer layout");
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(patched);
+});
+
+test("partial or unknown editor sources fail before any write", () => {
+  for (const partial of [false, true]) {
+    const app = sandbox(String(partial));
+    writeFileSync(join(app.dir, "bash-mode/editor.ts"), partial ? edits["bash-mode/editor.ts"][0][1] : "changed source");
+    const before = app.contents();
+    expect(app.run().exitCode).not.toBe(0);
+    expect(app.contents()).toEqual(before);
+  }
+});
+
+// Opt-in integration tests use the actual installed host/editor, not a geometry mock.
+// PI_SDK_ROOT=/path/to/@earendil-works/pi-coding-agent bun test <this file>
+const sdk = process.env.PI_SDK_ROOT;
+const installed = join(homedir(), ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
+const transpiler = new Bun.Transpiler({ loader: "ts" });
+const marker = "\x1b_pi:c\x07";
+const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").replaceAll(marker, "");
+
+async function host() {
+  return import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+}
+
+test.skipIf(!sdk)("real editor stays centered through wrapping, scrolling, completion and paste", async () => {
+  const { Editor, visibleWidth } = await host();
+  const source = readFileSync(join(installed, "index.ts"), "utf8");
+  const start = source.indexOf("      // configs:powerline-editor-v1");
+  expect(start).toBeGreaterThan(0);
+  const end = source.indexOf("\n      return editor;", start);
+  const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
+    transpiler.transformSync(source.slice(start, end)) + "\nreturn editor;");
+  const tui = { terminal: { rows: 20 }, requestRender() {} };
+  const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
+    tui, () => "", { reset: "", getFgAnsi: () => "" }, false, () => false, () => "+");
+  editor.focused = true;
+
+  for (const text of ["", "hello", "界🙂".repeat(30), "───\nsecond line", Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n")]) {
+    editor.setText(text);
+    for (const width of [16, 40, 80, 160]) {
+      const rows = editor.render(width);
+      const margin = Math.max(2, Math.floor(width * 0.04));
+      expect(plain(rows[0]).startsWith(" ".repeat(margin) + "╭")).toBe(true);
+      expect(plain(rows.at(-1)).endsWith("╯")).toBe(true);
+      expect(rows.every((s: string) => visibleWidth(s) <= width)).toBe(true);
+      expect(visibleWidth(rows[0])).toBe(width - margin);
+      expect(rows.join("").split(marker).length - 1).toBe(1);
+      expect(editor.getText()).toBe(text);
+    }
+  }
+  expect(editor.render(9).every((s: string) => visibleWidth(s) <= 9)).toBe(true);
+  expect(plain(editor.render(80)[0])).toContain("↑");
+
+  editor.setText("/a");
+  editor.autocompleteState = {};
+  editor.autocompleteList = { render: () => ["completion", "───"] };
+  const completed = editor.render(80).map(plain);
+  expect(completed[2].endsWith("╯")).toBe(true);
+  expect(completed[3].trim()).toBe("completion");
+  expect(completed[4].trim()).toBe("───");
+  expect(completed[3].startsWith("       ")).toBe(true);
+  editor.autocompleteState = null;
+  editor.autocompleteList = null;
+  editor.setText("");
+  editor.handleInput("\x1b[200~hello\nworld\x1b[201~");
+  expect(editor.getExpandedText()).toBe("hello\nworld");
+  expect(editor.render(40).join("")).toContain(marker);
+});
+
+test.skipIf(!sdk)("bash ghost text preserves padded cursor and avoids overwriting wrapped input", async () => {
+  const { Editor, visibleWidth, truncateToWidth } = await host();
+  const source = readFileSync(join(installed, "bash-mode/editor.ts"), "utf8");
+  const start = source.indexOf("  render(width: number): string[] {");
+  const end = source.indexOf("  private isShellCompletionContext", start);
+  const TestEditor = new Function("Editor", "visibleWidth", "truncateToWidth", transpiler.transformSync(
+    `class TestEditor extends Editor { ghost = { value: 'echo hello' }; isShellCompletionContext() { return true; }\n${source.slice(start, end)}\n}`,
+  ) + "\nreturn TestEditor;")(Editor, visibleWidth, truncateToWidth);
+  const editor = new TestEditor({ terminal: { rows: 30 }, requestRender() {} }, { borderColor: (s: string) => s }, { paddingX: 1 });
+  editor.focused = true;
+  editor.setText("echo");
+  const rows = editor.render(40);
+  expect(rows[1]).toContain(marker);
+  expect(plain(rows[1]).startsWith(" echo")).toBe(true);
+  expect(plain(rows[1])).toContain("hello");
+  expect(visibleWidth(rows[1])).toBe(40);
+  editor.setText("echo ".repeat(20));
+  editor.ghost.value = editor.getText() + "suffix";
+  const wrapped = editor.render(25);
+  expect(wrapped[1]).not.toContain("suffix");
+  expect(wrapped.join("")).toContain(marker);
+});
