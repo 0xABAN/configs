@@ -169,9 +169,10 @@ The installer patches the installed powerline package so below-editor rows stay 
 
 The footer layout patch puts model/branch on the left and reported cost plus
 an opt-in five-cell context meter on the right. Mode/effort and TPS live in the
-input's top border, not duplicated in the footer. The labels read `edit mode`
-(`edit` in compact panes) and the bare effort, such as `xhigh`. The edit gradient
-runs white → jade teal (`#439187`) → light beige; plan keeps its purple midpoint.
+input's top border, not duplicated in the footer. The labels read `build mode`
+(`build` in compact panes) and the prefixed effort, such as `think:xhigh`.
+The build gradient runs white → pale teal (`#daebe8`) → light beige;
+plan keeps its purple midpoint.
 The context ball shares
 the meter's color, including warning/critical states, and remains visible when
 cost is hidden. Subscription cost is the provider-reported
@@ -193,7 +194,8 @@ The editor patch adds the rounded `╭╮╰╯` frame without a second outer in
 It reserves space before text wrapping and keeps scroll indicators,
 completion rows, paste handling, and hardware cursor markers. Tiny terminals
 fall back to the host editor. Mode/effort labels interrupt the top border near
-the right corner, followed by a warm-beige-on-deep-teal TPS badge. TPS yields
+the right corner. A warm-beige-on-deep-teal TPS badge comes first, with three
+spaces before `build mode ❯ think:xhigh` and no chevron beside TPS. TPS yields
 first when space is tight; if the labels still cannot fit, the border keeps
 the scroll hint. Working status stays outside the
 box, within the shared viewport. Keep **pi-pretty before

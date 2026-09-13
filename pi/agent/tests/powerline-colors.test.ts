@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { planModeHarness } from "./support/plan-mode-harness";
 
-test("edit and bare thinking labels share jade and purple plan gradients", async () => {
+test("mode and thinking share softened build and purple plan gradients", async () => {
 	const app = planModeHarness([], ["read", "bash", "edit", "write"]);
 	const { statuses, ctx } = app;
 
@@ -12,26 +12,25 @@ test("edit and bare thinking labels share jade and purple plan gradients", async
 		expect(rendered.replace(/\x1b\[[0-9;]*m/g, "")).toBe(label);
 		expect(colors[0]).toBe(first);
 		expect(colors.at(-1)).toBe(last);
-		expect(new Set(colors).size).toBeGreaterThanOrEqual(3);
+		expect(new Set(colors).size).toBeGreaterThan(3);
 		expect(rendered.endsWith("\x1b[0m")).toBe(true);
 		return colors;
 	}
 
 	await app.event("session_start");
-	const edit = check("agent-mode", "\uF121  edit mode", "255;255;255", "243;238;223");
-	expect(edit[4]).toBe("67;145;135");
-	const thinking = check("agent-thinking", "med", "255;255;255", "243;238;223");
-	expect(thinking[1]).toBe("67;145;135");
+	check("agent-mode", "\uF121  build mode", "255;255;255", "243;238;223");
+	const build = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
+	expect(build[4]).toBe("218;235;232");
 
 	await app.toggle();
 	check("agent-mode", "\uF022  plan mode", "255;255;255", "243;238;223");
-	const plan = check("agent-thinking", "med", "255;255;255", "243;238;223");
-	expect(plan[1]).toBe("196;160;230");
+	const plan = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
+	expect(plan[4]).toBe("196;160;230");
 
 	for (const level of ["off", "minimal", "low", "high", "xhigh", "max"]) {
 		ctx.thinkingLevel = level;
 		await app.event("thinking_level_select");
-		check("agent-thinking", level === "minimal" ? "min" : level, "255;255;255", "243;238;223");
+		check("agent-thinking", `think:${level === "minimal" ? "min" : level}`, "255;255;255", "243;238;223");
 	}
 
 	const { colors } = JSON.parse(readFileSync(new URL("../extensions/powerline-footer/theme.json", import.meta.url), "utf8"));

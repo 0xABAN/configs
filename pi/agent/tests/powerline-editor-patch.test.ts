@@ -103,7 +103,11 @@ test("existing plain border upgrades without disturbing other source", () => {
   }
 });
 
-for (const helper of ["editor-badges-before-centered-scroll.ts.inc", "editor-badges-before-tps.ts.inc"]) {
+for (const helper of [
+  "editor-badges-before-centered-scroll.ts.inc",
+  "editor-badges-before-tps.ts.inc",
+  "editor-badges-before-leading-tps.ts.inc",
+]) {
   test(`${helper} migrates exactly; partial or modified predecessors refuse writes`, () => {
     const app = sandbox(helper);
     expect(app.run().exitCode).toBe(0);
@@ -244,11 +248,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   }
   editor.setText("");
   const top = editor.render(80)[0];
-  expect(plain(top)).toEndWith(" edit mode ❯ med ──╮");
+  expect(plain(top)).toEndWith(" build mode ❯ think:med ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
   expect(top).toContain(statuses.get("agent-thinking")!);
   expect(visibleWidth(top)).toBe(80);
-  expect(plain(editor.render(16)[0])).not.toContain("edit mode");
+  expect(plain(editor.render(16)[0])).not.toContain("build mode");
   for (const height of [12, 20, 30, 12]) {
     tui.terminal.rows = height;
     for (const width of [40, 55, 70, 100, 40]) {
@@ -261,11 +265,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       const hint = plain(nativeBorder).match(/↑ \d+ more/)![0];
       expect(plain(rows[0])).toContain(hint);
       expect(plain(rows[0])).toStartWith("╭────── ↑ ");
-      expect(plain(rows[0])).toContain("edit");
+      expect(plain(rows[0])).toContain("build");
       expect(plain(rows[0])).toContain("med");
       expect(rows[0]).toContain("\x1b[0m ❯ ");
       expect(rows[0].match(/\x1b\[38;2;/g)!.length).toBeGreaterThan(5);
-      expect(plain(rows[0]).includes("edit mode")).toBe(width >= 80 && height >= 24);
+      expect(plain(rows[0]).includes("build mode")).toBe(width >= 80 && height >= 24);
       expect(editor.getText()).toBe("界🙂".repeat(1000));
     }
   }
@@ -276,31 +280,33 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   statuses.set("agent-tps", "42.1 TPS");
   for (const width of [80, 120]) {
     const row = editor.render(width)[0];
-    expect(plain(row)).toEndWith(" edit mode ❯ xhigh ❯  42.1 TPS  ──╮");
-    expect(row).toContain("\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 42.1 TPS \x1b[0m");
+    expect(plain(row)).toEndWith(" build mode ❯ think:xhigh ──╮");
+    const paintedTps = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 42.1 TPS \x1b[0m";
+    expect(row).toContain(paintedTps + "   " + statuses.get("agent-mode"));
+    expect(plain(row).match(/❯/g)).toHaveLength(1);
     expect(visibleWidth(row)).toBe(width);
   }
   statuses.set("agent-tps", "— TPS");
-  expect(plain(editor.render(80)[0])).toContain(" xhigh ❯  — TPS ");
+  expect(plain(editor.render(80)[0])).toContain(" — TPS    \uF121  build mode ❯ think:xhigh");
   statuses.set("agent-tps", "42.1 TPS");
   editor.setText("界🙂".repeat(1000));
   for (const width of [40, 55, 80]) {
     const rows = editor.render(width);
     const row = plain(rows[0]);
-    expect(row).toContain("edit");
+    expect(row).toContain("build");
     expect(row).toContain("xhigh");
-    expect(row).not.toContain("think:");
+    expect(row.includes("think:")).toBe(width > 40);
     const hint = plain(Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset)).match(/↑ \d+ more/)![0];
     expect(row).toContain(hint);
-    expect(row.includes(" 42.1 TPS ")).toBe(width > 40);
+    expect(row.includes(" 42.1 TPS "), `width ${width}: ${row}`).toBe(width > 40);
     expect(rows.every((line: string) => visibleWidth(line) <= width)).toBe(true);
     expect(rows.join("").split(marker)).toHaveLength(2);
   }
   statuses.delete("agent-tps");
   editor.setText("");
   statuses.set("agent-mode", "plan mode");
-  statuses.set("agent-thinking", "high");
-  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ high ──╮");
+  statuses.set("agent-thinking", "think:high");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ think:high ──╮");
   editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(9).every((s: string) => visibleWidth(s) <= 9)).toBe(true);
   expect(plain(editor.render(80)[0])).toContain("↑");
