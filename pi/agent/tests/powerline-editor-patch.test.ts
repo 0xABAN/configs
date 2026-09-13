@@ -7,11 +7,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const { edits, border, legacyPrompt } = describePatch<{
+const { edits, border, legacyBorder, badgeImport, legacyPrompt } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
+  legacyBorder: [string, string];
+  badgeImport: [string, string];
   legacyPrompt: string;
-}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyPrompt':m['LEGACY_PROMPT']}",
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT']}",
   "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
 const root = temporaryDirectory("powerline-editor-");
 const sdk = process.env.PI_SDK_ROOT;
@@ -29,7 +31,8 @@ function sandbox(name: string) {
   for (const [file, replacements] of Object.entries(edits)) {
     const path = join(dir, file);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, replacements.map(([old]) => old).join("\n") + "\n// preserve footer layout\n");
+    writeFileSync(path, replacements.map(([old]) => old).join("\n")
+      + (file === "index.ts" ? `\n${badgeImport[0]}\n` : "") + "\n// preserve footer layout\n");
   }
   return {
     dir,
@@ -92,10 +95,27 @@ test("existing plain border upgrades without disturbing other source", () => {
   const app = sandbox("legacy-border");
   expect(app.run().exitCode).toBe(0);
   const current = app.contents();
-  for (const previous of [border[0], border[1].replace('join(" ❯ ")', 'join(" · ")')]) {
-    writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(border[1], previous));
+  for (const previous of [border[0], legacyBorder[1], legacyBorder[1].replace('join(" ❯ ")', 'join(" · ")')]) {
+    writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
+      .replace(border[1], previous).replace(badgeImport[1], badgeImport[0]));
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
+  }
+});
+
+test("partial or modified compact badges refuse writes", () => {
+  const app = sandbox("compact-partial");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  for (const index of [
+    current["index.ts"].replace(badgeImport[1], badgeImport[0]),
+    current["index.ts"].replace(border[1], legacyBorder[1]),
+    current["index.ts"].replace("const compact = width < 80", "const compact = width < 81"),
+  ]) {
+    writeFileSync(join(app.dir, "index.ts"), index);
+    const before = app.contents();
+    expect(app.run().exitCode).not.toBe(0);
+    expect(app.contents()).toEqual(before);
   }
 });
 
@@ -141,24 +161,26 @@ realTest("real package resolver preserves editor ownership order", async () => {
 });
 
 realTest("real editor fills the shared viewport through wrapping, scrolling, completion and paste", async () => {
-  const { Editor, visibleWidth, truncateToWidth } = await host();
+  const { Editor, visibleWidth, truncateToWidth, sliceByColumn } = await host();
   const text = source("index.ts");
   const start = text.indexOf("      // configs:powerline-editor-v1");
   expect(start).toBeGreaterThan(0);
   const end = text.indexOf("\n      return editor;", start);
   const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
-    "footerDataRef", "visibleWidth", "truncateToWidth",
+    "footerDataRef", "visibleWidth", "truncateToWidth", "sliceByColumn",
     transpiler.transformSync(text.slice(start, end)) + "\nreturn editor;");
+  const { formatPlanStatus } = await import("../extensions/plan-mode/status");
+  const gradient = formatPlanStatus(false, "medium");
   const statuses = new Map([
-    ["agent-mode", "\u001b[36mbuild mode\u001b[0m"],
-    ["agent-thinking", "\u001b[36mthink:med\u001b[0m"],
+    ["agent-mode", gradient.mode],
+    ["agent-thinking", gradient.thinking],
   ]);
   const footer = { getExtensionStatuses: () => statuses };
-  const tui = { terminal: { rows: 20 }, requestRender() {} };
+  const tui = { terminal: { rows: 30 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
     tui, () => "\x1b[38;2;95;168;118m",
     { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
-    false, () => false, () => "+", footer, visibleWidth, truncateToWidth);
+    false, () => false, () => "+", footer, visibleWidth, truncateToWidth, sliceByColumn);
   editor.focused = true;
   expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
@@ -166,7 +188,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       tui, () => "\x1b[38;2;95;168;118m",
       { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
       bashMode, () => captureMode, () => "+",
-      undefined, visibleWidth, truncateToWidth);
+      undefined, visibleWidth, truncateToWidth, sliceByColumn);
     const row = special.render(80)[1];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
@@ -192,6 +214,25 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   expect(top).toContain(statuses.get("agent-thinking")!);
   expect(visibleWidth(top)).toBe(80);
   expect(plain(editor.render(16)[0])).not.toContain("build mode");
+  for (const height of [12, 20, 30, 12]) {
+    tui.terminal.rows = height;
+    for (const width of [40, 55, 70, 100, 40]) {
+      editor.setText("界🙂".repeat(1000));
+      const rows = editor.render(width);
+      expect(rows.every((row: string) => visibleWidth(row) <= width)).toBe(true);
+      expect(rows.join("").split(marker)).toHaveLength(2);
+      expect(plain(rows[0])).toContain("↑");
+      expect(plain(rows[0])).toContain("build");
+      expect(plain(rows[0])).toContain("med");
+      expect(rows[0]).toContain("\x1b[0m ❯ ");
+      expect(rows[0].match(/\x1b\[38;2;/g)!.length).toBeGreaterThan(5);
+      expect(plain(rows[0]).includes("build mode")).toBe(width >= 80 && height >= 24);
+      expect(editor.getText()).toBe("界🙂".repeat(1000));
+    }
+  }
+  tui.terminal.rows = 30;
+  editor.setText("");
+  expect(editor.render(80)[0]).toBe(top);
   statuses.set("agent-mode", "plan mode");
   statuses.set("agent-thinking", "think:high");
   expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ think:high ──╮");
@@ -202,12 +243,17 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText("/a");
   editor.autocompleteState = {};
   editor.autocompleteList = { render: () => ["completion", "───"] };
-  const completed = editor.render(80).map(plain);
-  expect(completed[2].endsWith("╯")).toBe(true);
-  expect(completed[3].trim()).toBe("completion");
-  expect(completed[4].trim()).toBe("───");
-  // Four columns for the frame/prompt, plus the host's one-column input padding.
-  expect(completed[3].indexOf("completion")).toBe(5);
+  for (const height of [12, 30]) {
+    tui.terminal.rows = height;
+    for (const width of [40, 80]) {
+      const completed = editor.render(width).map(plain);
+      expect(completed[2].endsWith("╯")).toBe(true);
+      expect(completed[3].trim()).toBe("completion");
+      expect(completed[4].trim()).toBe("───");
+      // Four columns for the frame/prompt, plus native input padding.
+      expect(completed[3].indexOf("completion")).toBe(5);
+    }
+  }
   editor.autocompleteState = null;
   editor.autocompleteList = null;
   editor.setText("");

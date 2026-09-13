@@ -7,10 +7,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-layout.py", import.meta.url));
-const { edits, align, meter, legacyAlign, legacySeparator, legacyMeter } = describePatch<{
+const { edits, compactEdits, align, meter, legacyAlign, legacySeparator, legacyMeter } = describePatch<{
   edits: Record<string, [string, string][]>; align: string; meter: string;
   legacyAlign: string; legacySeparator: string; legacyMeter: string;
-}>(patcher, "{'edits':m['EDITS'],'align':m['ALIGN'],'meter':m['METER'],'legacyAlign':m['LEGACY_ALIGN'],'legacySeparator':m['LEGACY_SEPARATOR'],'legacyMeter':m['LEGACY_METER']}", `
+  compactEdits: [string, string][];
+}>(patcher, "{'edits':m['EDITS'],'compactEdits':m['COMPACT_EDITS'],'align':m['ALIGN'],'meter':m['METER'],'legacyAlign':m['LEGACY_ALIGN'],'legacySeparator':m['LEGACY_SEPARATOR'],'legacyMeter':m['LEGACY_METER']}", `
 m['EDITS']['segments.ts'].append(m['UNSTAGED_EDIT'])
 m['EDITS']['index.ts'].extend([m['SEPARATOR_JOIN_EDIT'], m['SEPARATOR_ARGUMENT_EDIT'], m['SEPARATOR_EDIT']])
 `);
@@ -29,7 +30,9 @@ function sandbox(name: string) {
   const dir = join(home, ".pi/agent/git/github.com/nicobailon/pi-powerline-footer");
   mkdirSync(dir, { recursive: true });
   for (const [file, replacements] of Object.entries(edits)) {
-    writeFileSync(join(dir, file), replacements.map(([old]) => old).join("\n") + "\n// existing DJ patch\n");
+    const anchors = replacements.map(([old]) => old);
+    if (file === "index.ts") anchors.push(...compactEdits.map(([old]) => old));
+    writeFileSync(join(dir, file), anchors.join("\n") + "\n// existing DJ patch\n");
   }
   const run = () => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, HOME: home } });
   const contents = () => Object.fromEntries(Object.keys(edits).map(file => [file, readFileSync(join(dir, file), "utf8")]));
@@ -90,6 +93,28 @@ test("existing right-hand groups upgrade to the green ball separator", () => {
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
   }
+});
+
+test("complete pre-compact layouts migrate, partial compact layouts refuse writes", () => {
+  const app = sandbox("compact-migration");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  let previous = current["index.ts"];
+  for (const [old, next] of compactEdits) previous = previous.replace(next, old);
+  writeFileSync(join(app.dir, "index.ts"), previous);
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+
+  for (const [old, next] of compactEdits) {
+    writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(next, old));
+    const before = app.contents();
+    expect(app.run().exitCode).not.toBe(0);
+    expect(app.contents()).toEqual(before);
+  }
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace("width < 60", "width < 61"));
+  const modified = app.contents();
+  expect(app.run().exitCode).not.toBe(0);
+  expect(app.contents()).toEqual(modified);
 });
 
 test("changed or partial anchors refuse all writes", () => {
@@ -200,19 +225,21 @@ realTest("patched unstaged count uses sage without changing its label", () => {
   );
   expect(indicators).toEqual(["#85877e:*3"]);
 });
-realTest("patched layout preserves right alignment through narrow overflow", () => {
+realTest("patched layout preserves right alignment with a single compact row", async () => {
   const text = source("index.ts");
-  const start = text.indexOf("/** Render a single segment");
+  const start = text.indexOf("// configs:powerline-compact-v1");
   const end = text.indexOf("// Extension\n", start);
   expect(start).toBeGreaterThan(0);
   expect(end).toBeGreaterThan(start);
   const js = transpiler.transformSync(text.slice(start, end));
   const config = { separator: "dot" };
-  const compute = new Function("config", "renderSegment", "visibleWidth", "getSeparator", "getFgAnsiCode", "ansi", "mergeSegmentsWithCustomItems",
+  const { truncateToWidth } = await import(`${process.env.PI_SDK_ROOT}/node_modules/@earendil-works/pi-tui/dist/index.js`);
+  const compute = new Function("config", "renderSegment", "visibleWidth", "getSeparator", "getFgAnsiCode", "ansi", "mergeSegmentsWithCustomItems", "truncateToWidth",
     js + "\nreturn computeResponsiveLayout;")(
     config, (id: string) => ({ visible: id !== "hidden", content: id === "meter" ? "● meter" : id }), Bun.stringWidth,
     () => ({ left: "·" }), () => "", { reset: "" },
     () => ({ leftSegments: ["model", "branch", "hidden"], rightSegments: ["cost", "meter"], secondarySegments: ["mode"] }),
+    truncateToWidth,
   );
   const wide = compute({}, {}, 80);
   expect(wide.topContent).toBe(" model · branch · mode" + " ".repeat(45) + "cost ● meter ");
@@ -222,5 +249,8 @@ realTest("patched layout preserves right alignment through narrow overflow", () 
     expect(Bun.stringWidth(rows.topContent)).toBeLessThanOrEqual(width);
     expect(Bun.stringWidth(rows.secondaryContent)).toBeLessThanOrEqual(width);
   }
-  expect(compute({}, {}, 16).secondaryContent.endsWith("cost ● meter ")).toBe(true);
+  expect(compute({}, {}, 16).secondaryContent).toBe("");
+  expect(compute({}, {}, 16).topContent).toContain("model");
+  expect(compute({}, {}, 80, 12).secondaryContent).toBe("");
+  expect(compute({}, {}, 80, 30)).toEqual(wide);
 });

@@ -6,6 +6,8 @@ visible input rows (30% of terminal height, minimum five), then completion rows.
 """
 from pathlib import Path
 
+from patch_support import read_payload
+
 
 EDITS = {
     "index.ts": [
@@ -103,7 +105,7 @@ LEGACY_PROMPT = '''        const promptGlyph = bashModeActive ? "$" : captureDra
         const promptColor = bashModeActive ? ansi.getFgAnsi(200, 200, 200) : getFgAnsiCode("queue");'''
 
 
-BORDER_EDIT = (
+LEGACY_BORDER_EDIT = (
     '''        result.push(inset + bc("╭───") + lines[0] + bc("╮"));''',
     r'''        // Read live extension statuses, retaining their original gradient bytes.
         const statuses = footerDataRef?.getExtensionStatuses();
@@ -122,6 +124,13 @@ BORDER_EDIT = (
 )
 
 
+BORDER_EDIT = (LEGACY_BORDER_EDIT[0], read_payload("powerline/editor-badges.ts.inc").rstrip("\n"))
+BADGE_IMPORT = (
+    "SelectList, truncateToWidth,",
+    "SelectList, sliceByColumn, truncateToWidth,",
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
     sources = dict(sources)
@@ -129,8 +138,20 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # Canonicalize the optional border upgrade before validating the base frame.
     # The final result restores it below, so replay leaves installed bytes intact.
     old_border, new_border = BORDER_EDIT
-    legacy_border = new_border.replace('join(" ❯ ")', 'join(" · ")')
-    sources["index.ts"] = sources["index.ts"].replace(legacy_border, old_border).replace(new_border, old_border)
+    index = sources["index.ts"]
+    if (new_border in index) != (BADGE_IMPORT[1] in index):
+        raise ValueError("partial compact editor badge patch")
+    border_variants = [new_border, LEGACY_BORDER_EDIT[1],
+                       LEGACY_BORDER_EDIT[1].replace('join(" ❯ ")', 'join(" · ")')]
+    for variant in border_variants:
+        index = index.replace(variant, old_border)
+
+    old_import, new_import = BADGE_IMPORT
+    if index.count(new_import) == 1 and index.count(old_import) == 0:
+        index = index.replace(new_import, old_import, 1)
+    elif index.count(old_import) != 1 or index.count(new_import) != 0:
+        raise ValueError("editor badge import changed or duplicated")
+    sources["index.ts"] = index
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
     # Validate it separately, still before any file is written.
@@ -167,7 +188,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             for old, new in EDITS[name]:
                 source = source.replace(old, new, 1)
             result[name] = source
-    result["index.ts"] = result["index.ts"].replace(old_border, new_border, 1)
+    result["index.ts"] = (result["index.ts"].replace(old_border, new_border, 1)
+                          .replace(old_import, new_import, 1))
     return result
 
 

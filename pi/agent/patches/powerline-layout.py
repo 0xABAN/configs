@@ -88,7 +88,79 @@ SEPARATOR_JOIN_EDIT = (
 )
 
 
+COMPACT_EDITS = [
+    ("/** Render a single segment and return its content with width */",
+     read_payload("powerline/compact-layout.ts.inc") + "\n/** Render a single segment and return its content with width */"),
+    ("  availableWidth: number\n): { topContent: string; secondaryContent: string } {",
+     "  availableWidth: number,\n  availableRows = Infinity\n): { topContent: string; secondaryContent: string } {"),
+    ("  const primaryIds = [...mergedSegments.leftSegments, ...mergedSegments.rightSegments];",
+     "  if (availableWidth < 80 || availableRows < 24) {\n"
+     "    return computeCompactLayout(ctx, mergedSegments, separatorStyle, availableWidth);\n"
+     "  }\n\n  const primaryIds = [...mergedSegments.leftSegments, ...mergedSegments.rightSegments];"),
+    ("  let lastLayoutWidth = 0;", "  let lastLayoutWidth = 0;\n  let lastLayoutRows = Infinity;"),
+    ("function getResponsiveLayout(width: number, theme: Theme)",
+     "function getResponsiveLayout(width: number, theme: Theme, rows = Infinity)"),
+    ("lastLayoutResult && lastLayoutWidth === width", "lastLayoutResult && lastLayoutWidth === width && lastLayoutRows === rows"),
+    ("    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, width);",
+     "    lastLayoutRows = rows;\n    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, width, rows);"),
+    ("function renderPowerlinePrimaryLines(width: number, theme: Theme)",
+     "function renderPowerlinePrimaryLines(width: number, theme: Theme, rows = Infinity)"),
+    ("function renderPowerlineSecondaryLines(width: number, theme: Theme)",
+     "function renderPowerlineSecondaryLines(width: number, theme: Theme, rows = Infinity)"),
+    ("    const layout = getResponsiveLayout(width, theme);\n    return layout.topContent",
+     "    const layout = getResponsiveLayout(width, theme, rows);\n    return layout.topContent"),
+    ("    const layout = getResponsiveLayout(width, theme);\n    return layout.secondaryContent",
+     "    const layout = getResponsiveLayout(width, theme, rows);\n    return layout.secondaryContent"),
+    ("return renderPowerlinePrimaryLines(width, theme);", "return renderPowerlinePrimaryLines(width, theme, _tui.terminal.rows);"),
+    ("return renderPowerlineSecondaryLines(width, theme);", "return renderPowerlineSecondaryLines(width, theme, _tui.terminal.rows);"),
+    ("function renderBashTranscriptLines(width: number, theme: Theme)",
+     "function renderBashTranscriptLines(width: number, theme: Theme, rows = Infinity)"),
+    ("return renderBashTranscriptLines(width, theme);", "return renderBashTranscriptLines(width, theme, _tui.terminal.rows);"),
+    ("    if (snapshot.commands.length === 0) return [];",
+     "    if (snapshot.commands.length === 0) return [];\n\n" + read_payload("powerline/compact-bash.ts.inc").rstrip("\n")),
+    ("function renderPowerlineQueuePreviewLines(width: number, theme: Theme)",
+     "function renderPowerlineQueuePreviewLines(width: number, theme: Theme, rows = Infinity)"),
+    ("return renderPowerlineQueuePreviewLines(width, theme);", "return renderPowerlineQueuePreviewLines(width, theme, _tui.terminal.rows);"),
+    ("    if (!summary.leadingText) return [];",
+     read_payload("powerline/compact-queue.ts.inc") + "    if (!summary.leadingText) return [];"),
+    ("    if (bashModeActive || !showLastPrompt || !lastUserPrompt) return [];",
+     "    // The footer factory owns tuiRef; keep the DJ-owned widget byte-identical.\n"
+     "    if ((tuiRef?.terminal.rows ?? Infinity) < 24) return [];\n"
+     "    if (bashModeActive || !showLastPrompt || !lastUserPrompt) return [];"),
+    ("      if (visibleWidth(lineContent) <= width) {\n        notifications.push(lineContent);\n      }",
+     "      if (width < 80) {\n        notifications.push(truncateToWidth(lineContent, width, \"…\"));\n"
+     "      } else if (visibleWidth(lineContent) <= width) {\n        notifications.push(lineContent);\n      }"),
+]
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+    """Upgrade a complete earlier layout or replay the complete compact variant."""
+    sources = dict(sources)
+    index = sources["index.ts"]
+    compact_states = []
+    for old, new in COMPACT_EDITS:
+        # Replacements can contain their own original anchor. Ignore that one,
+        # but still reject stray originals and duplicate/modified replacements.
+        if index.count(new) == 1 and old not in index.replace(new, "", 1):
+            compact_states.append("patched")
+        elif index.count(new) == 0 and index.count(old) == 1:
+            compact_states.append("original")
+        else:
+            raise ValueError(f"compact powerline anchor changed or duplicated: {old[:70]}")
+    if len(set(compact_states)) != 1:
+        raise ValueError("partial compact powerline patch; inspect before reapplying")
+    if compact_states[0] == "patched":
+        for old, new in COMPACT_EDITS:
+            index = index.replace(new, old, 1)
+        sources["index.ts"] = index
+
+    result = patch_layout_sources(sources)
+    for old, new in COMPACT_EDITS:
+        result["index.ts"] = result["index.ts"].replace(old, new, 1)
+    return result
+
+
+def patch_layout_sources(sources: dict[str, str]) -> dict[str, str]:
     """Accept a wholly original or wholly patched set, never a partial patch."""
     # Small appearance upgrades also apply over an already-installed layout.
     # Keep other warning colors and separator styles intact.
