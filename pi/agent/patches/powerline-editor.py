@@ -91,11 +91,29 @@ EDITS = {
 }
 
 
+PROMPT_EDIT = (
+    '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : ">";
+        const promptColor = captureDraft ? getFgAnsiCode("queue") : ansi.getFgAnsi(200, 200, 200);''',
+    '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : "◆";
+        const promptColor = bashModeActive ? ansi.getFgAnsi(200, 200, 200) : getFgAnsiCode("queue");''',
+)
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
+    sources = dict(sources)
+
+    # The prompt can upgrade an already-framed editor or a fresh installation.
+    # Validate it separately, still before any file is written.
+    old_prompt, new_prompt = PROMPT_EDIT
+    index = sources["index.ts"]
+    if index.count(new_prompt) == 0 and index.count(old_prompt) == 1:
+        sources["index.ts"] = index.replace(old_prompt, new_prompt, 1)
+    elif index.count(new_prompt) != 1 or index.count(old_prompt) != 0:
+        raise ValueError("editor prompt anchor changed or duplicated")
+
     # Upgrade the complete earlier editor patch without stacking its 4% gutter
     # inside the host's new 2% gutter. All anchors are still validated below.
-    sources = dict(sources)
     sources["index.ts"] = sources["index.ts"].replace(
         "const margin = Math.max(2, Math.floor(width * 0.04));",
         "const margin = 0; // The Pi host owns the shared outer inset.",

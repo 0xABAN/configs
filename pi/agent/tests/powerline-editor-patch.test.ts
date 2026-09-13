@@ -7,7 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
 const describe = Bun.spawnSync(["python3", "-B", "-c", `
 import runpy,json,sys
-print(json.dumps(runpy.run_path(sys.argv[1])['EDITS']))
+patch = runpy.run_path(sys.argv[1])
+edits = patch['EDITS']
+edits['index.ts'].append(patch['PROMPT_EDIT'])
+print(json.dumps(edits))
 `, patcher]);
 if (describe.exitCode !== 0) throw new Error(describe.stderr.toString());
 const edits = JSON.parse(describe.stdout.toString()) as Record<string, [string, string][]>;
@@ -58,6 +61,20 @@ test("existing editor inset migrates without double-padding the shared viewport"
   ));
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(current);
+});
+
+test("existing framed prompt upgrades to a diamond and rejects unknown prompts", () => {
+  const app = sandbox("legacy-prompt");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const [oldPrompt, newPrompt] = edits["index.ts"].at(-1)!;
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(newPrompt, oldPrompt));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(newPrompt, "unknown prompt"));
+  const before = app.contents();
+  expect(app.run().exitCode).not.toBe(0);
+  expect(app.contents()).toEqual(before);
 });
 
 test("partial or unknown editor sources fail before any write", () => {
@@ -114,8 +131,14 @@ test.skipIf(!sdk)("real editor fills the shared viewport through wrapping, scrol
     transpiler.transformSync(source.slice(start, end)) + "\nreturn editor;");
   const tui = { terminal: { rows: 20 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
-    tui, () => "", { reset: "", getFgAnsi: () => "" }, false, () => false, () => "+");
+    tui, () => "\x1b[38;2;95;168;118m", { reset: "\x1b[0m", getFgAnsi: () => "" }, false, () => false, () => "+");
   editor.focused = true;
+  expect(editor.render(80)[1]).toContain("\x1b[38;2;95;168;118m◆\x1b[0m");
+  for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
+    const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
+      tui, () => "", { reset: "", getFgAnsi: () => "" }, bashMode, () => captureMode, () => "+");
+    expect(plain(special.render(80)[1])).toStartWith(`│ ${glyph} `);
+  }
 
   for (const text of ["", "hello", "界🙂".repeat(30), "───\nsecond line", Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n")]) {
     editor.setText(text);
