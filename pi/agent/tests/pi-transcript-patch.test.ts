@@ -9,6 +9,7 @@ const patcher = fileURLToPath(new URL("../patches/pi-transcript.py", import.meta
 const { edits, module: modulePath } = describePatch<{ edits: Record<string, [string, string][]>; module: string }>(
   patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
 const previousLookup = describePatch<[string, string]>(patcher, "m['PRE_INTERCOM_LOOKUP']");
+const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
 const temp = temporaryDirectory("pi-transcript-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -153,6 +154,24 @@ test("the installed pre-Intercom lookup migrates with exact helper guards and ba
   expect(readdirSync(backupRoot)).toHaveLength(2);
 });
 
+test("the installed pre-reset background helper migrates with an exact backup", () => {
+  const root = sandbox("pre-background-reset");
+  expect(run(root).exitCode).toBe(0);
+  const current = contents(root);
+  writeFileSync(join(root, modulePath), previousBackground);
+  const backupRoot = join(root, ".config/theme-backups");
+  const beforeBackups = readdirSync(backupRoot);
+
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backupRoot, added[0], modulePath), "utf8")).toBe(previousBackground);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  expect(readdirSync(backupRoot)).toHaveLength(beforeBackups.length + 1);
+});
+
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
   const before = contents(root);
@@ -266,6 +285,11 @@ realTest("user messages use a live dark background without a cream separator", a
   app.renderSessionItems(messages);
   const children = [...app.chatContainer.children];
   const background = m.colors.theme.getBgAnsi("userMessageBg");
+  const styledUser = new m.TranscriptContainer(() => 0, () => 40);
+  styledUser.addChild({ transcriptRole: "user", render: () => [`\x1b[1m◆ You\x1b[0m`] });
+  const styledRow = styledUser.render(20)[0];
+  expect(styledRow).toContain(`\x1b[0m${background}`);
+
   const wideAnswer = app.chatContainer.render(120)
     .find((line: string) => m.tui.stripTerminalSequences(line).includes("An answer"));
   expect(wideAnswer).toBeDefined();

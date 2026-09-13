@@ -28,6 +28,20 @@ PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-n
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
 PRE_USER_BACKGROUND_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-background.js.inc')
+_USER_BACKGROUND_HELPER = '''function userMessageBackground(line, width) {
+    const background = theme.getBgAnsi("userMessageBg");
+    const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
+    // chalk.bold may emit a full reset; reopen the row background after it.
+    return theme.bg("userMessageBg", padded.replaceAll("\\x1b[0m", `\\x1b[0m${background}`));
+}'''
+_PRE_USER_BACKGROUND_HELPER = '''function userMessageBackground(line, width) {
+    return theme.bg("userMessageBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
+}'''
+if MODULE_SOURCE.count(_USER_BACKGROUND_HELPER) != 1:
+    raise ValueError("transcript user background helper changed or duplicated")
+PRE_USER_BACKGROUND_RESET_MODULE_SOURCE = MODULE_SOURCE.replace(
+    _USER_BACKGROUND_HELPER, _PRE_USER_BACKGROUND_HELPER, 1,
+)
 PRE_METRICS_EDITS = json.loads(read_payload('host/legacy/transcript-edits-before-metrics.json'))
 LEGACY_EDITS = json.loads(read_payload('host/legacy/transcript-edits-v1.json'))
 EDITS = {
@@ -232,6 +246,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
             PRE_USER_BACKGROUND_MODULE_SOURCE,
+            PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
         ):
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:

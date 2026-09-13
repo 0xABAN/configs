@@ -62,7 +62,10 @@ export function transcriptPadding(base, width) {
 }
 
 function userMessageBackground(line, width) {
-    return theme.bg("userMessageBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
+    const background = theme.getBgAnsi("userMessageBg");
+    const padded = line + " ".repeat(Math.max(0, width - visibleWidth(line)));
+    // chalk.bold may emit a full reset; reopen the row background after it.
+    return theme.bg("userMessageBg", padded.replaceAll("\x1b[0m", `\x1b[0m${background}`));
 }
 
 export function speakerHeader(name, timestamp, padding, width) {
