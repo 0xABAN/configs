@@ -8,6 +8,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
 nvim/                 → ~/.config/nvim  (AstroNvim v6 + osaka-jade)
 ghostty/themes/       → ~/.config/ghostty/themes/ (osaka-jade for cmux)
+ghostty/backgrounds/  → ~/.config/ghostty/backgrounds/ (static grain)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   AGENTS.md           → ~/.pi/agent/AGENTS.md + ~/.codex/AGENTS.md
   mcp.json.example    → copy to mcp.json locally (secrets)
@@ -56,14 +57,18 @@ Outside selections, large surfaces never use green fills.
 Supporting neutrals and subdued warning/error colors are chosen to fit;
 ANSI colors use the same restrained treatment. No theme plugins required.
 
-Pi and Neovim select it by default. The installer links the terminal theme;
-activate it in `~/.config/ghostty/config` (also used by cmux):
+Pi and Neovim select it by default. The installer links the terminal theme and
+grain texture; activate them in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
 background-opacity = 0.95
 background-blur = 30
 background-opacity-cells = true
+background-image = ~/.config/ghostty/backgrounds/osaka-jade-grain.png
+background-image-fit = none
+background-image-repeat = true
+background-image-opacity = 0.25
 ```
 
 Remove explicit background/foreground/selection overrides if they override
@@ -96,6 +101,15 @@ Base surfaces inherit one translucent background consistently across the shell,
 Pi, and Neovim. Adjust opacity and blur here, not separately per app.
 Use opacity 1 for an opaque background. The previous 0.96/20 settings are backed
 up locally in `~/.config/theme-backups/cmux-glass-20260913-091911/ghostty-config`.
+The 256×256 grain tile adds fine static noise behind text, without an animated
+shader or a change to the blur. It is centered on Osaka Jade's `#121319` background
+with ±8 RGB levels of monochrome noise. `background-image-opacity = 0.25` keeps it
+subtle; lower that value for less grain, or set it to `0` to hide the texture.
+This mixes the grain into the terminal background before its 95% opacity is
+applied, leaving the blurred backdrop visible underneath.
+It affects terminal panes, not cmux's sidebar, and is intended for this dark theme.
+The local pre-grain config is backed up in
+`~/.config/theme-backups/cmux-grain-20260913-110639/ghostty-config`.
 Run `cmux reload-config` to apply terminal appearance without restarting sessions.
 Select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.

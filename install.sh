@@ -49,6 +49,7 @@ link "$ROOT/zsh/.zshrc" "$HOME/.zshrc"
 
 echo "== terminal theme =="
 link "$ROOT/ghostty/themes/osaka-jade" "$HOME/.config/ghostty/themes/osaka-jade"
+link "$ROOT/ghostty/backgrounds/osaka-jade-grain.png" "$HOME/.config/ghostty/backgrounds/osaka-jade-grain.png"
 
 echo "== nvim =="
 mkdir -p "$HOME/.config"
