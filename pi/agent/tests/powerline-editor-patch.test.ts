@@ -29,6 +29,16 @@ function sandbox(name: string) {
   };
 }
 
+test("powerline owns the final editor after pi-pretty installs its prompt", () => {
+  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
+  const packages = settings.packages.map((entry: string | { source: string }) =>
+    typeof entry === "string" ? entry : entry.source);
+  const pretty = packages.findIndex((source: string) => source.startsWith("npm:@heyhuynhgiabuu/pi-pretty"));
+  const powerline = packages.findIndex((source: string) => source.includes("nicobailon/pi-powerline-footer"));
+  expect(pretty).toBeGreaterThanOrEqual(0);
+  expect(powerline).toBeGreaterThan(pretty);
+});
+
 test("editor patch is idempotent and preserves unrelated changes", () => {
   const app = sandbox("valid");
   expect(app.run().exitCode).toBe(0);
@@ -59,6 +69,28 @@ const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").replaceAll(marker,
 async function host() {
   return import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
 }
+
+test.skipIf(!sdk)("real package resolver preserves editor ownership order", async () => {
+  const { DefaultPackageManager } = await import(pathToFileURL(join(sdk!, "dist/core/package-manager.js")).href);
+  const { SettingsManager } = await import(pathToFileURL(join(sdk!, "dist/core/settings-manager.js")).href);
+  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
+  const packages = settings.packages.filter((entry: string | { source: string }) => {
+    const source = typeof entry === "string" ? entry : entry.source;
+    return source.includes("pi-pretty") || source.includes("pi-powerline-footer");
+  });
+  const manager = new DefaultPackageManager({
+    cwd: process.cwd(), agentDir: join(homedir(), ".pi/agent"),
+    settingsManager: SettingsManager.inMemory({ packages }),
+  });
+  // Never install or update anything as part of a test.
+  const resources = await manager.resolve(async () => "error");
+  const paths = resources.extensions.filter((entry: { enabled: boolean; path: string }) =>
+    entry.enabled && (entry.path.includes("pi-pretty") || entry.path.includes("pi-powerline-footer")))
+    .map((entry: { path: string }) => entry.path);
+  expect(paths).toHaveLength(2);
+  expect(paths[0]).toContain("pi-pretty");
+  expect(paths[1]).toContain("pi-powerline-footer");
+});
 
 test.skipIf(!sdk)("real editor stays centered through wrapping, scrolling, completion and paste", async () => {
   const { Editor, visibleWidth } = await host();

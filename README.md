@@ -130,7 +130,11 @@ The editor patch adds a centered, rounded `╭╮╰╯` frame with a 4% horizon
 inset (at least two columns). It reserves space before text wrapping and
 keeps scroll indicators, completion rows, paste handling, and hardware cursor
 markers. Tiny terminals fall back to the host editor. Working status and
-mode/thinking labels remain outside the box; no competing editor is installed.
+mode/thinking labels remain outside the box. Keep **pi-pretty before
+powerline** in `settings.json`'s packages list: both install an editor during
+`session_start`, and Pi awaits those handlers in package order. Powerline must
+run last to retain the framed editor and bash controls; pretty's output
+formatters remain active.
 
 Reapply with `python3 pi/agent/patches/powerline-editor.py`, then `/reload`.
 The installer runs it after the footer patches. Its row-boundary hook follows
