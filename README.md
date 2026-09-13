@@ -8,7 +8,7 @@ Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 zsh/.zshrc            → ~/.zshrc  (no secrets; source ~/.zshrc.local)
 nvim/                 → ~/.config/nvim  (AstroNvim v6 + osaka-jade)
 ghostty/themes/       → ~/.config/ghostty/themes/ (osaka-jade for cmux)
-ghostty/backgrounds/  → ~/.config/ghostty/backgrounds/ (static grain)
+ghostty/shaders/      → ~/.config/ghostty/shaders/ (static grain)
 pi/agent/             → ~/.pi/agent/* (selected paths)
   AGENTS.md           → ~/.pi/agent/AGENTS.md + ~/.codex/AGENTS.md
   mcp.json.example    → copy to mcp.json locally (secrets)
@@ -58,17 +58,15 @@ Supporting neutrals and subdued warning/error colors are chosen to fit;
 ANSI colors use the same restrained treatment. No theme plugins required.
 
 Pi and Neovim select it by default. The installer links the terminal theme and
-grain texture; activate them in `~/.config/ghostty/config` (also used by cmux):
+grain shader; activate them in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
 background-opacity = 0.92
 background-blur = 30
 background-opacity-cells = true
-background-image = ~/.config/ghostty/backgrounds/osaka-jade-grain.png
-background-image-fit = none
-background-image-repeat = true
-background-image-opacity = 0.25
+custom-shader = ~/.config/ghostty/shaders/grain.glsl
+custom-shader-animation = false
 ```
 
 Remove explicit background/foreground/selection overrides if they override
@@ -101,15 +99,22 @@ Base surfaces inherit one translucent background consistently across the shell,
 Pi, and Neovim. Adjust opacity and blur here, not separately per app.
 Use opacity 1 for an opaque background. The previous 0.96/20 settings are backed
 up locally in `~/.config/theme-backups/cmux-glass-20260913-091911/ghostty-config`.
-The 256×256 grain tile adds fine static noise behind text, without an animated
-shader or a change to the blur. It is centered on Osaka Jade's `#121319` background
-with ±8 RGB levels of monochrome noise. `background-image-opacity = 0.25` keeps it
-subtle; lower that value for less grain, or set it to `0` to hide the texture.
-This mixes the grain into the terminal background before its 92% opacity is
-applied, leaving the blurred backdrop visible underneath.
-It affects terminal panes, not cmux's sidebar, and is intended for this dark theme.
-The local pre-grain config is backed up in
-`~/.config/theme-backups/cmux-grain-20260913-110639/ghostty-config`.
+
+The static shader draws faint monochrome grain below terminal content, leaving
+opaque text unchanged. Its `GRAIN_OPACITY = 0.006` adds only 0.6% coverage above
+the host backdrop: at 92% background opacity, the combined opacity is about
+92.05%. Animation is disabled. It affects terminal panes, not cmux's sidebar.
+
+Replace the previous `custom-shader` entry and remove the old `background-image*`
+settings. Do not use the PNG grain tile: cmux 0.64.22 already paints a translucent
+host background, and its Ghostty image renderer adds a second background fill.
+At 92%, those stacked fills produce about 99.4% opacity, hiding the glass. Even
+a transparent PNG takes that same fill path. See the revision-pinned
+[image compositor](https://github.com/manaflow-ai/ghostty/blob/6143bac/src/renderer/shaders/shaders.metal#L423-L443)
+and [host-background handling](https://github.com/manaflow-ai/ghostty/blob/6143bac/src/renderer/generic.zig#L1715-L1741).
+The pre-shader config and passthrough are backed up locally in
+`~/.config/theme-backups/cmux-grain-shader-20260913-112526/`.
+
 Run `cmux reload-config` to apply terminal appearance without restarting sessions.
 Select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
@@ -122,7 +127,10 @@ Restore those files to recover the previous appearance, or select `woody`
 in Pi and Neovim to switch just their palettes.
 
 Checks: `nvim --headless -u NONE -l nvim/tests/osaka-jade.lua` and
-`ghostty +validate-config` after terminal activation.
+`ghostty +validate-config` after terminal activation. On macOS,
+`swift -suppress-warnings ghostty/tests/grain.swift` compiles the actual GLSL
+with system OpenGL and checks GPU pixels for alpha, grain, and text preservation.
+Also verify live cmux rendering: config validation alone does not compile shaders.
 
 ## Shell navigation
 
