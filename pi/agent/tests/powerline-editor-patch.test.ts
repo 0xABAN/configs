@@ -103,34 +103,36 @@ test("existing plain border upgrades without disturbing other source", () => {
   }
 });
 
-test("the exact previous compact badge payload migrates; partial or modified predecessors refuse writes", () => {
-  const app = sandbox("centered-scroll-migration");
-  expect(app.run().exitCode).toBe(0);
-  const current = app.contents();
-  const previousBorder = readFileSync(new URL(
-    "../patches/payloads/powerline/legacy/editor-badges-before-centered-scroll.ts.inc", import.meta.url), "utf8").trimEnd();
-  const previous = current["index.ts"].replace(border[1], previousBorder);
-  writeFileSync(join(app.dir, "index.ts"), previous);
-  expect(app.run().exitCode).toBe(0);
-  expect(app.contents()).toEqual(current);
-  expect(app.run().exitCode).toBe(0);
-  expect(app.contents()).toEqual(current);
+for (const helper of ["editor-badges-before-centered-scroll.ts.inc", "editor-badges-before-tps.ts.inc"]) {
+  test(`${helper} migrates exactly; partial or modified predecessors refuse writes`, () => {
+    const app = sandbox(helper);
+    expect(app.run().exitCode).toBe(0);
+    const current = app.contents();
+    const previousBorder = readFileSync(new URL(
+      `../patches/payloads/powerline/legacy/${helper}`, import.meta.url), "utf8").trimEnd();
+    const previous = current["index.ts"].replace(border[1], previousBorder);
+    writeFileSync(join(app.dir, "index.ts"), previous);
+    expect(app.run().exitCode).toBe(0);
+    expect(app.contents()).toEqual(current);
+    expect(app.run().exitCode).toBe(0);
+    expect(app.contents()).toEqual(current);
 
-  for (const mode of ["missing-import", "modified-payload", "duplicate-payload", "mixed-payload", "partial-frame"]) {
-    let index = previous;
-    if (mode === "missing-import") index = index.replace(badgeImport[1], badgeImport[0]);
-    if (mode === "modified-payload") index = index.replace("const compact = width < 80", "const compact = width < 81");
-    if (mode === "duplicate-payload") index += previousBorder;
-    if (mode === "mixed-payload") index += border[1];
-    writeFileSync(join(app.dir, "index.ts"), index);
-    writeFileSync(join(app.dir, "bash-mode/editor.ts"), mode === "partial-frame"
-      ? current["bash-mode/editor.ts"].replace(edits["bash-mode/editor.ts"][0][1], edits["bash-mode/editor.ts"][0][0])
-      : current["bash-mode/editor.ts"]);
-    const before = app.contents();
-    expect(app.run().exitCode, mode).not.toBe(0);
-    expect(app.contents()).toEqual(before);
-  }
-});
+    for (const mode of ["missing-import", "modified-payload", "duplicate-payload", "mixed-payload", "partial-frame"]) {
+      let index = previous;
+      if (mode === "missing-import") index = index.replace(badgeImport[1], badgeImport[0]);
+      if (mode === "modified-payload") index = index.replace("const compact = width < 80", "const compact = width < 81");
+      if (mode === "duplicate-payload") index += previousBorder;
+      if (mode === "mixed-payload") index += border[1];
+      writeFileSync(join(app.dir, "index.ts"), index);
+      writeFileSync(join(app.dir, "bash-mode/editor.ts"), mode === "partial-frame"
+        ? current["bash-mode/editor.ts"].replace(edits["bash-mode/editor.ts"][0][1], edits["bash-mode/editor.ts"][0][0])
+        : current["bash-mode/editor.ts"]);
+      const before = app.contents();
+      expect(app.run().exitCode, mode).not.toBe(0);
+      expect(app.contents()).toEqual(before);
+    }
+  });
+}
 
 test("partial or modified compact badges refuse writes", () => {
   const app = sandbox("compact-partial");
@@ -208,7 +210,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   const tui = { terminal: { rows: 30 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
     tui, () => "\x1b[38;2;95;168;118m",
-    { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
+    {
+      reset: "\x1b[0m",
+      getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`,
+      getBgAnsi: (r: number, g: number, b: number) => `\x1b[48;2;${r};${g};${b}m`,
+    },
     false, () => false, () => "+", footer, visibleWidth, truncateToWidth, sliceByColumn);
   editor.focused = true;
   expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
@@ -238,11 +244,11 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   }
   editor.setText("");
   const top = editor.render(80)[0];
-  expect(plain(top)).toEndWith(" build mode ❯ think:med ──╮");
+  expect(plain(top)).toEndWith(" edit mode ❯ med ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
   expect(top).toContain(statuses.get("agent-thinking")!);
   expect(visibleWidth(top)).toBe(80);
-  expect(plain(editor.render(16)[0])).not.toContain("build mode");
+  expect(plain(editor.render(16)[0])).not.toContain("edit mode");
   for (const height of [12, 20, 30, 12]) {
     tui.terminal.rows = height;
     for (const width of [40, 55, 70, 100, 40]) {
@@ -255,20 +261,46 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       const hint = plain(nativeBorder).match(/↑ \d+ more/)![0];
       expect(plain(rows[0])).toContain(hint);
       expect(plain(rows[0])).toStartWith("╭────── ↑ ");
-      expect(plain(rows[0])).toContain("build");
+      expect(plain(rows[0])).toContain("edit");
       expect(plain(rows[0])).toContain("med");
       expect(rows[0]).toContain("\x1b[0m ❯ ");
       expect(rows[0].match(/\x1b\[38;2;/g)!.length).toBeGreaterThan(5);
-      expect(plain(rows[0]).includes("build mode")).toBe(width >= 80 && height >= 24);
+      expect(plain(rows[0]).includes("edit mode")).toBe(width >= 80 && height >= 24);
       expect(editor.getText()).toBe("界🙂".repeat(1000));
     }
   }
   tui.terminal.rows = 30;
   editor.setText("");
   expect(editor.render(80)[0]).toBe(top);
+  statuses.set("agent-thinking", formatPlanStatus(false, "xhigh").thinking);
+  statuses.set("agent-tps", "42.1 TPS");
+  for (const width of [80, 120]) {
+    const row = editor.render(width)[0];
+    expect(plain(row)).toEndWith(" edit mode ❯ xhigh ❯  42.1 TPS  ──╮");
+    expect(row).toContain("\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 42.1 TPS \x1b[0m");
+    expect(visibleWidth(row)).toBe(width);
+  }
+  statuses.set("agent-tps", "— TPS");
+  expect(plain(editor.render(80)[0])).toContain(" xhigh ❯  — TPS ");
+  statuses.set("agent-tps", "42.1 TPS");
+  editor.setText("界🙂".repeat(1000));
+  for (const width of [40, 55, 80]) {
+    const rows = editor.render(width);
+    const row = plain(rows[0]);
+    expect(row).toContain("edit");
+    expect(row).toContain("xhigh");
+    expect(row).not.toContain("think:");
+    const hint = plain(Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset)).match(/↑ \d+ more/)![0];
+    expect(row).toContain(hint);
+    expect(row.includes(" 42.1 TPS ")).toBe(width > 40);
+    expect(rows.every((line: string) => visibleWidth(line) <= width)).toBe(true);
+    expect(rows.join("").split(marker)).toHaveLength(2);
+  }
+  statuses.delete("agent-tps");
+  editor.setText("");
   statuses.set("agent-mode", "plan mode");
-  statuses.set("agent-thinking", "think:high");
-  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ think:high ──╮");
+  statuses.set("agent-thinking", "high");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ high ──╮");
   editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(9).every((s: string) => visibleWidth(s) <= 9)).toBe(true);
   expect(plain(editor.render(80)[0])).toContain("↑");

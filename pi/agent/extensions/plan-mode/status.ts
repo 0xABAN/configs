@@ -1,4 +1,4 @@
-/** White → mid → light beige. Build uses pale teal; plan uses purple. */
+/** White → mid → light beige. Edit uses jade teal; plan uses purple. */
 function shine(text: string, mid: [number, number, number]): string {
 	const stops: [number, number, number][] = [
 		[255, 255, 255], // white
@@ -34,17 +34,17 @@ function thinkingLabel(level: string): string {
 		minimal: "min",
 		medium: "med",
 	};
-	return `think:${labels[level] ?? level}`;
+	return labels[level] ?? level;
 }
 
 /** Pure presentation: lifecycle code owns status keys, tool state and persistence. */
 export function formatPlanStatus(enabled: boolean, thinkingLevel?: string): { mode: string; thinking: string } {
 	const mid: [number, number, number] = enabled
 		? [196, 160, 230] // pastel purple (plan)
-		: [218, 235, 232]; // pale teal (build, #daebe8)
+		: [67, 145, 135]; // jade teal (edit, #439187)
 
 	return {
-		mode: shine(enabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
+		mode: shine(enabled ? "\uF022  plan mode" : "\uF121  edit mode", mid),
 		thinking: shine(thinkingLabel(thinkingLevel || "off"), mid),
 	};
 }

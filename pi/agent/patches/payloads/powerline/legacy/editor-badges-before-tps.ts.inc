@@ -16,19 +16,17 @@
 
         // Slice by display columns, not bytes: our gradient paints every letter.
         const plainMode = mode.replace(/\x1b\[[0-9;]*m/g, "");
-        const modeMatch = /(?:edit|plan) mode$/.exec(plainMode);
+        const modeMatch = /(?:build|plan) mode$/.exec(plainMode);
         const shortMode = modeMatch
           ? sliceByColumn(mode, visibleWidth(plainMode.slice(0, modeMatch.index)), modeMatch[0].length - 5) + ansi.reset
           : mode;
-        const primary = [compact ? shortMode : mode, thinking].filter(Boolean).join(" ❯ ");
-        const throughput = statuses?.get("agent-tps") ?? "";
-        // Warm beige on deep jade keeps the filled badge readable (5.16:1 contrast).
-        const tps = throughput
-          ? ansi.getBgAnsi(50, 109, 101) + ansi.getFgAnsi(243, 238, 223) + ` ${throughput} ` + ansi.reset
-          : "";
-        let badges = [primary, tps].filter(Boolean).join(" ❯ ");
-        // Drop throughput first: mode, effort, scroll hints and input take priority.
-        if (visibleWidth(badges) > badgeBudget) badges = primary;
+        let badges = [compact ? shortMode : mode, thinking].filter(Boolean).join(" ❯ ");
+        if (compact && visibleWidth(badges) > badgeBudget) {
+          const plainThinking = thinking.replace(/\x1b\[[0-9;]*m/g, "");
+          const shortThinking = plainThinking.startsWith("think:")
+            ? sliceByColumn(thinking, 6, visibleWidth(thinking) - 6) + ansi.reset : thinking;
+          badges = [shortMode, shortThinking].filter(Boolean).join(" ❯ ");
+        }
 
         const badgeWidth = visibleWidth(badges);
         // Scroll hints and input are never clipped to make room for decoration.
