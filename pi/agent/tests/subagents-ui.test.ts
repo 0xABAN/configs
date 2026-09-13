@@ -124,6 +124,39 @@ previous=m['replace_counted'](original,m['LEGACY_WIDGET_EDITS'],'previous widget
   }
 });
 
+test("compact panels migrate complete predecessors, but never a mixed or edited panel stage", () => {
+  const root = sandbox("panel-migration");
+  check(run(root));
+  const current = contents(root);
+  check(patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
+for name,edits in m['PANEL_EDITS'].items():
+ source=(root/name).read_text()
+ (root/name).write_text(m['replace_counted'](source,edits,'old panel',reverse=True))
+`, [root]));
+  const previous = contents(root);
+  const backups = join(root, ".config/theme-backups");
+  const before = readdirSync(backups);
+  check(run(root));
+  expect(contents(root)).toEqual(current);
+  const added = readdirSync(backups).filter(name => !before.includes(name));
+  expect(added).toHaveLength(1);
+  for (const file of files.concat(modulePath)) {
+    expect(readFileSync(join(backups, added[0], file), "utf8")).toBe(previous[file]!);
+  }
+  check(run(root));
+  expect(readdirSync(backups)).toHaveLength(before.length + 1);
+  for (const mode of ["mixed", "edited"]) {
+    for (const [file, source] of Object.entries(current)) writeFileSync(join(root, file), source!);
+    const file = "src/ui/conversation-viewer.ts";
+    writeFileSync(join(root, file), mode === "mixed" ? previous[file]! : current[file]!.replace("this.renderCompact(width)", "this.renderCompact(width - 1)"));
+    const invalid = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(invalid);
+    expect(readdirSync(backups)).toHaveLength(before.length + 1);
+  }
+});
+
 test("absent installation is skipped without creating it", () => {
   const root = join(temp, "absent");
   check(run(root));
@@ -517,6 +550,185 @@ realTest("workflow card/dialog keep geometric trees, all display states, narrow 
   dialog.dispose();
 });
 
+const panelSizes = [[40, 12], [50, 16], [60, 20], [70, 12], [120, 12], [40, 40], [120, 24], [120, 40]];
+
+realTest("conversation chrome and steering fit the actual native overlay cap through both resize directions", async () => {
+  const m = await real();
+  const terminal = { rows: 40, columns: 120, write() {} };
+  const host = new m.tui.TuiMainScreen(terminal);
+  const fullscreen = new m.tui.TuiAltScreen(terminal);
+  const messages = [{ role: "user", content: Array.from({ length: 80 }, (_, n) => `Line ${n} 界`).join("\n") }];
+  const agent = { ...record(), invocation: { modelId: "provider/model-real-id", modelName: "Real model" } };
+  let stopped = 0;
+  let steered = "";
+  let disposed = 0;
+  const viewer = new m.ConversationViewer(host, { messages, subscribe: () => () => disposed++ }, agent,
+    undefined, m.theme, () => {}, () => stopped++, undefined, (text: string) => steered = text);
+  host.requestRender = () => {};
+  for (const [width, rows] of [...panelSizes, ...panelSizes.toReversed()]) {
+    terminal.columns = width;
+    terminal.rows = rows;
+    const layout = host.resolveOverlayLayout({ width: "90%", maxHeight: "70%" }, 0, width, rows);
+    expect(fullscreen.resolveOverlayLayout({ width: "90%", maxHeight: "70%" }, 0, width, rows)).toEqual(layout);
+    const shown = () => viewer.render(layout.width);
+    let lines = shown();
+    within(m, lines, layout.width);
+    expect(lines.length).toBeLessThanOrEqual(layout.maxHeight);
+    expect(plain(m, lines)).toContain("Agent");
+    expect(plain(m, lines)).toContain("Esc close");
+    expect(plain(m, lines)).toContain("x stop");
+    expect(plain(m, lines)).toContain("Line 79");
+    viewer.handleInput("\x1b[H");
+    expect(plain(m, shown())).toContain("You");
+    viewer.handleInput("\x1b[F");
+    viewer.handleInput("\r");
+    viewer.handleInput("Steer 界");
+    lines = shown();
+    expect(lines.length).toBeLessThanOrEqual(layout.maxHeight);
+    expect(lines.join("\n")).toContain("\x1b_pi:c\x07");
+    expect(plain(m, lines)).toContain("Esc cancel");
+    viewer.handleInput("\r");
+    expect(steered).toBe("Steer 界");
+    viewer.handleInput("x");
+    expect(plain(m, shown())).toContain("STOP");
+    viewer.handleInput("m"); // Existing non-stop key disarms confirmation.
+  }
+  expect(stopped).toBe(0);
+  viewer.dispose();
+  expect(disposed).toBe(1);
+});
+
+realTest("compact workflow panes keep selected last rows and controls visible, and page through detail", async () => {
+  const m = await real();
+  const terminal = { rows: 12, columns: 40, write() {} };
+  const host = new m.tui.TuiMainScreen(terminal);
+  host.requestRender = () => {};
+  const input = workflowInput();
+  input.progress = Array.from({ length: 30 }, (_, index) => ({ type: "workflow_agent", index,
+    label: `Agent ${index} 界`, phaseIndex: index, phaseTitle: `Phase ${index}`, state: "start",
+    recordId: `record${index}`, promptPreview: Array.from({ length: 30 }, (_, n) => `prompt ${n}`).join("\n") }));
+  const actions: string[] = [];
+  const dialog = new m.WorkflowDialog(host, () => input, m.theme, () => actions.push("close"), {
+    onKill: () => actions.push("stop"), onPause: () => actions.push("pause"), onOpenAgent: () => actions.push("open"),
+    onSkipAgent: () => actions.push("skip"), onRetryAgent: () => actions.push("retry"),
+  });
+  for (let n = 0; n < 40; n++) dialog.handleInput("j");
+  expect(dialog.state.selectedPhase).toBe(29);
+  for (const [width, rows] of [...panelSizes, ...panelSizes.toReversed()]) {
+    terminal.rows = rows;
+    terminal.columns = width;
+    const layout = host.resolveOverlayLayout({ width: "90%", maxHeight: "70%" }, 0, width, rows);
+    const lines = dialog.render(layout.width);
+    within(m, lines, layout.width);
+    expect(lines.length).toBeLessThanOrEqual(layout.maxHeight);
+    const text = plain(m, lines);
+    expect(text).toContain("Review authentication");
+    expect(text.toLowerCase()).toContain("esc close");
+    expect(text).toContain("x stop");
+    expect(text).toContain("p pause");
+    expect(text).toContain("❯");
+    expect(dialog.state.selectedPhase).toBe(29);
+  }
+  input.progress = input.progress.map(entry => ({ ...entry, phaseIndex: 0, phaseTitle: "Review" }));
+  dialog.handleInput("\r");
+  for (let n = 0; n < 40; n++) dialog.handleInput("j");
+  expect(dialog.state.selectedAgent).toBe(29);
+  let lines = dialog.render(34);
+  expect(plain(m, lines)).toContain("PgUp/Dn");
+  expect(plain(m, lines)).toContain("s skip");
+  expect(plain(m, lines)).toContain("r retry");
+  expect(lines.length).toBeLessThanOrEqual(8);
+  dialog.handleInput("\r"); // Preserve the existing expand prompt action.
+  dialog.render(34);
+  for (let n = 0; n < 50; n++) { dialog.handleInput("\x1b[6~"); lines = dialog.render(34); }
+  expect(plain(m, lines)).toContain("running).");
+  const atEnd = dialog.detailOffset;
+  terminal.rows = 40;
+  dialog.render(110);
+  terminal.rows = 12;
+  dialog.render(34);
+  expect(dialog.detailOffset).toBe(atEnd);
+  expect(dialog.state.promptExpanded).toBe(true);
+  dialog.handleInput("\x1b[5~");
+  dialog.render(34);
+  expect(dialog.detailOffset).toBeLessThan(atEnd);
+  dialog.handleInput("p");
+  dialog.handleInput("x");
+  dialog.handleInput("c");
+  expect(actions).toEqual(["pause", "stop", "open"]);
+  dialog.dispose();
+});
+
+realTest("FleetList windows its selected roster without losing focus or resize state", async () => {
+  const m = await real();
+  const agents = Array.from({ length: 30 }, (_, index) => ({ ...record("running", String(index)),
+    description: `Target ${index} 界`, startedAt: index, session: { messages: [], subscribe: () => () => {} } }));
+  let component: any;
+  const host = { terminal: { rows: 40 }, requestRender() {}, focusedComponent: undefined };
+  const fleet = new m.FleetList({ listAgents: () => agents }, new Map());
+  fleet.setUICtx({ setWidget(_key: string, factory: any) { if (factory) component = factory(host, m.theme); },
+    onTerminalInput: () => () => {}, getEditorText: () => "", notify() {} });
+  fleet.update();
+  for (let n = 0; n < 40; n++) fleet.handleKey("\x1b[B");
+  for (const [width, rows] of [...panelSizes, ...panelSizes.toReversed()]) {
+    host.terminal.rows = rows;
+    const lines = component.render(width);
+    within(m, lines, width);
+    if (rows < 24) expect(lines.length).toBeLessThanOrEqual(Math.max(2, Math.min(5, Math.floor(rows / 4))));
+    expect(plain(m, lines)).toContain("Target 29");
+    expect(plain(m, lines)).toContain("●");
+    expect(fleet.selectedIndex).toBe(30);
+  }
+  component.invalidate();
+  host.terminal.rows = 12;
+  expect(component.render(40)).toHaveLength(3);
+  fleet.dispose();
+});
+
+realTest("large conversation, workflow and FleetList rendering remains byte-identical after compact resizes", async () => {
+  const m = await real();
+  check(patchModule(patcher, `
+root=pathlib.Path(sys.argv[2])
+for name in ['conversation-viewer','workflow-dialog','fleet-list']:
+ path='src/ui/'+name+'.ts'
+ source=(root/path).read_text()
+ previous=m['replace_counted'](source,m['PANEL_EDITS'][path],'previous panels',reverse=True)
+ (root/('src/ui/'+name+'-before-panels.ts')).write_text(previous)
+`, [m.root]));
+  const previousViewer = await m.load("ui/conversation-viewer-before-panels.ts");
+  const previousWorkflow = await m.load("ui/workflow-dialog-before-panels.ts");
+  const previousFleet = await m.load("ui/fleet-list-before-panels.ts");
+  const host = { terminal: { columns: 120, rows: 40 }, requestRender() {} };
+  const agent = { ...record(), session: { messages: [{ role: "user", content: "Literal 界 message" }], subscribe: () => () => {} } };
+  const pair = [m, { ...previousViewer, ...previousWorkflow, ...previousFleet }].map(mod => {
+    let fleetComponent: any;
+    const fleet = new mod.FleetList({ listAgents: () => [agent] }, new Map());
+    fleet.setUICtx({ setWidget(_key: string, factory: any) { if (factory) fleetComponent = factory(host, m.theme); },
+      onTerminalInput: () => () => {}, getEditorText: () => "" });
+    fleet.update();
+    return { fleet, fleetComponent,
+      viewer: new mod.ConversationViewer(host, agent.session, agent, undefined, m.theme, () => {}),
+      workflow: new mod.WorkflowDialog(host, () => workflowInput(), m.theme, () => {}) };
+  });
+  const now = Date.now;
+  try {
+    const fixed = now();
+    Date.now = () => fixed;
+    for (const name of ["viewer", "workflow", "fleetComponent"] as const) {
+      expect(pair[0][name].render(110)).toEqual(pair[1][name].render(110));
+      host.terminal.rows = 12;
+      const cap = name === "fleetComponent" ? 3 : 8;
+      expect(pair[1][name].render(34).length).toBeGreaterThan(cap);
+      expect(pair[0][name].render(34).length).toBeLessThanOrEqual(cap);
+      host.terminal.rows = 40;
+      expect(pair[0][name].render(110)).toEqual(pair[1][name].render(110));
+    }
+  } finally {
+    Date.now = now;
+    for (const item of pair) { item.fleet.dispose(); item.viewer.dispose(); item.workflow.dispose(); }
+  }
+});
+
 realTest("native menus retain plain original labels, unique numbering and mention insertion", async () => {
   const m = await real();
   const items = [{ id: 1 }, { id: 2 }];
@@ -626,7 +838,43 @@ realTest("Agent call/results/streaming/notifications and workflow registrations 
         selected = true;
         return rows.find(row => row.startsWith(menu));
       }, custom: async (factory: any) => {
-        const component = factory({}, m.theme, {}, () => {});
+        const host = { terminal: { columns: 120, rows: 40 } };
+        const component = factory(host, m.theme, {}, () => {});
+        const handleInput = m.tui.SettingsList.prototype.handleInput;
+        let list: any;
+        m.tui.SettingsList.prototype.handleInput = function(data: string) {
+          list = this;
+          return handleInput.call(this, data);
+        };
+        try {
+          component.handleInput("\x1b[B");
+        } finally {
+          m.tui.SettingsList.prototype.handleInput = handleInput;
+        }
+        expect(list).toBeDefined();
+        for (let i = 0; i < list.items.length && list.selectedIndex !== list.items.length - 1; i++) {
+          component.handleInput("\x1b[B");
+        }
+        for (const [width, rows] of [...panelSizes, ...panelSizes.toReversed()]) {
+          host.terminal.columns = width;
+          host.terminal.rows = rows;
+          const lines = component.render(width);
+          within(m, lines, width);
+          expect(list.selectedIndex).toBe(list.items.length - 1);
+          const cursor = m.tui.stripTerminalSequences(list.theme.cursor);
+          const selectedRow = list.render(m.agentBodyWidth(width).inner)
+            .find((line: string) => m.tui.stripTerminalSequences(line).startsWith(cursor));
+          expect(selectedRow).toBeDefined();
+          // Keep the native selected row, including its width-limited value,
+          // rather than merely retaining a selection index outside the viewport.
+          expect(plain(m, lines).split("\n").map(line => line.trim()))
+            .toContain(m.tui.stripTerminalSequences(selectedRow).trim());
+          if (width < 80 || rows < 24) {
+            expect(lines.length).toBeLessThanOrEqual(rows - 4);
+            expect(plain(m, lines)).toContain("Esc cancel");
+          }
+        }
+        host.terminal.rows = 40;
         for (const width of [1, 2, 4, 8, 30, 60]) within(m, component.render(width), width);
         component.handleInput("\x1b[B");
         component.invalidate();

@@ -252,10 +252,95 @@ EDITS[WIDGET] += [
 ]
 
 
+# A panel stage is installed as a whole. Each source carries its own stage mark,
+# so a current helper never authorizes upgrading a mixed or edited installation.
+PANEL_MARKER = '// configs:subagents-compact-panels-v1'
+PANEL_EDITS = {
+    'src/index.ts': [
+        ('import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text }',
+         'import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text, wrapTextWithAnsi }', 1),
+        ('export default function (pi: ExtensionAPI) {', read_payload('subagents/compact-settings.ts.inc') + '\nexport default function (pi: ExtensionAPI) {', 1),
+        ('      container.addChild(list);', '      container.addChild(list);\n      const normalRows = Reflect.get(list, "maxVisible") as number;', 2),
+        ('render: (w: number) => renderAgentBody(w, inner => container.render(inner)),',
+         'render: (w: number) => renderAgentSettings(container, list, _tui, w, normalRows),', 2),
+    ],
+    'src/ui/conversation-viewer.ts': [
+        ('import { agentState } from "./agent-chrome.js";', 'import { agentState } from "./agent-chrome.js";', 1),
+        ('    this.lastInnerW = innerW;', '    this.lastInnerW = innerW;\n    if (this.compact()) return this.renderCompact(width);', 1),
+        ('  private viewportHeight(): number {', read_payload('subagents/compact-conversation.ts.inc') + '\n  private viewportHeight(): number {', 1),
+        ('return Math.max(MIN_VIEWPORT, maxRows - this.chromeLines());',
+         'return Math.max(this.compact() ? 0 : MIN_VIEWPORT, maxRows - this.chromeLines());', 1),
+        ('    return CHROME_LINES_BASE + (this.invocationLine() ? 1 : 0) + (this.composer ? 1 : 0);',
+         '    if (this.compact()) return 3 + (this.invocationLine() ? 1 : 0) + (this.composer ? 1 : 0) + this.compactHints().length;\n    return CHROME_LINES_BASE + (this.invocationLine() ? 1 : 0) + (this.composer ? 1 : 0);', 1),
+    ],
+    'src/ui/fleet-list.ts': [
+        ('import { renderAgentBody } from "./agent-chrome.js";', 'import { renderAgentBody } from "./agent-chrome.js";', 1),
+        ('inner => this.renderBar(inner, theme)', 'inner => this.renderBar(inner, theme, tui.terminal?.rows ?? 40, w < 80)', 1),
+        ('private renderBar(width: number, theme: Theme)', 'private renderBar(width: number, theme: Theme, terminalRows = 40, compactWidth = false)', 1),
+        ('    const hint = this.active', read_payload('subagents/compact-fleet.ts.inc') + '\n    const hint = this.active', 1),
+    ],
+    'src/ui/workflow-dialog.ts': [
+        ('export interface WorkflowDialogInput extends WorkflowDialogSource {', 'export interface WorkflowDialogInput extends WorkflowDialogSource {', 1),
+        ('  bodyRows?: number;', '  bodyRows?: number;\n  compact?: boolean;\n  detailOffset?: number;', 1),
+        ('return Math.max(12, terminalWidth - 6);', 'return Math.max(12, terminalWidth - (terminalWidth < 80 ? 2 : 6));', 1),
+        ('export function layoutWorkflowDialog(input: WorkflowDialogInput): WorkflowCardLine[] {',
+         read_payload('subagents/compact-workflow.ts.inc') + '\nexport function layoutWorkflowDialog(input: WorkflowDialogInput): WorkflowCardLine[] & { detailMaxScroll?: number } {', 1),
+        ('const capacity = Math.max(MIN_PANE_BODY_ROWS, input.bodyRows ?? DEFAULT_PANE_BODY_ROWS);',
+         'const compactHints = input.compact ? compactWorkflowHints(input) : [];\n  const capacity = Math.max(input.compact ? 1 : MIN_PANE_BODY_ROWS, input.bodyRows ?? DEFAULT_PANE_BODY_ROWS);', 1),
+        ('  const lines: WorkflowCardLine[] = [];\n\n  // ---- Header:',
+         '  const lines: WorkflowCardLine[] & { detailMaxScroll?: number } = [];\n\n  // ---- Header:', 1),
+        ('  lines.push(\n    rightAlign(\n      head.subtext', '  if (!input.compact) lines.push(\n    rightAlign(\n      head.subtext', 1),
+        ('  lines.push([]);\n\n  const frameWidth', '  if (!input.compact) lines.push([]);\n\n  const frameWidth', 1),
+        ('  const rightRows = inPhases ? agentRows : detailRows;',
+         '  const detailMaxScroll = Math.max(0, detailRows.length - capacity);\n  const detailStart = Math.min(input.detailOffset ?? 0, detailMaxScroll);\n  const rightRows = inPhases ? agentRows : input.compact ? detailRows.slice(detailStart, detailStart + capacity) : detailRows;\n  if (input.compact) lines.detailMaxScroll = detailMaxScroll;', 1),
+        ('Math.max(MIN_PANE_BODY_ROWS, leftRows.length, rightRows.length)', 'Math.max(input.compact ? 1 : MIN_PANE_BODY_ROWS, leftRows.length, rightRows.length)', 1),
+        ('  // ---- Key hints ----',
+         '  if (input.compact) {\n    lines.push(...compactHints.map(text => [{ text: ` ${text}`, color: "dim" as const }]));\n    return lines;\n  }\n\n  // ---- Key hints ----', 1),
+        ('  private spinnerFrame = 0;', '  private spinnerFrame = 0;\n  private detailOffset = 0;\n  private detailMaxScroll = 0;\n  private detailPageRows = 1;', 1),
+        ('    const result = handleWorkflowDialogKey(data, this.state, resolveWorkflowDialog(input));',
+         '''    if (this.state.level === "agent" && (matchesKey(data, "pageUp") || matchesKey(data, "pageDown"))) {
+      const delta = matchesKey(data, "pageUp") ? -this.detailPageRows : this.detailPageRows;
+      this.detailOffset = Math.max(0, Math.min(this.detailMaxScroll, this.detailOffset + delta));
+      this.tui.requestRender();
+      return;
+    }
+    const result = handleWorkflowDialogKey(data, this.state, resolveWorkflowDialog(input));''', 1),
+        ('    this.state = result.state;', '    if (this.state !== result.state) this.detailOffset = 0;\n    this.state = result.state;', 1),
+        ('    const lines = layoutWorkflowDialog({',
+         '    const rows = this.tui.terminal?.rows ?? 40;\n    const compact = width < 80 || rows < 24;\n    const input: WorkflowDialogInput = {', 1),
+        ('      spinnerFrame: this.spinnerFrame,\n    });',
+         '''      spinnerFrame: this.spinnerFrame,
+      compact,
+      detailOffset: this.detailOffset,
+    };
+    if (compact) {
+      // The native overlay hard-crops at 70%; reserve title, frame and all
+      // controls first, then window the panes around their real selections.
+      input.bodyRows = Math.max(1, Math.floor(rows * 0.7) - 3 - compactWorkflowHints(input).length);
+    } else {
+      input.bodyRows = Math.min(DEFAULT_PANE_BODY_ROWS, Math.floor(rows * 0.7) - 6);
+    }
+    const lines = layoutWorkflowDialog(input);
+    if (compact) {
+      this.detailPageRows = input.bodyRows ?? DEFAULT_PANE_BODY_ROWS;
+      this.detailMaxScroll = lines.detailMaxScroll ?? 0;
+      this.detailOffset = Math.min(this.detailOffset, this.detailMaxScroll);
+    }''', 1),
+    ],
+}
+
+
+PRE_PANEL_EDITS = {name: list(edits) for name, edits in EDITS.items()}
+for name, edits in PANEL_EDITS.items():
+    old, new, count = edits[0]
+    edits[0] = (old, PANEL_MARKER + '\n' + new, count)
+    EDITS[name] += edits
+
+
 def transform(name: str, source: str, reverse: bool = False) -> str:
     # Older installations have the complete original UI but no compact branch.
     # Still reverse/count every old anchor; a recognized helper is not enough.
-    edits = EDITS[name]
+    edits = PRE_PANEL_EDITS[name] if reverse and name in PANEL_EDITS and PANEL_MARKER not in source else EDITS[name]
     if reverse and name == WIDGET and COMPACT_MARKER not in source:
         edits = LEGACY_WIDGET_EDITS
     return replace_counted(
@@ -278,12 +363,17 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             raise ValueError("subagents UI source marker moved")
         if sources.get(MODULE) not in (MODULE_SOURCE, LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE):
             raise ValueError("subagents UI helper changed or missing; inspect before reapplying")
+        panel_stages = [sources[name].count(PANEL_MARKER) for name in PANEL_EDITS]
+        if len(set(panel_stages)) != 1 or panel_stages[0] not in (0, 1):
+            raise ValueError('partial or duplicated compact panel stage')
         result = dict(sources)
         for name in EDITS:
             source = sources[name].removeprefix(MARKER + "\n")
             original = transform(name, source, reverse=True)
             if name == WIDGET and COMPACT_MARKER not in source:
                 expected = replace_counted(original, LEGACY_WIDGET_EDITS, "inconsistent previous widget")
+            elif name in PANEL_EDITS and PANEL_MARKER not in source:
+                expected = replace_counted(original, PRE_PANEL_EDITS[name], 'inconsistent previous panels')
             else:
                 expected = transform(name, original)
             if expected != source:
