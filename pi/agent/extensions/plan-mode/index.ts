@@ -82,7 +82,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function modeMid(): [number, number, number] {
 		return planModeEnabled
 			? [196, 160, 230] // pastel purple (plan)
-			: [232, 243, 241]; // near-white teal (build, #e8f3f1)
+			: [218, 235, 232]; // pale teal (build, #daebe8)
 	}
 
 	function thinkingLabel(level: string): string {
