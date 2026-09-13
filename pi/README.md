@@ -41,10 +41,10 @@ Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
 widgets share at most one third of the rows, also reserving the native input
 viewport/frame and footer/conversation space. Each retains at least one summary
 row; at larger heights the limit is `Infinity`. This is a display-only preview
-limit, not an expansion-state change. Packages
-choose their visible content and overflow summaries. Unknown widgets do not
-participate. Read the callback during rendering, not registration, so resizing
-and widget removal immediately update the allocation.
+limit, not an expansion-state change. Packages choose their visible content and
+overflow summaries. Unknown widgets do not participate. Read the callback during
+rendering, not registration, so resizing and widget removal immediately update
+the allocation.
 
 Keep theme reads live and preserve native components, cursor markers, image
 payloads, selection, expansion, and session ordering. The transcript's explicit
@@ -54,6 +54,19 @@ tool-name heuristic. The terminal owns the base background.
 Plan-mode status formatting is pure; the entrypoint owns status publication,
 tool restoration, and persistence. Whimsical's compaction adapter contains the
 host-specific prototype hook. Keep that compatibility code out of its catalog.
+
+### Compact windows
+
+Below 80 available columns, inner gutters and powerline labels shrink. Below 24
+terminal rows, previews share a smaller budget and decorative rows disappear.
+These rules use the width passed to `render`, after the shared viewport inset.
+Read terminal height live; Pi replaces the backing renderer when switching modes.
+
+Native dialogs window their bodies around the selection or caret. Agent panels
+retain their native selection and scrolling state; workflow details use Page Up
+and Page Down. Settings descriptions may end in an ellipsis. Exceptionally tall
+dialog titles/hints are not paged: there is no extra read-details step or resize
+gate for extreme window sizes.
 
 ## Patch contracts
 
