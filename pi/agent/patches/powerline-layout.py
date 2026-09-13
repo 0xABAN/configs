@@ -28,7 +28,7 @@ LEGACY_ALIGN = ALIGN
 ALIGN = ALIGN.replace(
     "const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style);",
     'const right = buildContentFromParts(parts.filter(p => p.right).map(p => p.content), style,\n'
-    '    ansi.getFgAnsi(95, 168, 118) + "●" + ansi.reset);',
+    '    ansi.getFgAnsi(94, 158, 128) + "●" + ansi.reset);',
 )
 
 METER = '''// configs:powerline-meter-v1
@@ -108,7 +108,11 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # Small appearance upgrades also apply over an already-installed layout.
     # Keep other warning colors and separator styles intact.
     sources = dict(sources)
-    sources["index.ts"] = sources["index.ts"].replace(LEGACY_ALIGN, ALIGN).replace(LEGACY_SEPARATOR, SEPARATOR_EDIT[1])
+    legacy_jade_align = ALIGN.replace("ansi.getFgAnsi(94, 158, 128)", "ansi.getFgAnsi(95, 168, 118)")
+    sources["index.ts"] = (sources["index.ts"]
+        .replace(legacy_jade_align, ALIGN)
+        .replace(LEGACY_ALIGN, ALIGN)
+        .replace(LEGACY_SEPARATOR, SEPARATOR_EDIT[1]))
     for name, (old, new) in [
         ("segments.ts", UNSTAGED_EDIT),
         ("index.ts", SEPARATOR_EDIT),
