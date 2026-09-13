@@ -8,8 +8,8 @@ import { nativeSuite } from "./support/native-suite";
 
 const patcher = fileURLToPath(new URL("../patches/intercom-ui.py", import.meta.url));
 const generator = fileURLToPath(new URL("./support/intercom_fixture.py", import.meta.url));
-const description = describePatch<{ edits: Record<string, [string, string, number][]>; original: string; module: string }>(
-  patcher, "{'edits': m['EDITS'], 'original': m['ORIGINAL_MODULE'], 'module': m['MODULE']}");
+const description = describePatch<{ edits: Record<string, [string, string, number][]>; original: string; module: string; previous: string }>(
+  patcher, "{'edits': m['EDITS'], 'original': m['ORIGINAL_MODULE'], 'module': m['MODULE'], 'previous': m['_PREVIOUS_MODULE_SOURCE']}");
 const source = process.env.PI_INTERCOM_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/pi-intercom");
 const sdk = process.env.PI_SDK_ROOT;
 const temp = temporaryDirectory("intercom-ui-");
@@ -46,6 +46,23 @@ test("Intercom validates both files before writing, backs up exact bytes and is 
   checkProcess(run(root));
   expect(contents(root)).toEqual(after);
   expect(readdirSync(backupRoot)).toEqual(backups);
+});
+
+test("the previous expanded-body renderer migrates exactly", () => {
+  const root = sandbox("previous-renderer");
+  checkProcess(run(root));
+  const current = contents(root);
+  writeFileSync(join(root, description.module), description.previous);
+  const backupRoot = join(root, ".config/theme-backups");
+  const beforeBackups = readdirSync(backupRoot);
+
+  checkProcess(run(root));
+  expect(contents(root)).toEqual(current);
+  const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
+  expect(added).toHaveLength(1);
+  expect(readFileSync(join(backupRoot, added[0], description.module), "utf8")).toBe(description.previous);
+  checkProcess(run(root));
+  expect(contents(root)).toEqual(current);
 });
 
 test("Intercom rejects changed versions, owners, modules and partial/duplicate registrations without writes", () => {

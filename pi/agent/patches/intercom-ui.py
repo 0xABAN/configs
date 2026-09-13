@@ -14,6 +14,15 @@ from patch_support import read_payload, backup_sources, write_sources, replace_c
 MODULE = "ui/inline-message.ts"
 ORIGINAL_MODULE = read_payload("intercom/inline-message-original.ts.inc")
 MODULE_SOURCE = read_payload("intercom/inline-message.ts.inc")
+_BODY_DECLARATION = '    const body = clean(this.bodyText || this.message.content.text);'
+_PREVIOUS_MODULE_SOURCE = MODULE_SOURCE.replace(
+    '    if (this.collapsed) {',
+    _BODY_DECLARATION + "\n\n    if (this.collapsed) {", 1,
+).replace(
+    _BODY_DECLARATION + "\n    const add =", "    const add =", 1,
+)
+if _PREVIOUS_MODULE_SOURCE == MODULE_SOURCE:
+    raise ValueError("Intercom cleanup migration anchor changed")
 EDITS = {
     "index.ts": [
         ('return new InlineMessageComponent(details.from, details.message, theme, details.replyCommand, details.bodyText, !options.expanded);',
@@ -25,7 +34,9 @@ EDITS = {
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """The exact renderer and registration must agree; never repair half a patch."""
     original = sources[MODULE] == ORIGINAL_MODULE
-    if not original and sources[MODULE] != MODULE_SOURCE:
+    previous = sources[MODULE] == _PREVIOUS_MODULE_SOURCE
+    current = sources[MODULE] == MODULE_SOURCE
+    if not original and not previous and not current:
         raise ValueError("Intercom incoming renderer changed; review upstream first")
     index = sources["index.ts"]
     if original and EDITS["index.ts"][0][1] in index:
@@ -37,7 +48,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         # A stray original next to the patched registration must also refuse.
         if EDITS["index.ts"][0][0] in index:
             raise ValueError("mixed Intercom renderer registration")
-        return sources
+        return {**sources, MODULE: MODULE_SOURCE} if previous else sources
     return {"index.ts": restored, MODULE: MODULE_SOURCE}
 
 

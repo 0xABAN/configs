@@ -46,14 +46,13 @@ export class InlineMessageComponent implements Component {
     const senderName = clean(this.from.name || this.from.id.slice(0, 8)).replace(/\s+/g, " ");
     const lines = [truncateToWidth(" ".repeat(headerPad) + this.theme.fg("accent", "◇ ")
       + this.theme.bold(this.theme.fg("text", `From ${senderName}`)), width)];
-    const body = clean(this.bodyText || this.message.content.text);
-
     if (this.collapsed) {
       lines.push(indent + this.theme.fg("text", truncateToWidth(clean(this.message.content.text).replace(/\s+/g, " ").trim(), bodyWidth)));
       lines.push(indent + truncateToWidth(keyHint("app.tools.expand", "to expand"), bodyWidth));
       return lines;
     }
 
+    const body = clean(this.bodyText || this.message.content.text);
     const add = (text: string, color: "text" | "dim") => {
       for (const line of wrapTextWithAnsi(clean(text), bodyWidth)) {
         lines.push(indent + this.theme.fg(color, truncateToWidth(line, bodyWidth)));
