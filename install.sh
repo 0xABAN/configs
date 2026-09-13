@@ -125,6 +125,11 @@ if [[ -f "$ROOT/pi/agent/patches/pi-activity-notices.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-activity-notices.py"
 fi
 
+# Share short-window activity space without clipping extension-owned content.
+if [[ -f "$ROOT/pi/agent/patches/pi-compact-layout.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-compact-layout.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true

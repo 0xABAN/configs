@@ -36,6 +36,14 @@ The transcript owns speaker headers and grouping of eligible native tool rows.
 Package renderers own Todos and Agents; the host owns notification wrapping and
 native dialogs. Do not add a second outer margin to individual renderers.
 
+The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
+Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
+widgets share one third of the rows; at larger heights the limit is `Infinity`.
+This is a display-only preview limit, not an expansion-state change. Packages
+choose their visible content and overflow summaries. Unknown widgets do not
+participate. Read the callback during rendering, not registration, so resizing
+and widget removal immediately update the allocation.
+
 Keep theme reads live and preserve native components, cursor markers, image
 payloads, selection, expansion, and session ordering. The transcript's explicit
 pi-pretty allowance protects other custom renderers; do not replace it with a
@@ -49,7 +57,7 @@ host-specific prototype hook. Keep that compatibility code out of its catalog.
 
 | Target | Supported input | Commands under `agent/patches/` |
 |--------|-----------------|--------------------------------|
-| Pi host and bundled TUI | Pi `0.84.2` | `pi-horizontal-inset.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py` |
+| Pi host and bundled TUI | Pi `0.84.2` | `pi-horizontal-inset.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
 | Powerline | Git commit `8c9bda10fdfd2822e89334ec85f3da9f8ca49182` | `powerline-dj.py`, `powerline-layout.py`, `powerline-editor.py` |
 | rpiv-todo UI | `@juicesharp/rpiv-todo` `2.9.0`, after legacy tweaks | `rpiv-todo-ui.py` |
 | Subagents UI | `@tintinweb/pi-subagents` `0.19.0` | `subagents-ui.py` |
@@ -78,7 +86,8 @@ The Todo UI patch recognizes only the exact clear-block reinjection it supports.
 Do not change persistence as part of a visual cleanup.
 
 `install.sh` owns the serial order: powerline DJ/layout, host inset, editor,
-transcript, dialogs, notices, legacy Todo tweaks, Todo UI, then Subagents UI.
+transcript, dialogs, notices, compact layout, legacy Todo tweaks, Todo UI, then
+Subagents UI.
 The legacy Todo command remains best-effort; the other patch failures propagate.
 Keep pi-pretty before powerline in package settings because both install editors.
 
