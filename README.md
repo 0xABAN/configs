@@ -57,8 +57,8 @@ activate it in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.96
-background-blur = 20
+background-opacity = 0.78
+background-blur = 30
 background-opacity-cells = true
 ```
 
@@ -85,11 +85,15 @@ outline stays disabled, and split dividers keep their default color:
 }
 ```
 
-Opacity 0.96 lets the backdrop show through; blur 20 keeps it soft.
+Opacity 0.78 lets backdrop colors show through; blur 30 softens their detail
+for a frosted-glass background. The result depends on the wallpaper and windows
+behind cmux; a flat dark backdrop will still look dark.
 Base surfaces inherit one translucent background consistently across the shell,
 Pi, and Neovim. Adjust opacity and blur here, not separately per app.
-Use opacity 1 for an opaque background.
-Reload cmux's configuration, select `osaka-jade` in Pi's `/settings`, and restart Neovim
+Use opacity 1 for an opaque background. The previous 0.96/20 settings are backed
+up locally in `~/.config/theme-backups/cmux-glass-20260913-091911/ghostty-config`.
+Run `cmux reload-config` to apply terminal appearance without restarting sessions.
+Select `osaka-jade` in Pi's `/settings`, and restart Neovim
 (or run `:colorscheme osaka-jade`) for existing sessions.
 
 The original `woody` Pi and Neovim themes remain unchanged. The initial
