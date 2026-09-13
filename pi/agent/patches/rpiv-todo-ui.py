@@ -9,8 +9,8 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
-import tempfile
+
+from patch_support import backup_sources, write_sources
 
 
 # Older gray-patch runs duplicated this identical ternary on every replay.
@@ -330,16 +330,9 @@ def main() -> None:
     sources = {name: (root / name).read_text() for name in EDITS}
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="rpiv-todo-ui-", dir=backup_root))
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
+        backup = backup_sources(root, sources, "rpiv-todo-ui-")
         print(f"Todo UI backup: {backup}")
-        for name, source in patched.items():
-            (root / name).write_text(source)
+        write_sources(root, patched)
     print("Todo UI ready; reload Pi to apply")
 
 

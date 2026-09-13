@@ -1,0 +1,69 @@
+"""Shared patch mechanics, not compatibility policy.
+
+Callers validate their complete source set before backing up or writing it.
+Versions, accepted migrations, diagnostics and installation order stay local.
+"""
+from collections.abc import Iterable, Mapping, Sequence
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+
+def discover_pi_root() -> Path | None:
+    """Honor the existing SDK override before asking the active npm installation."""
+    if os.environ.get("PI_SDK_ROOT"):
+        return Path(os.environ["PI_SDK_ROOT"]).expanduser()
+    if not shutil.which("npm"):
+        return None
+    result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
+    return Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
+
+
+def backup_sources(
+    root: Path,
+    names: Iterable[str],
+    prefix: str,
+    *,
+    added_files: list[str] | None = None,
+) -> Path:
+    """Copy every original before a caller writes; optionally record new files.
+
+    None preserves patchers that never wrote a manifest. An empty list creates
+    an empty manifest, which is a distinct existing installation contract.
+    """
+    backup_root = Path.home() / ".config/theme-backups"
+    backup_root.mkdir(parents=True, exist_ok=True)
+    backup = Path(tempfile.mkdtemp(prefix=prefix, dir=backup_root))
+    for name in names:
+        target = backup / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / name, target)
+    if added_files is not None:
+        (backup / "added-files.json").write_text(json.dumps(added_files) + "\n")
+    return backup
+
+
+def write_sources(root: Path, sources: Mapping[str, str]) -> None:
+    """Write the caller's validated sources in their original order."""
+    for name, source in sources.items():
+        (root / name).write_text(source)
+
+
+def replace_counted(
+    source: str,
+    edits: Sequence[tuple[str, str, int]],
+    error_prefix: str,
+    *,
+    reverse: bool = False,
+) -> str:
+    """Apply ordered exact replacements, reversing their order when undoing them."""
+    ordered_edits = reversed(edits) if reverse else edits
+    for old, new, count in ordered_edits:
+        before, after = (new, old) if reverse else (old, new)
+        if source.count(before) != count:
+            raise ValueError(f"{error_prefix} {before[:80]!r}")
+        source = source.replace(before, after)
+    return source

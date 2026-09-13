@@ -5,11 +5,13 @@ Keep native tools and session records intact. Refuse partial/unknown hosts befor
 writing; back up every changed source and leave unrelated installed edits alone.
 """
 import json
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from patch_support import (
+    discover_pi_root as discover_root,
+    backup_sources,
+    write_sources,
+)
 
 
 BASE = "dist/modes/interactive/"
@@ -115,15 +117,6 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def discover_root() -> Path | None:
-    if os.environ.get("PI_SDK_ROOT"):
-        return Path(os.environ["PI_SDK_ROOT"]).expanduser()
-    if not shutil.which("npm"):
-        return None
-    result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
-    return Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
-
-
 def main() -> None:
     root = discover_root()
     if root is None or not root.exists():
@@ -137,18 +130,11 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="pi-transcript-", dir=backup_root))
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
-        # Record newly installed files so restoring a backup is unambiguous.
-        (backup / "added-files.json").write_text(json.dumps(sorted(set(patched) - set(sources))) + "\n")
+        backup = backup_sources(
+            root, sources, "pi-transcript-", added_files=sorted(set(patched) - set(sources)),
+        )
         print(f"Pi transcript backup: {backup}")
-        for name, source in patched.items():
-            (root / name).write_text(source)
+        write_sources(root, patched)
     print("Pi transcript preview ready; restart Pi to apply")
 
 

@@ -7,8 +7,8 @@ unrelated edits, and refuse partial/unknown installations. Reload Pi to apply.
 import json
 import os
 from pathlib import Path
-import shutil
-import tempfile
+
+from patch_support import backup_sources, write_sources, replace_counted
 
 MODULE = "src/ui/agent-chrome.ts"
 MODULE_SOURCE = Path(__file__).with_name("subagents-ui.ts.inc").read_text()
@@ -236,13 +236,9 @@ EDITS = {
 
 
 def transform(name: str, source: str, reverse: bool = False) -> str:
-    edits = list(reversed(EDITS[name])) if reverse else EDITS[name]
-    for old, new, count in edits:
-        before, after = (new, old) if reverse else (old, new)
-        if source.count(before) != count:
-            raise ValueError(f"{name}: changed/duplicate UI anchor {before[:80]!r}")
-        source = source.replace(before, after)
-    return source
+    return replace_counted(
+        source, EDITS[name], f"{name}: changed/duplicate UI anchor", reverse=reverse,
+    )
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
@@ -286,17 +282,9 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="subagents-ui-", dir=backup_root))
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
-        (backup / "added-files.json").write_text(json.dumps([MODULE]) + "\n")
+        backup = backup_sources(root, sources, "subagents-ui-", added_files=[MODULE])
         print(f"Subagents UI backup: {backup}")
-        for name, source in patched.items():
-            (root / name).write_text(source)
+        write_sources(root, patched)
     print("Subagents UI ready; reload Pi to apply")
 
 

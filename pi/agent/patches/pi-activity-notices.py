@@ -5,11 +5,13 @@ The host owns notification wrapping. Prefixing extension strings with spaces
 only indents their first line, so use a responsive component at that boundary.
 """
 import json
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from patch_support import (
+    discover_pi_root as discover_root,
+    backup_sources,
+    write_sources,
+)
 
 HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/activity-notice.js"
@@ -79,13 +81,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
 
 
 def main() -> None:
-    if os.environ.get("PI_SDK_ROOT"):
-        root = Path(os.environ["PI_SDK_ROOT"]).expanduser()
-    elif shutil.which("npm"):
-        result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
-        root = Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
-    else:
-        root = None
+    root = discover_root()
     if root is None or not root.exists():
         print("Pi host not installed; skipping activity notices")
         return
@@ -96,17 +92,11 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="pi-activity-notices-", dir=backup_root))
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
-        (backup / "added-files.json").write_text(json.dumps(sorted(set(patched) - set(sources))) + "\n")
+        backup = backup_sources(
+            root, sources, "pi-activity-notices-", added_files=sorted(set(patched) - set(sources)),
+        )
         print(f"Activity notices backup: {backup}")
-        for name, text in patched.items():
-            (root / name).write_text(text)
+        write_sources(root, patched)
     print("Activity notices ready; restart Pi to apply")
 
 

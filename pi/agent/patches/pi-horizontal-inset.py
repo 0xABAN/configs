@@ -8,11 +8,13 @@ this preserves the native image fast path and scroll-relative document columns.
 A Pi process restart is required: /reload does not reload host JavaScript.
 """
 import json
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from patch_support import (
+    discover_pi_root as discover_root,
+    backup_sources,
+    write_sources,
+)
 
 
 TUI = "node_modules/@earendil-works/pi-tui/dist/"
@@ -111,15 +113,6 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def discover_root() -> Path | None:
-    if os.environ.get("PI_SDK_ROOT"):
-        return Path(os.environ["PI_SDK_ROOT"]).expanduser()
-    if not shutil.which("npm"):
-        return None
-    result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
-    return Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
-
-
 def main() -> None:
     root = discover_root()
     if root is None or not root.exists():
@@ -131,17 +124,9 @@ def main() -> None:
     sources = {name: (root / name).read_text() for name in EDITS}
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="pi-horizontal-inset-", dir=backup_root))
-        # Back up the complete source set before touching the installed host.
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
+        backup = backup_sources(root, sources, "pi-horizontal-inset-")
         print(f"Pi host backup: {backup}")
-        for name, source in patched.items():
-            (root / name).write_text(source)
+        write_sources(root, patched)
     print("Pi shared horizontal inset ready; restart Pi to apply")
 
 

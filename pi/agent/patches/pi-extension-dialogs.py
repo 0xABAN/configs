@@ -5,11 +5,14 @@ Display only: retain original input/focus/timeout/external-editor handlers. Refu
 unknown or partial sources before writing; back up exact originals. Restart Pi.
 """
 import json
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from patch_support import (
+    discover_pi_root as discover_root,
+    backup_sources,
+    write_sources,
+    replace_counted,
+)
 
 BASE = "dist/modes/interactive/components/"
 MODULE = BASE + "extension-dialogs.js"
@@ -65,13 +68,9 @@ EDITS = {
 
 
 def transform(name: str, source: str, reverse: bool = False) -> str:
-    edits = list(reversed(EDITS[name])) if reverse else EDITS[name]
-    for old, new, count in edits:
-        before, after = (new, old) if reverse else (old, new)
-        if source.count(before) != count:
-            raise ValueError(f"{name}: changed/duplicate dialog anchor {before[:80]!r}")
-        source = source.replace(before, after)
-    return source
+    return replace_counted(
+        source, EDITS[name], f"{name}: changed/duplicate dialog anchor", reverse=reverse,
+    )
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
@@ -96,15 +95,6 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def discover_root() -> Path | None:
-    if os.environ.get("PI_SDK_ROOT"):
-        return Path(os.environ["PI_SDK_ROOT"]).expanduser()
-    if not shutil.which("npm"):
-        return None
-    result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
-    return Path(result.stdout.strip()) / "@earendil-works/pi-coding-agent"
-
-
 def main() -> None:
     root = discover_root()
     if root is None or not root.exists():
@@ -118,17 +108,9 @@ def main() -> None:
         sources[MODULE] = (root / MODULE).read_text()
     patched = patch_sources(sources)
     if patched != sources:
-        backup_root = Path.home() / ".config/theme-backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        backup = Path(tempfile.mkdtemp(prefix="pi-extension-dialogs-", dir=backup_root))
-        for name in sources:
-            target = backup / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / name, target)
-        (backup / "added-files.json").write_text(json.dumps([MODULE]) + "\n")
+        backup = backup_sources(root, sources, "pi-extension-dialogs-", added_files=[MODULE])
         print(f"Pi native dialog backup: {backup}")
-        for name, source in patched.items():
-            (root / name).write_text(source)
+        write_sources(root, patched)
     print("Pi native dialog UI ready; restart Pi to apply")
 
 
