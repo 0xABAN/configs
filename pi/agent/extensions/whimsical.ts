@@ -17,7 +17,7 @@ export default function (pi: ExtensionAPI) {
 	// Hide it; render sparkles as aboveEditor widget so stack is:
 	//   rpiv-todo → whimsical spinner → editor
 	// clear+set bumps this key to the end of the widget Map (just above the editor).
-	let frames = randomFrames();
+	let frames: string[] = [];
 	let active = false;
 
 	const show = (ctx: ExtensionContext, reshuffle: boolean) => {
