@@ -7,7 +7,7 @@ mock.module("@earendil-works/pi-tui", () => ({
 
 const { default: planMode } = await import("../extensions/plan-mode/index.ts");
 
-test("mode and thinking keep original gradients alongside the jade footer", async () => {
+test("mode and thinking share softened build and purple plan gradients", async () => {
 	const handlers = new Map<string, Function>();
 	const commands = new Map<string, { handler: Function }>();
 	const statuses = new Map<string, string>();
@@ -43,7 +43,7 @@ test("mode and thinking keep original gradients alongside the jade footer", asyn
 	await handlers.get("session_start")!({}, ctx);
 	check("agent-mode", "\uF121  build mode", "255;255;255", "243;238;223");
 	const build = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
-	expect(build[4]).toBe("175;225;235");
+	expect(build[4]).toBe("195;233;240");
 
 	await commands.get("plan")!.handler("", ctx);
 	check("agent-mode", "\uF022  plan mode", "255;255;255", "243;238;223");
