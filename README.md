@@ -62,7 +62,7 @@ grain texture; activate them in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.95
+background-opacity = 0.92
 background-blur = 30
 background-opacity-cells = true
 background-image = ~/.config/ghostty/backgrounds/osaka-jade-grain.png
@@ -94,7 +94,7 @@ outline stays disabled, and split dividers keep their default color:
 }
 ```
 
-Opacity 0.95 limits bright backdrops to preserve text contrast; blur 30 keeps
+Opacity 0.92 reveals more of the backdrop beneath the grain; blur 30 keeps
 visible detail soft. The glass effect is subtle and depends on the wallpaper
 and windows behind cmux; a flat dark backdrop will still look dark.
 Base surfaces inherit one translucent background consistently across the shell,
@@ -105,7 +105,7 @@ The 256×256 grain tile adds fine static noise behind text, without an animated
 shader or a change to the blur. It is centered on Osaka Jade's `#121319` background
 with ±8 RGB levels of monochrome noise. `background-image-opacity = 0.25` keeps it
 subtle; lower that value for less grain, or set it to `0` to hide the texture.
-This mixes the grain into the terminal background before its 95% opacity is
+This mixes the grain into the terminal background before its 92% opacity is
 applied, leaving the blurred backdrop visible underneath.
 It affects terminal panes, not cmux's sidebar, and is intended for this dark theme.
 The local pre-grain config is backed up in
