@@ -82,20 +82,20 @@ test("dependency installation failure leaves existing config links untouched", (
 });
 
 test("installer runs the Pi rendering patches and surfaces incompatible installations", () => {
-  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py", "pi-transcript.py", "pi-extension-dialogs.py", "pi-activity-notices.py", "pi-compact-layout.py", "rpiv-todo-ui.py", "subagents-ui.py"]) {
+  for (const name of ["powerline-dj.py", "powerline-layout.py", "pi-horizontal-inset.py", "powerline-editor.py", "pi-transcript.py", "intercom-ui.py", "pi-extension-dialogs.py", "pi-activity-notices.py", "pi-compact-layout.py", "rpiv-todo-ui.py", "subagents-ui.py"]) {
     const { cwd, run } = sandbox(name);
     const patches = join(cwd, "pi/agent/patches");
     mkdirSync(patches);
     writeFileSync(join(patches, name), "raise SystemExit(23)\n");
     expect(run().exitCode).toBe(23);
   }
-}, 15_000); // Ten separate installer processes can exceed Bun's 5s default under load.
+}, 15_000); // Separate installer processes can exceed Bun's 5s default under load.
 
 test("activity styling runs after legacy todo tweaks", () => {
   const { cwd, home, run } = sandbox("activity-order");
   const patches = join(cwd, "pi/agent/patches");
   mkdirSync(patches);
-  const names = ["pi-extension-dialogs.py", "pi-activity-notices.py", "pi-compact-layout.py", "rpiv-todo-gray.py", "rpiv-todo-ui.py", "subagents-ui.py"];
+  const names = ["pi-transcript.py", "intercom-ui.py", "pi-extension-dialogs.py", "pi-activity-notices.py", "pi-compact-layout.py", "rpiv-todo-gray.py", "rpiv-todo-ui.py", "subagents-ui.py"];
   for (const name of names) {
     writeFileSync(join(patches, name), `from pathlib import Path
 with (Path.home() / "patch-order.log").open("a") as log:

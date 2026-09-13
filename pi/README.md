@@ -13,7 +13,7 @@ Installation and appearance settings are in the [repository guide](../README.md)
 | `agent/extensions/whimsical/` | Animation catalog, frame generation, and compaction-loader adapter |
 | `agent/patches/*.py` | Target-specific anchors, compatibility rules, and patch commands |
 | `agent/patches/patch_support.py` | SDK discovery, exact source loading, backup/write mechanics, and counted replacements |
-| `agent/patches/payloads/` | Renderer source grouped by `host`, `powerline`, `todo`, and `subagents` |
+| `agent/patches/payloads/` | Renderer source grouped by `host`, `powerline`, `todo`, `subagents`, and `intercom` |
 | `agent/tests/` | Feature and patch contract tests |
 | `agent/tests/support/` | Disposable fixtures, isolated native runners, and the plan-mode harness |
 | `agent/themes/`, `agents/`, `skills/`, `prompts/` | Theme data and agent instructions |
@@ -36,8 +36,13 @@ The transcript owns speaker headers and tool invocation rows. Every call keeps a
 row, even when its renderer is silent. Built-in names retain their action labels;
 other names use `⌇ Tool <name>` without exposing arbitrary extension arguments.
 Custom cards, images, and expanded output stay intact below their invocation row.
-Package renderers own Todos and Agents; the host owns notification wrapping and
-native dialogs. Do not add a second outer margin to individual renderers.
+Package renderers own Todos, Agents and incoming Intercom messages; the host
+owns notification wrapping and native dialogs. Intercom's installed npm owner
+and `intercom` tool name opt into collapsed invocation-only output. Its native
+expanded renderers, error summaries and images remain available. Incoming
+messages use a sender heading and message preview; expansion retains the full
+body, metadata, reply hint and attachments. No delivery or stored/model content
+is changed. Do not add a second outer margin to individual renderers.
 
 The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
 Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
@@ -51,8 +56,8 @@ the allocation.
 
 Keep theme reads live and preserve native components, cursor markers, image
 payloads, selection, expansion, and session ordering. The transcript's explicit
-pi-pretty allowance protects other custom renderers; do not replace it with a
-tool-name heuristic. The terminal owns the base background.
+pi-pretty and Intercom owner allowances protect other custom renderers; do not
+replace them with tool-name heuristics. The terminal owns the base background.
 
 Plan-mode status formatting is pure; the entrypoint owns status publication,
 tool restoration, and persistence. Whimsical's compaction adapter contains the
@@ -79,6 +84,7 @@ gate for extreme window sizes.
 | Powerline | Git commit `8c9bda10fdfd2822e89334ec85f3da9f8ca49182` | `powerline-dj.py`, `powerline-layout.py`, `powerline-editor.py` |
 | rpiv-todo UI | `@juicesharp/rpiv-todo` `2.9.0`, after legacy tweaks | `rpiv-todo-ui.py` |
 | Subagents UI | `@tintinweb/pi-subagents` `0.19.0` | `subagents-ui.py` |
+| Intercom messages | `pi-intercom` `0.13.0` | `intercom-ui.py` (with host `pi-transcript.py`) |
 
 Shared helpers do not decide compatibility. Each guarded patcher validates its
 complete source set before writing. Preserve exact anchors and occurrence counts,
@@ -104,7 +110,7 @@ The Todo UI patch recognizes only the exact clear-block reinjection it supports.
 Do not change persistence as part of a visual cleanup.
 
 `install.sh` owns the serial order: powerline DJ/layout, host inset, editor,
-transcript, dialogs, notices, compact layout, legacy Todo tweaks, Todo UI, then
+transcript, Intercom UI, dialogs, notices, compact layout, legacy Todo tweaks, Todo UI, then
 Subagents UI, then `pi/launcher.py`.
 The legacy Todo command remains best-effort; the other patch failures propagate.
 Keep pi-pretty before powerline in package settings because both install editors.
@@ -160,7 +166,7 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
   bun test pi/agent/tests
 ```
 
-`PI_POWERLINE_ROOT`, `PI_SUBAGENTS_ROOT`, and `RPIV_TODO_TEST_ROOT` override the
+`PI_POWERLINE_ROOT`, `PI_SUBAGENTS_ROOT`, `PI_INTERCOM_ROOT`, and `RPIV_TODO_TEST_ROOT` override the
 usual installed package source paths for tests. Guard fixtures exercise patch
 mechanics without an installation; they do not prove upstream compatibility.
 Native tests apply checkout patchers to disposable copies and retain real Pi
@@ -197,7 +203,7 @@ python3 -B pi/upgrade.py 0.85.1 --backup
 ```
 
 Requires Python 3.10+, Git, npm/Node, Bun, tmux, and the installed Powerline, Todo,
-Subagents and pi-pretty sources under `~/.pi/agent/`. Use an exact stable version;
+Subagents, Intercom and pi-pretty sources under `~/.pi/agent/`. Use an exact stable version;
 `latest`, ranges, prereleases and arbitrary npm specs are rejected. The command
 installs only inside a private `/tmp/pi-upgrade-<version>-*` directory, using
 `npm install --ignore-scripts --save-exact` against the public npm registry.
@@ -210,13 +216,19 @@ Powerline patches inside the stage, selects the candidate npm symlink with the
 same launcher helper used at activation, and launches **that executable** in
 120×36 tmux terminals in regular and fullscreen modes. The rendered faux-provider
 response must show `◆ You`, `● Pi`, the cream separator, a two-column outer inset
-and the configured Powerline footer. Captured ANSI/plain screens, executed
+and the configured Powerline footer. Intercom must show only its invocation row
+when collapsed, a borderless incoming sender/preview, and full details/attachments
+after expansion. Captured ANSI/plain screens, executed
 commands and individual assertions are retained under `cli-smoke/`.
 
 The terminal checks load copied pi-pretty and Powerline sources in configured
 order, with the configured theme and Powerline options. They do not load all
-personal extensions: intercom, MCP and subagents can contact live peers/services.
-Personal auth, remaining settings,
+personal extensions: Intercom's entrypoint, MCP and subagents can contact live
+peers/services. Intercom's exact renderer callbacks and pure formatting helpers
+are extracted into a synthetic npm package with its normal owner metadata;
+synthetic tool execution and incoming messages exercise the real host pipeline.
+No Intercom broker, bus or session hooks are loaded. These checks prove renderer
+integration, not delivery. Personal auth, remaining settings,
 Node overrides and API-key environment variables are not inherited by commands;
 PATH is retained to locate tools. This is isolation for testing, not a sandbox.
 Only npm installation needs network access; no model calls or lifecycle scripts
@@ -241,10 +253,12 @@ The patch-contract table above is the version authority. The patch purposes are:
 - Powerline DJ/layout/editor: mode presentation, footer sizing and editor frame.
 - Legacy Todo: dependency and persistence tweaks; Todo UI: task presentation.
 - Subagents UI: agent panels, previews and constrained-window layout.
+- Intercom UI: incoming sender/preview and expanded metadata, without delivery changes.
 
 `--backup` runs only after all checks pass. It copies the global Pi package,
 `pi/clean` including its installed dependencies, and the complete Powerline
-source (including `index.ts` and `bash-mode/editor.ts`) into `rollback/`.
+source (including `index.ts` and `bash-mode/editor.ts`), plus the Intercom package
+source, into `rollback/`.
 It also saves the actual command's exact link as `pi-launcher` and its path/target
 in `launcher.json`. Package-copy links are dereferenced; the launcher link itself
 is deliberately preserved. `auth.json` is excluded. A partial copy is not a

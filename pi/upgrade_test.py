@@ -29,7 +29,7 @@ class UpgradeTest(unittest.TestCase):
         # Exercise the real filesystem orchestration with controlled subprocesses.
         for failure in (
             None, "install", "config", "clean", "skip", "missing-summary", "source-change",
-            "backup", "no-backup", "cli", "launcher", "cli-assertions", "foreign-launcher",
+            "backup", "no-backup", "cli", "launcher", "cli-assertions", "foreign-launcher", "intercom",
         ):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -48,7 +48,7 @@ class UpgradeTest(unittest.TestCase):
                     home / ".pi/agent/auth.json": "DO NOT READ OR COPY",
                     global_modules / upgrade.PACKAGE / "original.txt": "live global install",
                 }
-                for name in ("@juicesharp/rpiv-todo", "@tintinweb/pi-subagents", "@heyhuynhgiabuu/pi-pretty"):
+                for name in ("@juicesharp/rpiv-todo", "@tintinweb/pi-subagents", "@heyhuynhgiabuu/pi-pretty", "pi-intercom"):
                     files[home / upgrade.NPM_PACKAGES / name / "package.json"] = '{"version":"1.0.0"}'
                 for path, text in files.items():
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +120,8 @@ class UpgradeTest(unittest.TestCase):
                             }))
                         else:
                             self.assertTrue(args[2].startswith("pi/agent/patches/"))
+                            if args[2] == "pi/agent/patches/intercom-ui.py":
+                                code = 1 if failure == "intercom" else 0
                     elif args == ["npm", "root", "-g"]:
                         output = str(global_modules) + "\n"
                         if failure == "backup":
@@ -156,6 +158,8 @@ class UpgradeTest(unittest.TestCase):
                     self.assertTrue(report["backup_complete"])
                     rollback = stage / "rollback"
                     self.assertEqual((rollback / "powerline/bash-mode/editor.ts").read_text(), "original bash editor")
+                    self.assertTrue((rollback / "intercom/package.json").exists())
+                    self.assertIn(["python3", "-B", "pi/agent/patches/intercom-ui.py"], calls)
                     self.assertEqual((rollback / "pi-clean/node_modules/installed.txt").read_text(), "live clean install")
                     self.assertFalse((rollback / "global-pi/alias.txt").is_symlink())
                     self.assertFalse(list(rollback.rglob("auth.json")))

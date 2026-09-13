@@ -247,9 +247,11 @@ the textarea without another gutter. The existing input/footer are unchanged.
 
 Native tools and the installed pi-pretty formatters use compact rows, with error
 summaries kept visible. The existing tool-output expansion action restores their
-original detailed renderers. Other extensions' custom renderers and image output
-keep their native presentation. Default-shell tool cards, including Intercom,
-share the transcript body's horizontal gutters and wrap inside that width.
+original detailed renderers. The `intercom` tool from the installed pi-intercom
+package also collapses to its invocation row; errors retain a visible summary.
+Unknown same-name tools, other custom renderers and image output keep their
+native presentation. Default-shell tool cards share the transcript body's
+horizontal gutters and wrap inside that width.
 Narrow panes reclaim the extra gutter. Self-framed renderers and image bodies
 keep their own geometry. There are no per-row click controls. Component order
 is preserved; mixed text/tool/text blocks inside one assistant message are not split.
@@ -289,6 +291,27 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 ```
 
 Restart Pi to apply host changes; `/reload` alone is not enough.
+
+### Intercom
+
+Incoming messages use a `◇ From <sender>` heading and a one-line message preview,
+with the transcript's gutters and live theme colors rather than a rounded card.
+Tool-output expansion reveals the full body, sender/message metadata, reply hint
+and attachments. Outgoing calls collapse to the existing host invocation row;
+expanding restores Intercom's native call/result renderers. Delivery, reply
+tracking, stored messages and model-visible content are unchanged.
+
+The guarded package patch targets **pi-intercom 0.13.0**, alongside the Pi 0.85.1
+transcript patch. After reinstalling the package, replay both and restart Pi:
+
+```sh
+python3 -B pi/agent/patches/pi-transcript.py
+python3 -B pi/agent/patches/intercom-ui.py
+```
+
+The installer and upgrade checker include both steps. Offline terminal checks
+use the real renderer callbacks with synthetic registration/messages, not a live
+Intercom broker or peer. They verify collapsed and expanded output in both modes.
 
 ### Todos and Agents
 

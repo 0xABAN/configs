@@ -116,6 +116,11 @@ if [[ -f "$ROOT/pi/agent/patches/pi-transcript.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-transcript.py"
 fi
 
+# Intercom's incoming messages share the transcript; delivery stays package-owned.
+if [[ -f "$ROOT/pi/agent/patches/intercom-ui.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/intercom-ui.py"
+fi
+
 # Agents' pickers, confirmations and editors use these shared native dialogs.
 if [[ -f "$ROOT/pi/agent/patches/pi-extension-dialogs.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-extension-dialogs.py"

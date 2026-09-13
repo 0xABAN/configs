@@ -149,6 +149,19 @@ EDITS = {
 }
 
 
+# Keep the exact installed lookup as a migration input; only the registered
+# intercom tool from the supported npm package joins the compact allowance.
+PRE_INTERCOM_LOOKUP = EDITS[BASE + "interactive-mode.js"][2]
+old_lookup, previous_lookup = PRE_INTERCOM_LOOKUP
+EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, previous_lookup.replace(
+    '        // Only native and the installed pretty formatters opt into compact rows.',
+    '        // Only native, installed pretty and the supported Intercom tool opt in.',
+).replace(
+    '.test(owner ?? "") };',
+    '.test(owner ?? "")\n            || (toolName === "intercom"'
+    ' && (owner === "npm:pi-intercom" || owner === "npm:pi-intercom@0.13.0")) };',
+))
+
 # Keep the supported layout/helper migrations, but require 0.85.1's renderer
 # lookup in every revision. An old host method must not drop built-in renderers.
 for previous_edits in (PRE_METRICS_EDITS, LEGACY_EDITS):
@@ -183,17 +196,28 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     try:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
-        revisions = (
+        revisions = [
+            (EDITS, (MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+                     PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
-        )
+        ]
+        # Accept earlier layouts with either known lookup, but still validate the
+        # entire matching source set and helper before changing anything.
+        for revision, helpers in list(revisions):
+            previous = {name: list(edits) for name, edits in revision.items()}
+            previous[BASE + "interactive-mode.js"][2] = PRE_INTERCOM_LOOKUP
+            revisions.append((previous, helpers))
         for previous_edits, helpers in revisions:
             if sources.get(MODULE) not in helpers:
                 continue
             # Old host edits and their helper migrate together. Never repair a
             # mixed installation just because its helper is recognizable.
-            if source_state(sources, previous_edits) != "patched":
-                raise current_error
+            try:
+                if source_state(sources, previous_edits) != "patched":
+                    continue
+            except ValueError:
+                continue
             original = dict(sources)
             del original[MODULE]
             for name, edits in previous_edits.items():

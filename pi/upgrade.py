@@ -78,7 +78,8 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
         "version": version, "status": "failed", "activated": False, "backup_complete": False,
         "coverage": {},
         "scope": "Local config/native suites and clean launcher/auth tests with synthetic tokens. "
-                 "Real CLI terminal checks cover pi-pretty, Powerline and the configured theme in both modes. "
+                 "Real CLI terminal checks cover pi-pretty, Powerline, the configured theme and real Intercom renderers "
+                 "with synthetic registration/delivery (no broker) in both modes. "
                  "Not every personal extension, upstream suites or authenticated model calls.",
     }
     isolated_home = stage / "home"
@@ -121,7 +122,7 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
         for relative in (NPM_PACKAGES, POWERLINE):
             copy_tree(home / relative, isolated_home / relative)
         required = [POWERLINE, *(NPM_PACKAGES / name for name in (
-            "@juicesharp/rpiv-todo", "@tintinweb/pi-subagents", "@heyhuynhgiabuu/pi-pretty",
+            "@juicesharp/rpiv-todo", "@tintinweb/pi-subagents", "@heyhuynhgiabuu/pi-pretty", "pi-intercom",
         ))]
         report["package_sources"] = {}
         for relative in required:
@@ -148,7 +149,7 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
         # Native tests patch disposable fixtures, not the candidate itself. Replay
         # into this candidate only after the unmodified clean-launcher tests pass.
         for patcher in ("powerline-dj", "powerline-layout", "pi-horizontal-inset", "powerline-editor",
-                        "pi-transcript", "pi-extension-dialogs", "pi-activity-notices", "pi-compact-layout"):
+                        "pi-transcript", "intercom-ui", "pi-extension-dialogs", "pi-activity-notices", "pi-compact-layout"):
             run(patcher, ["python3", "-B", f"pi/agent/patches/{patcher}.py"], snapshot)
         candidate_launcher = clean / "node_modules/.bin/pi"
         run("select-launcher", ["python3", "-B", "pi/launcher.py", "--sdk", str(sdk),
@@ -183,13 +184,14 @@ def check_upgrade(version: str, backup: bool, repo: Path, home: Path, stage: Pat
             rollback = stage / "rollback"
             rollback.mkdir()
             for source, destination in ((global_root, "global-pi"), (repo / "pi/clean", "pi-clean"),
-                                        (home / POWERLINE, "powerline")):
+                                        (home / POWERLINE, "powerline"),
+                                        (home / NPM_PACKAGES / "pi-intercom", "intercom")):
                 copy_tree(source, rollback / destination)
             (rollback / "launcher.json").write_text(json.dumps(report["live_launcher"], indent=2) + "\n")
             (rollback / "pi-launcher").symlink_to(report["live_launcher"]["target"])
             report["backup_complete"] = True
             report["backup_sources"] = {"global-pi": str(global_root), "pi-clean": str(repo / "pi/clean"),
-                                        "powerline": str(home / POWERLINE)}
+                                        "powerline": str(home / POWERLINE), "intercom": str(home / NPM_PACKAGES / "pi-intercom")}
         if source_snapshot(repo, env) != hashes:
             raise RuntimeError("configuration changed while backing up; rerun before activation")
         report["status"] = "passed"

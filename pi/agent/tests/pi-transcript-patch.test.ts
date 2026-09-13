@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const patcher = fileURLToPath(new URL("../patches/pi-transcript.py", import.meta.url));
 const { edits, module: modulePath } = describePatch<{ edits: Record<string, [string, string][]>; module: string }>(
   patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
+const previousLookup = describePatch<[string, string]>(patcher, "m['PRE_INTERCOM_LOOKUP']");
 const temp = temporaryDirectory("pi-transcript-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -125,6 +126,31 @@ for (const helper of [
     }
   });
 }
+
+test("the installed pre-Intercom lookup migrates with exact helper guards and backups", () => {
+  const root = sandbox("pre-intercom");
+  expect(run(root).exitCode).toBe(0);
+  const current = contents(root);
+  const file = "dist/modes/interactive/interactive-mode.js";
+  const previous = current[file]!.replace(edits[file][2][1], previousLookup[1]);
+  writeFileSync(join(root, file), previous);
+  const backupRoot = join(root, ".config/theme-backups");
+  const beforeBackups = readdirSync(backupRoot);
+  const helper = current[modulePath]!;
+  writeFileSync(join(root, modulePath), helper + "\n// changed helper");
+  const invalid = contents(root);
+  expect(run(root).exitCode).not.toBe(0);
+  expect(contents(root)).toEqual(invalid);
+  expect(readdirSync(backupRoot)).toEqual(beforeBackups);
+  writeFileSync(join(root, modulePath), helper);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(current);
+  const backup = readdirSync(backupRoot).find(name => !beforeBackups.includes(name))!;
+  expect(readFileSync(join(backupRoot, backup, file), "utf8")).toBe(previous);
+  expect(readFileSync(join(backupRoot, backup, modulePath), "utf8")).toBe(helper);
+  expect(run(root).exitCode).toBe(0);
+  expect(readdirSync(backupRoot)).toHaveLength(2);
+});
 
 test("transcript patch validates, backs up exact originals, and repeats without writes", () => {
   const root = sandbox("valid");
