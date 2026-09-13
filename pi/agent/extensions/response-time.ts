@@ -14,38 +14,76 @@ export function formatDuration(seconds: number): string {
 	return `${Math.floor(totalMinutes / 60)}h ${String(totalMinutes % 60).padStart(2, "0")}m`;
 }
 
-/** Latest main-agent response duration, including request wait but not tool execution. */
+/** Latest main-agent response duration, including tools and queued continuations. */
 export default function responseTime(pi: ExtensionAPI): void {
 	let startedAt: number | undefined;
+	let lastDuration = "—";
+	let lastStopReason: string | undefined;
+	let ticker: ReturnType<typeof setInterval> | undefined;
+
+	function clearTicker(): void {
+		if (ticker === undefined) return;
+		clearInterval(ticker);
+		ticker = undefined;
+	}
+
+	function elapsedMilliseconds(): number | undefined {
+		if (startedAt === undefined) return undefined;
+		const elapsed = performance.now() - startedAt;
+		return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : undefined;
+	}
+
+	function displayDuration(): string {
+		const elapsed = elapsedMilliseconds();
+		if (elapsed === undefined) return startedAt === undefined ? lastDuration : "—";
+		return elapsed === 0 ? "0.0s" : formatDuration(elapsed / 1000);
+	}
+
+	function update(ctx: ExtensionContext): void {
+		if (ctx.hasUI) ctx.ui.setStatus("agent-response-time", displayDuration());
+	}
 
 	function reset(_event: unknown, ctx: ExtensionContext): void {
 		startedAt = undefined;
-		if (ctx.hasUI) ctx.ui.setStatus("agent-response-time", "—");
+		lastStopReason = undefined;
+		lastDuration = "—";
+		clearTicker();
+		if (ctx.hasUI) ctx.ui.setStatus("agent-response-time", lastDuration);
 	}
 
 	pi.on("session_start", reset);
 	pi.on("session_tree", reset);
 
-	pi.on("context", () => {
-		// This runs before provider I/O for each response. message_start can arrive
-		// after the HTTP/prefill wait, so timing from it would understate duration.
+	pi.on("before_agent_start", (_event, ctx) => {
+		clearTicker();
 		startedAt = performance.now();
+		lastStopReason = undefined;
+		update(ctx);
+		if (ctx.hasUI) ticker = setInterval(() => update(ctx), 1000);
 	});
 
-	pi.on("message_end", (event, ctx) => {
-		if (event.message.role !== "assistant" || startedAt === undefined) return;
-		const elapsed = performance.now() - startedAt;
+	pi.on("message_end", (event) => {
+		if (event.message.role === "assistant") lastStopReason = event.message.stopReason;
+	});
+
+	pi.on("agent_settled", (_event, ctx) => {
+		if (startedAt === undefined) return;
+		const elapsed = elapsedMilliseconds();
 		startedAt = undefined;
+		clearTicker();
 
 		// Failed, cancelled and deferred attempts do not replace the last completion.
-		if (!["stop", "length", "toolUse"].includes(event.message.stopReason)) return;
-		const seconds = elapsed / 1000;
-		if (ctx.hasUI) ctx.ui.setStatus("agent-response-time", formatDuration(seconds));
+		if (elapsed !== undefined && ["stop", "length", "toolUse"].includes(lastStopReason ?? "")) {
+			lastDuration = formatDuration(elapsed / 1000);
+		}
+		update(ctx);
+		lastStopReason = undefined;
 	});
 
-	pi.on("agent_end", () => { startedAt = undefined; });
 	pi.on("session_shutdown", (_event, ctx) => {
 		startedAt = undefined;
+		lastStopReason = undefined;
+		clearTicker();
 		if (ctx.hasUI) ctx.ui.setStatus("agent-response-time", undefined);
 	});
 }
