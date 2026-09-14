@@ -92,6 +92,7 @@ for (const helper of [
   "transcript-before-inline-metrics.js.inc",
   "transcript-before-user-separator.js.inc",
   "transcript-before-single-action.js.inc",
+  "transcript-before-single-action-dash-removal.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -349,7 +350,7 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   expect(text).not.toContain("1 action");
   expect(text).toContain("├─ ✓ □ Read");
   expect(text).toContain("╰─ ✓ ◎ Search");
-  expect(text).toContain("─  × ↯ Run");
+  expect(text).toContain("\n      × ↯ Run");
   expect(text).toContain("Expected an active session");
   expect(text).not.toContain("SECRET_EXPANDED_DETAIL");
   expect(text.indexOf("session.ts")).toBeLessThan(text.indexOf("expiry"));
@@ -748,13 +749,13 @@ realTest("builtin-name overrides keep native cards beneath their invocation unle
       app.chatContainer.addChild(component);
       if (owner === "project-extension") {
         expect(transcript(m, app)).not.toContain("1 action");
-        expect(transcript(m, app)).toContain("─  ✓ □ Read");
+        expect(transcript(m, app)).toContain("\n      ✓ □ Read");
         expect(transcript(m, app)).toContain("CUSTOM");
         const native = component.render(90);
         expect(app.chatContainer.render(90).slice(-native.length)).toEqual(native);
       } else {
         expect(transcript(m, app)).not.toContain("1 action");
-        expect(transcript(m, app)).toContain("─  ✓ □ Read");
+        expect(transcript(m, app)).toContain("\n      ✓ □ Read");
         component.setExpanded(true);
         expect(transcript(m, app)).toContain("CUSTOM");
       }
@@ -773,7 +774,7 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   expect(transcript(m, app)).toContain("CUSTOM NOTICE");
   expect(transcript(m, app)).toContain("CUSTOM INTERACTIVE CARD");
   expect(transcript(m, app)).not.toContain("1 action");
-  expect(transcript(m, app)).toMatch(/─  ○ ⌇ Tool\s+workflow/);
+  expect(transcript(m, app)).toMatch(/^ {6}○ ⌇ Tool\s+workflow/m);
   expect(transcript(m, app).indexOf("Tool")).toBeLessThan(transcript(m, app).indexOf("CUSTOM INTERACTIVE CARD"));
   const hidden = new m.ToolExecutionComponent("read", "hidden", {}, {}, {
     renderShell: "self", renderCall: () => ({ render: () => [], invalidate() {} }),
@@ -885,18 +886,20 @@ realTest("single actions keep status and alignment when a group grows or shrinks
   const first = new m.ToolExecutionComponent("read", "first", { path: "first.ts" }, {}, undefined, app.ui, temp);
   const second = new m.ToolExecutionComponent("grep", "second", { pattern: "pageScroll", path: "/opt/homebrew" }, {}, undefined, app.ui, temp);
   app.chatContainer.addChild(first);
-  expect(transcript(m, app)).toContain("─  ○ □ Read");
+  expect(transcript(m, app)).toContain("\n      ○ □ Read");
   first.markExecutionStarted();
-  expect(transcript(m, app)).toContain("─  ◌ □ Read");
+  expect(transcript(m, app)).toContain("\n      ◌ □ Read");
   first.updateResult(result("first", "read", "file contents"));
   first.transcriptDurationMs = 50;
-  expect(transcript(m, app)).toContain("─  ✓ □ Read");
+  expect(transcript(m, app)).toContain("\n      ✓ □ Read");
 
   for (const rows of [40, 12]) {
     height = rows;
     for (const width of [120, 79, 40, 20, 12, 8, 6, 4]) {
       const single = app.chatContainer.render(width);
-      expect(single.map(m.tui.stripTerminalSequences).join("\n")).not.toContain("1 action");
+      const singleText = single.map(m.tui.stripTerminalSequences).join("\n");
+      expect(singleText).not.toContain("1 action");
+      expect(singleText).not.toMatch(/[─├╰]/);
       app.chatContainer.addChild(second);
       const grouped = app.chatContainer.render(width);
       expect([...single, ...grouped].every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
@@ -906,7 +909,7 @@ realTest("single actions keep status and alignment when a group grows or shrinks
         expect(group.some((line: string) => line.trim() === "2 actions")).toBe(true);
         expect(plain.find((line: string) => line.includes("Read"))).toContain("<0.1s");
         expect(plain.find((line: string) => line.includes("Read"))).toBe(
-          group.find((line: string) => line.includes("Read")).replace("├─ ", "─  "));
+          group.find((line: string) => line.includes("Read")).replace("├─ ", "   "));
         expect(group.find((line: string) => line.includes("Search"))).toContain("╰─ ○ ◎ Search");
       }
       app.chatContainer.removeChild(second);
@@ -940,7 +943,7 @@ realTest("transcript changes only singleton framing and label weight across erro
           line.replace(theme.bold(theme.fg("muted", "Read  ")), theme.fg("muted", "Read  ")));
         const expected = old.render(width)
           .filter((line: string) => m.tui.stripTerminalSequences(line).trim() !== "1 action")
-          .map((line: string) => count === 1 ? line.replace("╰─ ", "─  ") : line);
+          .map((line: string) => count === 1 ? line.replace("╰─ ", "   ") : line);
         expect(withoutBold).toEqual(expected);
       }
     }

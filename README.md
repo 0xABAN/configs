@@ -241,7 +241,7 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 The Pi 0.85.1 transcript patch adds `◆ You` / `● Pi` headers and compact
 geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
 action icons keep the teal accent. Speaker names retain the normal text color.
-Single tools use a straight `─` row without a count heading. Two or more
+Single tools have no count heading or tree connector. Two or more
 consecutive visible tool rows share a counted action tree, with status and action
 names aligned to the single-tool row. Action names such as **Search** and **Read**
 are bold; arguments and timing keep their existing weight. Narration and custom

@@ -28,6 +28,7 @@ PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-n
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
 PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
+PRE_DASH_REMOVAL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action-dash-removal.js.inc')
 # Derive the exact older background helpers from the frozen separator revision,
 # not the current renderer: later layout changes must not alter migration inputs.
 _USER_BACKGROUND_IMPORTS = '''import { DynamicBorder } from "./dynamic-border.js";\n\nconst USER_SEPARATOR = new DynamicBorder(line => theme.fg("toolOutput", line));\n'''
@@ -227,7 +228,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+            (EDITS, (MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
+                     PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
                      PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
@@ -259,7 +261,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise current_error
     if state == "patched":
         if sources.get(MODULE) in (
-            PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+            PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
+            PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
             PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
         ):

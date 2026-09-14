@@ -205,7 +205,7 @@ export class TranscriptContainer extends Container {
                 let continuation = "";
                 if (width - bodyPadding >= 6) {
                     // Keep status and label columns fixed as a singleton grows into a tree.
-                    branch = !grouped ? "   " : isLast ? "╰─ " : "├─ ";
+                    branch = !grouped ? "─  " : isLast ? "╰─ " : "├─ ";
                     continuation = isLast ? "   " : "│  ";
                 }
                 const rows = actionLines(actions[i], Math.max(1, width - bodyPadding - branch.length));

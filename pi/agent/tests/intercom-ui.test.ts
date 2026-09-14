@@ -157,7 +157,7 @@ realTest("real Intercom renderers compact only the authorized tool; expansion, p
     if (compact) {
       const rows = text().split("\n").filter((line: string) => line.trim());
       expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
-      expect(rows[1]).toMatch(/─  ✓ ⌇ Tool\s+intercom/);
+      expect(rows[1]).toMatch(/^ {6}✓ ⌇ Tool\s+intercom/);
     }
     tool.setExpanded(true);
     expect(text()).toContain("FULL_OUTGOING_DETAIL");
