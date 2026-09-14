@@ -27,6 +27,9 @@ nativeTest("native discovery loads entrypoints only; whimsical keeps loader and 
   }
   const { discoverAndLoadExtensions } = await import(pathToFileURL(join(sdk!, "dist/core/extensions/loader.js")).href);
   const tui = await import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
+  const { AssistantMessageComponent } = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/components/assistant-message.js")).href);
+  const { initTheme } = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/theme/theme.js")).href);
+  initTheme(undefined, false);
   const loaded = await discoverAndLoadExtensions([], temp, agent);
   expect(loaded.errors).toEqual([]);
   expect(loaded.extensions.map((extension: any) => extension.path.slice(extensions.length + 1)).sort())
@@ -56,11 +59,32 @@ nativeTest("native discovery loads entrypoints only; whimsical keeps loader and 
     expect(first.intervalMs).toBe(90);
     expect(first.render(100)[0]).not.toBe("");
     expect(first.intervalId).not.toBeNull();
+    const fallbackFrames = [...first.frames];
+    await dispatch("message_update", { message: { role: "assistant", content: [{ type: "text", text: "Answer" }] } });
+    expect(first.frames).toEqual(fallbackFrames);
+    await dispatch("message_update", { message: {
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "Exploring whimsical.ts file\nRequesting directory list" }],
+    } });
+    expect(first.frames).toEqual(sparkleFrames("Requesting directory list"));
+    const transformer = extension.markdownTransformer;
+    expect(transformer("reasoning trace", { messageType: "assistant-thinking" })).toBe("");
+    expect(transformer("assistant answer", { messageType: "assistant" })).toBe("assistant answer");
+    const transcriptThinking = new AssistantMessageComponent({
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "reasoning trace" }],
+    }, false, undefined, undefined, 1, [transformer]);
+    expect(transcriptThinking.render(100).map(tui.stripTerminalSequences).join("\n")).not.toContain("reasoning trace");
     await dispatch("turn_start");
     expect(first.intervalId).toBeNull();
     const next = widgets.get("whimsical-working");
     await dispatch("tool_result", { toolName: "read" });
     expect(widgets.get("whimsical-working")).toBe(next);
+    await dispatch("message_update", { message: {
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "Inspecting the next turn" }],
+    } });
+    expect(next.frames).toEqual(sparkleFrames("Inspecting the next turn"));
     const frames = [...next.frames];
     widgets.delete("rpiv-todos");
     widgets.set("rpiv-todos", undefined);
