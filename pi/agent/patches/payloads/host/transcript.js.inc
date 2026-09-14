@@ -166,9 +166,8 @@ export function actionLines(component, width) {
 
 /**
  * Keep the native flat child list: expansion, theme invalidation and history replay
- * continue to reach the exact same components. Group calls within each assistant
- * message; even an empty Pi component marks the boundary. Never move prose,
- * custom messages or tool results to manufacture a cleaner turn.
+ * continue to reach the exact same components. Group only adjacent visible tools;
+ * never move prose, custom messages or tool results to manufacture a cleaner turn.
  */
 export class TranscriptContainer extends Container {
     constructor(getPadding = () => 1, getRows = () => Infinity) {
@@ -215,11 +214,6 @@ export class TranscriptContainer extends Container {
         };
 
         for (const child of this.children) {
-            // An assistant message with only hidden content renders no lines, but
-            // it still separates its calls from the preceding assistant message.
-            if (child.transcriptRole === "pi" && actions.length) {
-                flushActions();
-            }
             // Recompute on every render: removing/clearing/replaying children must
             // not leave a cached speaker identity behind.
             if (child.transcriptRole === "pi") {

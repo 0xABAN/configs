@@ -371,29 +371,6 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   expect(transcript(m, live)).toBe(text);
 });
 
-realTest("assistant boundaries keep adjacent tool calls in separate action groups", async () => {
-  const m = await real();
-  const app = host(m);
-  const calls = [
-    assistant([toolCall("a", "read", { path: "a.ts" })]),
-    assistant([toolCall("b", "read", { path: "b.ts" })]),
-  ];
-
-  for (const [index, message] of calls.entries()) {
-    await app.handleEvent({ type: "message_start", message });
-    await app.handleEvent({ type: "message_update", message });
-    await app.handleEvent({ type: "message_end", message });
-    const id = String.fromCharCode(97 + index);
-    const output = result(id, "read", `${id} content`);
-    await app.handleEvent({ type: "tool_execution_start", toolCallId: id, toolName: "read", args: { path: `${id}.ts` } });
-    await app.handleEvent({ type: "tool_execution_end", toolCallId: id, toolName: "read", result: output, isError: false });
-  }
-
-  const text = transcript(m, app);
-  expect(text.match(/1 action/g)).toHaveLength(2);
-  expect(text).not.toContain("2 actions");
-});
-
 realTest("parallel timings persist outside model context and replay from only the active branch", async () => {
   const m = await real();
   const manager = m.SessionManager.create(temp, join(temp, "timing-sessions"));
