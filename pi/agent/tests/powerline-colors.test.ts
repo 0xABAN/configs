@@ -20,7 +20,7 @@ test("mode and thinking share softened build and purple plan gradients", async (
 	await app.event("session_start");
 	check("agent-mode", "\uF121  build mode", "255;255;255", "243;238;223");
 	const build = check("agent-thinking", "think:med", "255;255;255", "243;238;223");
-	expect(build[4]).toBe("218;235;232");
+	expect(build[4]).toBe("173;210;203");
 
 	await app.toggle();
 	check("agent-mode", "\uF022  plan mode", "255;255;255", "243;238;223");

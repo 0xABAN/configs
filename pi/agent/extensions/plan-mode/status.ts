@@ -41,7 +41,7 @@ function thinkingLabel(level: string): string {
 export function formatPlanStatus(enabled: boolean, thinkingLevel?: string): { mode: string; thinking: string } {
 	const mid: [number, number, number] = enabled
 		? [196, 160, 230] // pastel purple (plan)
-		: [218, 235, 232]; // pale teal (build, #daebe8)
+		: [173, 210, 203]; // pale teal (build, #add2cb)
 
 	return {
 		mode: shine(enabled ? "\uF022  plan mode" : "\uF121  build mode", mid),
