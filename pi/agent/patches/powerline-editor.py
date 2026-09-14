@@ -2,7 +2,7 @@
 """Round powerline's existing editor inside the Pi host's shared horizontal inset.
 
 The layoutText hook follows the pinned Pi editor's row contract: two borders,
-visible input rows (30% of terminal height, minimum five), then completion rows.
+visible input rows (40% of terminal height, minimum five), then completion rows.
 """
 from pathlib import Path
 
@@ -93,9 +93,8 @@ EDITS = {
 }
 
 
-PRE_VISIBLE_ROWS = EDITS["index.ts"][3][1].replace(
-    "Math.floor(tui.terminal.rows * 0.4)", "Math.floor(tui.terminal.rows * 0.3)",
-)
+PRE_VISIBLE_ROWS = '''        const visibleRows = Math.min(inputLineCount, Math.max(5, Math.floor(tui.terminal.rows * 0.3)));
+        const bottomBorderIndex = 1 + visibleRows;'''
 
 
 PROMPT_EDIT = (
@@ -130,6 +129,9 @@ LEGACY_BORDER_EDIT = (
 
 
 BORDER_EDIT = (LEGACY_BORDER_EDIT[0], read_payload("powerline/editor-badges.ts.inc").rstrip("\n"))
+BORDER_FRAME_PREFIX = EDITS["index.ts"][4][1].split(
+    "\n\n        for (let i = 1; i < bottomBorderIndex; i++)", 1,
+)[0]
 PRE_CENTERED_SCROLL_BORDER = read_payload("powerline/legacy/editor-badges-before-centered-scroll.ts.inc").rstrip("\n")
 PRE_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-tps.ts.inc").rstrip("\n")
 PRE_LEADING_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-leading-tps.ts.inc").rstrip("\n")
@@ -144,6 +146,11 @@ PRE_RENDER_HEIGHT = EDITS["index.ts"][2][1]
 RENDER_HEIGHT_EDIT = (
     PRE_RENDER_HEIGHT,
     read_payload("powerline/editor-render.ts.inc").rstrip("\n"),
+)
+PREVIOUS_BOTTOM_BORDER = (
+    BOTTOM_BORDER_EDIT[1] + "\n"
+    + EDITS["index.ts"][7][1].split("\n", 1)[1]
+      .replace("nativeBottomBorderIndex", "bottomBorderIndex")
 )
 BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
@@ -181,16 +188,6 @@ def canonicalize_bottom_border(index: str) -> str:
     return index.replace(new, old, 1) if new_count else index
 
 
-def upgrade_bottom_border(index: str) -> str:
-    """Apply the bottom badge payload after the complete frame is validated."""
-    old, new = BOTTOM_BORDER_EDIT
-    old_count = index.count(old)
-    new_count = index.count(new)
-    if old_count != 1 or new_count:
-        raise ValueError("editor bottom badge patch missing or duplicated")
-    return index.replace(old, new, 1)
-
-
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
     sources = dict(sources)
@@ -209,21 +206,48 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise ValueError("partial or duplicated compact editor badge patch")
     border_variants = [*compact_borders, LEGACY_BORDER_EDIT[1],
                        LEGACY_BORDER_EDIT[1].replace('join(" ❯ ")', 'join(" · ")')]
+    frame_comment = BORDER_FRAME_PREFIX.split("\n", 1)[0] + "\n"
     for variant in border_variants:
-        index = index.replace(variant, old_border)
+        index = index.replace(frame_comment + variant, BORDER_FRAME_PREFIX)
+        index = index.replace(variant, BORDER_FRAME_PREFIX)
 
     old_import, new_import = BADGE_IMPORT
     if index.count(new_import) == 1 and index.count(old_import) == 0:
         index = index.replace(new_import, old_import, 1)
     elif index.count(old_import) != 1 or index.count(new_import) != 0:
         raise ValueError("editor badge import changed or duplicated")
-    index = canonicalize_bottom_border(index)
+    if index.count(PREVIOUS_BOTTOM_BORDER) > 1:
+        raise ValueError("editor bottom badge patch changed or duplicated")
+    if index.count(PREVIOUS_BOTTOM_BORDER) == 1:
+        index = index.replace(PREVIOUS_BOTTOM_BORDER, EDITS["index.ts"][7][0], 1)
+    else:
+        index = canonicalize_bottom_border(index)
     index = canonicalize_render_height(index)
     visible_rows = EDITS["index.ts"][3][1]
-    if index.count(PRE_VISIBLE_ROWS) > 1 or index.count(visible_rows) > 1:
+    height_variants = (PRE_VISIBLE_ROWS, visible_rows)
+    height_counts = [index.count(variant) for variant in height_variants]
+    if sum(height_counts) > 1:
         raise ValueError("editor height patch changed or duplicated")
-    if index.count(PRE_VISIBLE_ROWS) == 1:
-        index = index.replace(PRE_VISIBLE_ROWS, visible_rows, 1)
+    if height_counts[0]:
+        index = index.replace(PRE_VISIBLE_ROWS, EDITS["index.ts"][3][0], 1)
+    if index.count(visible_rows) > 1:
+        raise ValueError("editor height patch changed or duplicated")
+
+    # Rebase a complete earlier installation so every guarded edit can be
+    # validated and replayed together. A partial installation still fails below.
+    core_edits = [EDITS["index.ts"][0], EDITS["index.ts"][1], EDITS["index.ts"][6],
+                  EDITS["bash-mode/editor.ts"][0]]
+    if all(index.count(new) == 1 and index.count(old) == 0 for old, new in core_edits[:3]) \
+            and sources["bash-mode/editor.ts"].count(core_edits[3][1]) == 1 \
+            and sources["bash-mode/editor.ts"].count(core_edits[3][0]) == 0:
+        for old, new in EDITS["index.ts"]:
+            if index.count(new) == 1 and index.count(old) == 0:
+                index = index.replace(new, old, 1)
+        bash_source = sources["bash-mode/editor.ts"]
+        for old, new in EDITS["bash-mode/editor.ts"]:
+            if bash_source.count(new) == 1 and bash_source.count(old) == 0:
+                bash_source = bash_source.replace(new, old, 1)
+        sources["bash-mode/editor.ts"] = bash_source
     sources["index.ts"] = index
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
@@ -261,7 +285,6 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             for old, new in EDITS[name]:
                 source = source.replace(old, new, 1)
             result[name] = source
-    result["index.ts"] = upgrade_bottom_border(result["index.ts"])
     result["index.ts"] = upgrade_render_height(result["index.ts"])
     result["index.ts"] = (result["index.ts"].replace(old_border, new_border, 1)
                           .replace(old_import, new_import, 1))

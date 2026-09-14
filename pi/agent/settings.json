@@ -70,7 +70,7 @@
       }
     ],
     "layout": {
-      "left": ["model", "git"],
+      "left": ["model", "custom:thinking", "git"],
       "right": ["cost", "context_pct"],
       "secondary": ["shell_mode", "queue"]
     }

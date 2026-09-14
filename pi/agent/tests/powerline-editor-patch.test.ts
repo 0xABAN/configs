@@ -50,8 +50,8 @@ test("powerline owns the final editor after pi-pretty installs its prompt", () =
   const powerline = packages.findIndex((source: string) => source.includes("nicobailon/pi-powerline-footer"));
   expect(pretty).toBeGreaterThanOrEqual(0);
   expect(powerline).toBeGreaterThan(pretty);
+  expect(settings.powerline.layout.left).toEqual(["model", "custom:thinking", "git"]);
   expect(Object.values(settings.powerline.layout).flat()).not.toContain("custom:mode");
-  expect(Object.values(settings.powerline.layout).flat()).not.toContain("custom:thinking");
 });
 
 test("editor patch is idempotent and preserves unrelated changes", () => {
@@ -271,11 +271,12 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(80)).toHaveLength(14);
   editor.setText("");
+  expect(editor.render(80)).toHaveLength(3);
   const top = editor.render(80)[0];
   expect(plain(top)).toEndWith(" build mode ❯ main ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
   expect(plain(top)).not.toContain("think:med");
-  expect(plain(editor.render(80).at(-1))).toContain("gpt-5.4 ❯ think:med");
+  expect(plain(editor.render(80).at(-1))).not.toContain("gpt-5.4 ❯ think:med");
   expect(visibleWidth(top)).toBe(80);
   expect(plain(editor.render(16)[0])).not.toContain("build mode");
   for (const height of [12, 20, 30, 12]) {
@@ -294,7 +295,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       expect(rows[0]).toContain(statuses.get("agent-mode")!);
       expect(plain(rows[0]).includes("main")).toBe(width > 40);
       const bottom = plain(rows.at(-1));
-      expect(bottom.includes("think:med")).toBe(width >= 40);
+      expect(bottom.includes("think:med")).toBe(false);
       expect(rows[0].includes("\x1b[0m ❯ ")).toBe(width > 40);
       expect(rows[0].match(/\x1b\[38;2;/g)!.length).toBeGreaterThan(5);
       expect(editor.getText()).toBe("界🙂".repeat(1000));
@@ -312,7 +313,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
     expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);
-    expect(plain(rows.at(-1))).toContain("gpt-5.4 ❯ think:xhigh");
+    expect(plain(rows.at(-1))).not.toContain("gpt-5.4 ❯ think:xhigh");
+    expect(plain(row)).not.toContain("think:xhigh");
     expect(visibleWidth(row)).toBe(width);
   }
   statuses.set("agent-response-time", "—");
@@ -325,8 +327,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     expect(row).toContain("\uF121  build mode");
     expect(row.includes("main")).toBe(width > 40);
     const bottom = plain(rows.at(-1));
-    expect(bottom.includes("xhigh")).toBe(width >= 40);
-    expect(bottom.includes("think:")).toBe(width >= 40);
+    expect(bottom.includes("xhigh")).toBe(false);
+    expect(bottom.includes("think:")).toBe(false);
     const hint = plain(Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset)).match(/↑ \d+ more/)![0];
     expect(row).toContain(hint);
     expect(row.includes(" 1m 05s "), `width ${width}: ${row}`).toBe(width >= 55);
@@ -339,7 +341,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   statuses.set("agent-mode", plan.mode);
   statuses.set("agent-thinking", plan.thinking);
   expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ main ──╮");
-  expect(plain(editor.render(80).at(-1))).toContain("gpt-5.4 ❯ think:high");
+  expect(plain(editor.render(80).at(-1))).not.toContain("gpt-5.4 ❯ think:high");
   tui.terminal.rows = 12;
   expect(editor.render(40)[0]).toContain(plan.mode);
   editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
@@ -353,11 +355,12 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     tui.terminal.rows = height;
     for (const width of [40, 80]) {
       const completed = editor.render(width).map(plain);
-      expect(completed[2].endsWith("╯")).toBe(true);
-      expect(completed[3].trim()).toBe("completion");
-      expect(completed[4].trim()).toBe("───");
+      const bottomBorderIndex = 2;
+      expect(completed[bottomBorderIndex].endsWith("╯")).toBe(true);
+      expect(completed[bottomBorderIndex + 1].trim()).toBe("completion");
+      expect(completed[bottomBorderIndex + 2].trim()).toBe("───");
       // Four columns for the frame/prompt, plus native input padding.
-      expect(completed[3].indexOf("completion")).toBe(5);
+      expect(completed[bottomBorderIndex + 1].indexOf("completion")).toBe(5);
     }
   }
   editor.autocompleteState = null;
