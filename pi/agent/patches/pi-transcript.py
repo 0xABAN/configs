@@ -19,6 +19,8 @@ from patch_support import (
 BASE = "dist/modes/interactive/"
 MODULE = BASE + "components/transcript.js"
 MODULE_SOURCE = read_payload('host/transcript.js.inc')
+# Current installs carry this exact module from the previous transcript revision.
+PRE_ACTION_BOUNDARY_MODULE_SOURCE = read_payload('host/legacy/transcript-before-action-boundary.js.inc')
 LEGACY_MODULE_SOURCE = read_payload('host/legacy/transcript.js.inc')
 PRE_COMPACT_MODULE_SOURCE = read_payload('host/legacy/transcript-before-compact.js.inc')
 PRE_YELLOW_ICON_MODULE_SOURCE = read_payload('host/legacy/transcript-before-yellow-icon.js.inc')
@@ -228,7 +230,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         revisions = [
             (EDITS, (MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-                     PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
+                     PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
+                     PRE_ACTION_BOUNDARY_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
         ]
@@ -261,6 +264,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
             PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
+            PRE_ACTION_BOUNDARY_MODULE_SOURCE,
         ):
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:
