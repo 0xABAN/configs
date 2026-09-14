@@ -130,10 +130,35 @@ PRE_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-tps.ts.inc"
 PRE_LEADING_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-leading-tps.ts.inc").rstrip("\n")
 PRE_FULL_MODE_BORDER = read_payload("powerline/legacy/editor-badges-before-full-mode.ts.inc").rstrip("\n")
 PRE_RESPONSE_TIME_BORDER = read_payload("powerline/legacy/editor-badges-before-response-time.ts.inc").rstrip("\n")
+PRE_MODEL_BRANCH_BORDER = read_payload("powerline/legacy/editor-badges-before-model-branch.ts.inc").rstrip("\n")
+BOTTOM_BORDER_EDIT = (
+    '''        result.push(inset + bc("╰───") + lines[bottomBorderIndex] + bc("╯"));''',
+    read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
+)
 BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
     "SelectList, sliceByColumn, truncateToWidth,",
 )
+
+
+def canonicalize_bottom_border(index: str) -> str:
+    """Normalize the current bottom border to the guarded pre-badge frame."""
+    old, new = BOTTOM_BORDER_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor bottom badge patch changed or duplicated")
+    return index.replace(new, old, 1) if new_count else index
+
+
+def upgrade_bottom_border(index: str) -> str:
+    """Apply the bottom badge payload after the complete frame is validated."""
+    old, new = BOTTOM_BORDER_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count != 1 or new_count:
+        raise ValueError("editor bottom badge patch missing or duplicated")
+    return index.replace(old, new, 1)
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
@@ -147,6 +172,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     compact_borders = (
         new_border, PRE_CENTERED_SCROLL_BORDER, PRE_TPS_BORDER,
         PRE_LEADING_TPS_BORDER, PRE_FULL_MODE_BORDER, PRE_RESPONSE_TIME_BORDER,
+        PRE_MODEL_BRANCH_BORDER,
     )
     compact_count = sum(index.count(border) for border in compact_borders)
     if compact_count > 1 or (compact_count == 1) != (BADGE_IMPORT[1] in index):
@@ -161,6 +187,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         index = index.replace(new_import, old_import, 1)
     elif index.count(old_import) != 1 or index.count(new_import) != 0:
         raise ValueError("editor badge import changed or duplicated")
+    index = canonicalize_bottom_border(index)
     sources["index.ts"] = index
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
@@ -198,6 +225,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             for old, new in EDITS[name]:
                 source = source.replace(old, new, 1)
             result[name] = source
+    result["index.ts"] = upgrade_bottom_border(result["index.ts"])
     result["index.ts"] = (result["index.ts"].replace(old_border, new_border, 1)
                           .replace(old_import, new_import, 1))
     return result

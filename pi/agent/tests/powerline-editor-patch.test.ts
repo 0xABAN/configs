@@ -109,6 +109,7 @@ for (const helper of [
   "editor-badges-before-leading-tps.ts.inc",
   "editor-badges-before-full-mode.ts.inc",
   "editor-badges-before-response-time.ts.inc",
+  "editor-badges-before-model-branch.ts.inc",
 ]) {
   test(`${helper} migrates exactly; partial or modified predecessors refuse writes`, () => {
     const app = sandbox(helper);
@@ -128,8 +129,11 @@ for (const helper of [
       if (mode === "missing-import") index = index.replace(badgeImport[1], badgeImport[0]);
       if (mode === "modified-payload") index = previousBorder.includes("const compact = width < 80")
         ? index.replace("const compact = width < 80", "const compact = width < 81")
-        : index.replace("const throughput = statuses?.get(\"agent-tps\") ?? \"\";",
-          "const throughput = statuses?.get(\"agent-tps\") ?? \"modified\";");
+        : previousBorder.includes("const responseTime = statuses?.get(\"agent-response-time\") ?? \"\";")
+          ? index.replace("const responseTime = statuses?.get(\"agent-response-time\") ?? \"\";",
+            "const responseTime = statuses?.get(\"agent-response-time\") ?? \"modified\";")
+          : index.replace("const throughput = statuses?.get(\"agent-tps\") ?? \"\";",
+            "const throughput = statuses?.get(\"agent-tps\") ?? \"modified\";");
       if (mode === "duplicate-payload") index += previousBorder;
       if (mode === "mixed-payload") index += border[1];
       writeFileSync(join(app.dir, "index.ts"), index);
@@ -207,7 +211,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   expect(start).toBeGreaterThan(0);
   const end = text.indexOf("\n      return editor;", start);
   const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
-    "footerDataRef", "visibleWidth", "truncateToWidth", "sliceByColumn",
+    "footerDataRef", "currentCtx", "visibleWidth", "truncateToWidth", "sliceByColumn",
     transpiler.transformSync(text.slice(start, end)) + "\nreturn editor;");
   const { formatPlanStatus } = await import("../extensions/plan-mode/status");
   const gradient = formatPlanStatus(false, "medium");
@@ -215,7 +219,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     ["agent-mode", gradient.mode],
     ["agent-thinking", gradient.thinking],
   ]);
-  const footer = { getExtensionStatuses: () => statuses };
+  const footer = { getExtensionStatuses: () => statuses, getGitBranch: () => "main" };
+  const currentCtx = { model: { name: "gpt-5.4" } };
   const tui = { terminal: { rows: 30 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
     tui, () => "\x1b[38;2;95;168;118m",
@@ -224,7 +229,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`,
       getBgAnsi: (r: number, g: number, b: number) => `\x1b[48;2;${r};${g};${b}m`,
     },
-    false, () => false, () => "+", footer, visibleWidth, truncateToWidth, sliceByColumn);
+    false, () => false, () => "+", footer, currentCtx, visibleWidth, truncateToWidth, sliceByColumn);
   editor.focused = true;
   expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
@@ -232,7 +237,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       tui, () => "\x1b[38;2;95;168;118m",
       { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
       bashMode, () => captureMode, () => "+",
-      undefined, visibleWidth, truncateToWidth, sliceByColumn);
+      undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn);
     const row = special.render(80)[1];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
@@ -253,9 +258,10 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   }
   editor.setText("");
   const top = editor.render(80)[0];
-  expect(plain(top)).toEndWith(" build mode ❯ think:med ──╮");
+  expect(plain(top)).toEndWith(" build mode ❯ main ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
-  expect(top).toContain(statuses.get("agent-thinking")!);
+  expect(plain(top)).not.toContain("think:med");
+  expect(plain(editor.render(80).at(-1))).toContain("gpt-5.4 ❯ think:med");
   expect(visibleWidth(top)).toBe(80);
   expect(plain(editor.render(16)[0])).not.toContain("build mode");
   for (const height of [12, 20, 30, 12]) {
@@ -272,7 +278,9 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       expect(plain(rows[0])).toStartWith("╭────── ↑ ");
       expect(plain(rows[0])).toContain("\uF121  build mode");
       expect(rows[0]).toContain(statuses.get("agent-mode")!);
-      expect(plain(rows[0]).includes("think:med")).toBe(width > 40);
+      expect(plain(rows[0]).includes("main")).toBe(width > 40);
+      const bottom = plain(rows.at(-1));
+      expect(bottom.includes("think:med")).toBe(width >= 40);
       expect(rows[0].includes("\x1b[0m ❯ ")).toBe(width > 40);
       expect(rows[0].match(/\x1b\[38;2;/g)!.length).toBeGreaterThan(5);
       expect(editor.getText()).toBe("界🙂".repeat(1000));
@@ -284,26 +292,30 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   statuses.set("agent-thinking", formatPlanStatus(false, "xhigh").thinking);
   statuses.set("agent-response-time", "1m 05s");
   for (const width of [80, 120]) {
-    const row = editor.render(width)[0];
-    expect(plain(row)).toEndWith(" build mode ❯ think:xhigh ──╮");
+    const rows = editor.render(width);
+    const row = rows[0];
+    expect(plain(row)).toEndWith(" build mode ❯ main ──╮");
     const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
     expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);
+    expect(plain(rows.at(-1))).toContain("gpt-5.4 ❯ think:xhigh");
     expect(visibleWidth(row)).toBe(width);
   }
   statuses.set("agent-response-time", "—");
-  expect(plain(editor.render(80)[0])).toContain(" —    \uF121  build mode ❯ think:xhigh");
+  expect(plain(editor.render(80)[0])).toContain(" —    \uF121  build mode ❯ main");
   statuses.set("agent-response-time", "1m 05s");
   editor.setText("界🙂".repeat(1000));
   for (const width of [40, 55, 80]) {
     const rows = editor.render(width);
     const row = plain(rows[0]);
     expect(row).toContain("\uF121  build mode");
-    expect(row.includes("xhigh")).toBe(width > 40);
-    expect(row.includes("think:")).toBe(width > 40);
+    expect(row.includes("main")).toBe(width > 40);
+    const bottom = plain(rows.at(-1));
+    expect(bottom.includes("xhigh")).toBe(width >= 40);
+    expect(bottom.includes("think:")).toBe(width >= 40);
     const hint = plain(Editor.prototype.renderTopBorder.call(editor, width - 5, editor.scrollOffset)).match(/↑ \d+ more/)![0];
     expect(row).toContain(hint);
-    expect(row.includes(" 1m 05s "), `width ${width}: ${row}`).toBe(width >= 80);
+    expect(row.includes(" 1m 05s "), `width ${width}: ${row}`).toBe(width >= 55);
     expect(rows.every((line: string) => visibleWidth(line) <= width)).toBe(true);
     expect(rows.join("").split(marker)).toHaveLength(2);
   }
@@ -312,7 +324,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   const plan = formatPlanStatus(true, "high");
   statuses.set("agent-mode", plan.mode);
   statuses.set("agent-thinking", plan.thinking);
-  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ think:high ──╮");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ main ──╮");
+  expect(plain(editor.render(80).at(-1))).toContain("gpt-5.4 ❯ think:high");
   tui.terminal.rows = 12;
   expect(editor.render(40)[0]).toContain(plan.mode);
   editor.setText(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
