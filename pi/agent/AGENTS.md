@@ -36,3 +36,5 @@ The user's preferred tools for new work. Follow the repository's existing stack 
 - Tooling: Bun, uv.
 - Database: PostgreSQL.
 - Hosting: AWS, Vercel, Railway.
+
+DO NOT USE SUBAGENTS WITHOUT PERMISSION OR I WILL KILL YOU
