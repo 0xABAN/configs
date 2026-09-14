@@ -241,8 +241,11 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 The Pi 0.85.1 transcript patch adds `◆ You` / `● Pi` headers and compact
 geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
 action icons keep the teal accent. Speaker names retain the normal text color.
-Consecutive visible tool rows share a group; narration
-and custom messages remain in place. Normal user messages inherit the terminal
+Single tools use a straight `─` row without a count heading. Two or more
+consecutive visible tool rows share a counted action tree, with status and action
+names aligned to the single-tool row. Action names such as **Search** and **Read**
+are bold; arguments and timing keep their existing weight. Narration and custom
+messages remain in place. Normal user messages inherit the terminal
 background rather than using a filled box. Each ends with a thin cream separator
 (`#dedec5`, the theme's `toolOutput` tone), spanning the same shared viewport as
 the textarea without another gutter. The existing input/footer are unchanged.

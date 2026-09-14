@@ -156,7 +156,8 @@ realTest("real Intercom renderers compact only the authorized tool; expansion, p
     expect(text().includes("CALL_PREVIEW")).toBe(!compact);
     if (compact) {
       const rows = text().split("\n").filter((line: string) => line.trim());
-      expect(rows).toHaveLength(3); // Pi header, action count, the existing invocation row.
+      expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
+      expect(rows[1]).toMatch(/─  ✓ ⌇ Tool\s+intercom/);
     }
     tool.setExpanded(true);
     expect(text()).toContain("FULL_OUTGOING_DETAIL");

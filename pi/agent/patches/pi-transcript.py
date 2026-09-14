@@ -27,8 +27,9 @@ PRE_TOOL_ROWS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-tool-r
 PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-native-padding.js.inc')
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
-# Existing installs may still have either background helper. Derive those exact
-# prior modules from the current separator source so removal remains guarded.
+PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
+# Derive the exact older background helpers from the frozen separator revision,
+# not the current renderer: later layout changes must not alter migration inputs.
 _USER_BACKGROUND_IMPORTS = '''import { DynamicBorder } from "./dynamic-border.js";\n\nconst USER_SEPARATOR = new DynamicBorder(line => theme.fg("toolOutput", line));\n'''
 _USER_SEPARATOR_RENDER = '''            lines.push(...nativeLines);\n            if (child.transcriptRole === "pi") speaker = "pi";\n            else if (child.transcriptRole === "user") {\n                speaker = "user";\n                // Like the textarea, use the shared viewport without a second gutter.\n                lines.push(...USER_SEPARATOR.render(width));\n            }\n            else if (child.transcriptRole !== "tool") speaker = undefined;'''
 _USER_BACKGROUND_RENDER = '''            lines.push(...(child.transcriptRole === "user"\n                ? nativeLines.map(line => userMessageBackground(line, width))\n                : nativeLines));\n            if (child.transcriptRole === "pi") speaker = "pi";\n            else if (child.transcriptRole === "user") speaker = "user";\n            else if (child.transcriptRole !== "tool") speaker = undefined;'''
@@ -43,11 +44,11 @@ _USER_BACKGROUND_RESET_HELPER = '''function userMessageBackground(line, width) {
     return theme.bg("userMessageBg", padded.replaceAll("\\x1b[0m", `\\x1b[0m${background}`));
 }
 '''
-if MODULE_SOURCE.count(_USER_BACKGROUND_IMPORTS) != 1 or MODULE_SOURCE.count(_USER_SEPARATOR_RENDER) != 1:
+if PRE_SINGLE_ACTION_MODULE_SOURCE.count(_USER_BACKGROUND_IMPORTS) != 1 or PRE_SINGLE_ACTION_MODULE_SOURCE.count(_USER_SEPARATOR_RENDER) != 1:
     raise ValueError("transcript separator source changed; inspect before migrating background removal")
 
 def _previous_background_module(helper):
-    source = MODULE_SOURCE.replace(_USER_BACKGROUND_IMPORTS, "", 1)
+    source = PRE_SINGLE_ACTION_MODULE_SOURCE.replace(_USER_BACKGROUND_IMPORTS, "", 1)
     source = source.replace(_USER_SEPARATOR_RENDER, _USER_BACKGROUND_RENDER, 1)
     marker = "\nexport function speakerHeader"
     if source.count(marker) != 1:
@@ -226,7 +227,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+            (EDITS, (MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
                      PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
@@ -258,7 +259,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise current_error
     if state == "patched":
         if sources.get(MODULE) in (
-            PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+            PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
             PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
         ):

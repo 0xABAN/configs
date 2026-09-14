@@ -13,7 +13,7 @@ const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUN
 const previousBackgroundReset = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
 const temp = temporaryDirectory("pi-transcript-");
 const sdk = process.env.PI_SDK_ROOT;
-const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
+const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk, { FORCE_COLOR: "1" });
 const run = (root: string) => Bun.spawnSync(["python3", "-B", patcher], { env: { ...process.env, PI_SDK_ROOT: root, HOME: root } });
 
 function sandbox(name: string) {
@@ -91,6 +91,7 @@ for (const helper of [
   "transcript-before-native-padding.js.inc",
   "transcript-before-inline-metrics.js.inc",
   "transcript-before-user-separator.js.inc",
+  "transcript-before-single-action.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -345,9 +346,10 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf("─".repeat(90)));
   expect(text.indexOf("─".repeat(90))).toBeLessThan(text.indexOf("● Pi"));
   expect(text).toContain("2 actions");
-  expect(text).toContain("1 action");
+  expect(text).not.toContain("1 action");
   expect(text).toContain("├─ ✓ □ Read");
-  expect(text).toContain("╰─ × ↯ Run");
+  expect(text).toContain("╰─ ✓ ◎ Search");
+  expect(text).toContain("─  × ↯ Run");
   expect(text).toContain("Expected an active session");
   expect(text).not.toContain("SECRET_EXPANDED_DETAIL");
   expect(text.indexOf("session.ts")).toBeLessThan(text.indexOf("expiry"));
@@ -745,12 +747,14 @@ realTest("builtin-name overrides keep native cards beneath their invocation unle
       app.chatContainer.clear();
       app.chatContainer.addChild(component);
       if (owner === "project-extension") {
-        expect(transcript(m, app)).toContain("1 action");
+        expect(transcript(m, app)).not.toContain("1 action");
+        expect(transcript(m, app)).toContain("─  ✓ □ Read");
         expect(transcript(m, app)).toContain("CUSTOM");
         const native = component.render(90);
         expect(app.chatContainer.render(90).slice(-native.length)).toEqual(native);
       } else {
-        expect(transcript(m, app)).toContain("1 action");
+        expect(transcript(m, app)).not.toContain("1 action");
+        expect(transcript(m, app)).toContain("─  ✓ □ Read");
         component.setExpanded(true);
         expect(transcript(m, app)).toContain("CUSTOM");
       }
@@ -768,8 +772,8 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   app.chatContainer.addChild(card);
   expect(transcript(m, app)).toContain("CUSTOM NOTICE");
   expect(transcript(m, app)).toContain("CUSTOM INTERACTIVE CARD");
-  expect(transcript(m, app)).toContain("1 action");
-  expect(transcript(m, app)).toMatch(/⌇ Tool\s+workflow/);
+  expect(transcript(m, app)).not.toContain("1 action");
+  expect(transcript(m, app)).toMatch(/─  ○ ⌇ Tool\s+workflow/);
   expect(transcript(m, app).indexOf("Tool")).toBeLessThan(transcript(m, app).indexOf("CUSTOM INTERACTIVE CARD"));
   const hidden = new m.ToolExecutionComponent("read", "hidden", {}, {}, {
     renderShell: "self", renderCall: () => ({ render: () => [], invalidate() {} }),
@@ -855,10 +859,67 @@ realTest("silent tools retain named invocation rows through execution, expansion
   expect(line).not.toContain("DO_NOT_ECHO_ARGUMENTS");
 });
 
-realTest("wide transcript output changes only the Pi icon color across error-row combinations", async () => {
+realTest("action labels alone are bold at wide and narrow widths", async () => {
+  const m = await real();
+  const theme = m.colors.theme;
+  for (const [toolName, label] of [
+    ["read", "Read"], ["grep", "Search"], ["edit", "Edit"], ["write", "Write"],
+    ["bash", "Run"], ["find", "Find"], ["ls", "List"], ["custom", "Tool"],
+  ]) {
+    for (const width of [40, 90]) {
+      const line = m.actionLines({ toolName, args: { path: "target.ts", command: "target.ts" } }, width)[0];
+      const labelText = width < 60 ? label : label.padEnd(6);
+      expect(line).toContain("\x1b[1m");
+      expect(line).toContain(theme.bold(theme.fg("muted", labelText)));
+      expect(line).toContain(" " + theme.fg("text", toolName === "custom" ? "custom" : "target.ts"));
+      expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
+  }
+});
+
+realTest("single actions keep status and alignment when a group grows or shrinks", async () => {
+  const m = await real();
+  const app = host(m);
+  let height = 40;
+  app.chatContainer = new m.TranscriptContainer(() => 1, () => height);
+  const first = new m.ToolExecutionComponent("read", "first", { path: "first.ts" }, {}, undefined, app.ui, temp);
+  const second = new m.ToolExecutionComponent("grep", "second", { pattern: "pageScroll", path: "/opt/homebrew" }, {}, undefined, app.ui, temp);
+  app.chatContainer.addChild(first);
+  expect(transcript(m, app)).toContain("─  ○ □ Read");
+  first.markExecutionStarted();
+  expect(transcript(m, app)).toContain("─  ◌ □ Read");
+  first.updateResult(result("first", "read", "file contents"));
+  first.transcriptDurationMs = 50;
+  expect(transcript(m, app)).toContain("─  ✓ □ Read");
+
+  for (const rows of [40, 12]) {
+    height = rows;
+    for (const width of [120, 79, 40, 20, 12, 8, 6, 4]) {
+      const single = app.chatContainer.render(width);
+      expect(single.map(m.tui.stripTerminalSequences).join("\n")).not.toContain("1 action");
+      app.chatContainer.addChild(second);
+      const grouped = app.chatContainer.render(width);
+      expect([...single, ...grouped].every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+      if (width >= 40) {
+        const plain = single.map(m.tui.stripTerminalSequences);
+        const group = grouped.map(m.tui.stripTerminalSequences);
+        expect(group.some((line: string) => line.trim() === "2 actions")).toBe(true);
+        expect(plain.find((line: string) => line.includes("Read"))).toContain("<0.1s");
+        expect(plain.find((line: string) => line.includes("Read"))).toBe(
+          group.find((line: string) => line.includes("Read")).replace("├─ ", "─  "));
+        expect(group.find((line: string) => line.includes("Search"))).toContain("╰─ ○ ◎ Search");
+      }
+      app.chatContainer.removeChild(second);
+      expect(app.chatContainer.render(width)).toEqual(single);
+    }
+  }
+  expect(app.chatContainer.children).toEqual([first]);
+});
+
+realTest("transcript changes only singleton framing and label weight across error-row combinations", async () => {
   const m = await real();
   const previousPath = join(fixture, "dist/modes/interactive/components/transcript-previous.js");
-  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript.js.inc", import.meta.url), "utf8"));
+  writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-single-action.js.inc", import.meta.url), "utf8"));
   const previous = await import(pathToFileURL(previousPath).href);
   for (const count of [1, 2, 3]) {
     for (let failed = -1; failed < count; failed++) {
@@ -874,9 +935,13 @@ realTest("wide transcript output changes only the Pi icon color across error-row
         old.addChild(component());
       }
       for (const width of [80, 90, 120, 160]) {
-        const withPreviousIcon = current.render(width).map((line: string) =>
-          line.replace(m.colors.theme.fg("warning", "●"), m.colors.theme.fg("accent", "●")));
-        expect(withPreviousIcon).toEqual(old.render(width));
+        const theme = m.colors.theme;
+        const withoutBold = current.render(width).map((line: string) =>
+          line.replace(theme.bold(theme.fg("muted", "Read  ")), theme.fg("muted", "Read  ")));
+        const expected = old.render(width)
+          .filter((line: string) => m.tui.stripTerminalSequences(line).trim() !== "1 action")
+          .map((line: string) => count === 1 ? line.replace("╰─ ", "─  ") : line);
+        expect(withoutBold).toEqual(expected);
       }
     }
   }

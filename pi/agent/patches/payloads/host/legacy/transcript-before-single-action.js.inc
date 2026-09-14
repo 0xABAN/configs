@@ -152,7 +152,7 @@ export function actionLines(component, width) {
         : plain(component.toolName) || "unknown";
     const shownLabel = width < 60 ? label : label.padEnd(6);
     const heading = theme.fg(color, status) + " " + theme.fg("accent", glyph)
-        + " " + theme.bold(theme.fg("muted", shownLabel));
+        + " " + theme.fg("muted", shownLabel);
     const title = heading + " " + theme.fg("text", target);
     const lines = [actionTitle(title, heading, component, width)];
 
@@ -195,17 +195,13 @@ export class TranscriptContainer extends Container {
                 speaker = "pi";
             }
             if (!tight) lines.push("");
-            const grouped = actions.length > 1;
-            if (grouped) {
-                lines.push(truncateToWidth(indent + theme.fg("muted", `${actions.length} actions`), width));
-            }
+            lines.push(truncateToWidth(indent + theme.fg("muted", `${actions.length} action${actions.length === 1 ? "" : "s"}`), width));
             for (let i = 0; i < actions.length; i++) {
                 const isLast = i === actions.length - 1;
                 let branch = "";
                 let continuation = "";
                 if (width - bodyPadding >= 6) {
-                    // Keep status and label columns fixed as a singleton grows into a tree.
-                    branch = !grouped ? "─  " : isLast ? "╰─ " : "├─ ";
+                    branch = isLast ? "╰─ " : "├─ ";
                     continuation = isLast ? "   " : "│  ";
                 }
                 const rows = actionLines(actions[i], Math.max(1, width - bodyPadding - branch.length));
