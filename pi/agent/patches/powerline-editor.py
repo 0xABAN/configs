@@ -44,7 +44,7 @@ EDITS = {
             bottomBorderIndex = i;
             break;
           }
-        }''', '''        const visibleRows = Math.min(inputLineCount, Math.max(5, Math.floor(tui.terminal.rows * 0.3)));
+        }''', '''        const visibleRows = Math.min(inputLineCount, Math.max(5, Math.floor(tui.terminal.rows * 0.4)));
         const bottomBorderIndex = 1 + visibleRows;'''),
         ('''        result.push(" " + bc("─".repeat(width - 2)));
 
@@ -93,6 +93,11 @@ EDITS = {
 }
 
 
+PRE_VISIBLE_ROWS = EDITS["index.ts"][3][1].replace(
+    "Math.floor(tui.terminal.rows * 0.4)", "Math.floor(tui.terminal.rows * 0.3)",
+)
+
+
 PROMPT_EDIT = (
     '''        const promptGlyph = bashModeActive ? "$" : captureDraft ? captureSigilGlyph() : ">";
         const promptColor = captureDraft ? getFgAnsiCode("queue") : ansi.getFgAnsi(200, 200, 200);''',
@@ -135,10 +140,35 @@ BOTTOM_BORDER_EDIT = (
     '''        result.push(inset + bc("╰───") + lines[bottomBorderIndex] + bc("╯"));''',
     read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
 )
+PRE_RENDER_HEIGHT = EDITS["index.ts"][2][1]
+RENDER_HEIGHT_EDIT = (
+    PRE_RENDER_HEIGHT,
+    read_payload("powerline/editor-render.ts.inc").rstrip("\n"),
+)
 BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
     "SelectList, sliceByColumn, truncateToWidth,",
 )
+
+
+def canonicalize_render_height(index: str) -> str:
+    """Normalize a taller editor render to the guarded native render block."""
+    old, new = RENDER_HEIGHT_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor render-height patch changed or duplicated")
+    return index.replace(new, old, 1) if new_count else index
+
+
+def upgrade_render_height(index: str) -> str:
+    """Apply the taller native render after the complete editor is validated."""
+    old, new = RENDER_HEIGHT_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count != 1 or new_count:
+        raise ValueError("editor render-height patch missing or duplicated")
+    return index.replace(old, new, 1)
 
 
 def canonicalize_bottom_border(index: str) -> str:
@@ -188,6 +218,12 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     elif index.count(old_import) != 1 or index.count(new_import) != 0:
         raise ValueError("editor badge import changed or duplicated")
     index = canonicalize_bottom_border(index)
+    index = canonicalize_render_height(index)
+    visible_rows = EDITS["index.ts"][3][1]
+    if index.count(PRE_VISIBLE_ROWS) > 1 or index.count(visible_rows) > 1:
+        raise ValueError("editor height patch changed or duplicated")
+    if index.count(PRE_VISIBLE_ROWS) == 1:
+        index = index.replace(PRE_VISIBLE_ROWS, visible_rows, 1)
     sources["index.ts"] = index
 
     # The prompt can upgrade an already-framed editor or a fresh installation.
@@ -226,6 +262,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
                 source = source.replace(old, new, 1)
             result[name] = source
     result["index.ts"] = upgrade_bottom_border(result["index.ts"])
+    result["index.ts"] = upgrade_render_height(result["index.ts"])
     result["index.ts"] = (result["index.ts"].replace(old_border, new_border, 1)
                           .replace(old_import, new_import, 1))
     return result

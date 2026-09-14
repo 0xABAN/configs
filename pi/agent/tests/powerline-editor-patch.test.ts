@@ -7,13 +7,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const { edits, border, legacyBorder, badgeImport, legacyPrompt } = describePatch<{
+const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
   legacyBorder: [string, string];
   badgeImport: [string, string];
   legacyPrompt: string;
-}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT']}",
+  preVisibleRows: string;
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS']}",
   "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
 const root = temporaryDirectory("powerline-editor-");
 const sdk = process.env.PI_SDK_ROOT;
@@ -60,6 +61,17 @@ test("editor patch is idempotent and preserves unrelated changes", () => {
   expect(patched["index.ts"]).toContain("// preserve footer layout");
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(patched);
+});
+
+test("existing editor height migrates from 30% to 40%", () => {
+  const app = sandbox("legacy-height");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  writeFileSync(join(app.dir, "index.ts"), current["index.ts"].replace(
+    edits["index.ts"][3][1], preVisibleRows,
+  ));
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
 });
 
 test("existing editor inset migrates without double-padding the shared viewport", () => {
@@ -256,6 +268,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       expect(editor.getText()).toBe(text);
     }
   }
+  editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
+  expect(editor.render(80)).toHaveLength(14);
   editor.setText("");
   const top = editor.render(80)[0];
   expect(plain(top)).toEndWith(" build mode ❯ main ──╮");
