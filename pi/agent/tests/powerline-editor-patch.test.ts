@@ -7,14 +7,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows } = describePatch<{
+const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, gitLabel, badgeBudget } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
   legacyBorder: [string, string];
   badgeImport: [string, string];
   legacyPrompt: string;
   preVisibleRows: string;
-}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS']}",
+  gitLabel: [string, string];
+  badgeBudget: [string, string];
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS'],'gitLabel':m['GIT_LABEL_EDIT'],'badgeBudget':m['BADGE_BUDGET_EDIT']}",
   "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
 const root = temporaryDirectory("powerline-editor-");
 const sdk = process.env.PI_SDK_ROOT;
@@ -50,7 +52,7 @@ test("powerline owns the final editor after pi-pretty installs its prompt", () =
   const powerline = packages.findIndex((source: string) => source.includes("nicobailon/pi-powerline-footer"));
   expect(pretty).toBeGreaterThanOrEqual(0);
   expect(powerline).toBeGreaterThan(pretty);
-  expect(settings.powerline.layout.left).toEqual(["model", "custom:thinking", "git"]);
+  expect(settings.powerline.layout.left).toEqual(["model", "custom:thinking"]);
   expect(Object.values(settings.powerline.layout).flat()).not.toContain("custom:mode");
 });
 
@@ -109,6 +111,7 @@ test("existing plain border upgrades without disturbing other source", () => {
   const current = app.contents();
   for (const previous of [border[0], legacyBorder[1], legacyBorder[1].replace('join(" ❯ ")', 'join(" · ")')]) {
     writeFileSync(join(app.dir, "index.ts"), current["index.ts"]
+      .replace(gitLabel[1], gitLabel[0])
       .replace(border[1], previous).replace(badgeImport[1], badgeImport[0]));
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
@@ -129,7 +132,9 @@ for (const helper of [
     const current = app.contents();
     const previousBorder = readFileSync(new URL(
       `../patches/payloads/powerline/legacy/${helper}`, import.meta.url), "utf8").trimEnd();
-    const previous = current["index.ts"].replace(border[1], previousBorder);
+    const previous = current["index.ts"]
+      .replace(gitLabel[1], gitLabel[0])
+      .replace(border[1], previousBorder);
     writeFileSync(join(app.dir, "index.ts"), previous);
     expect(app.run().exitCode).toBe(0);
     expect(app.contents()).toEqual(current);
@@ -163,10 +168,11 @@ test("partial or modified editor badges refuse writes", () => {
   const app = sandbox("compact-partial");
   expect(app.run().exitCode).toBe(0);
   const current = app.contents();
+  const canonical = current["index.ts"].replace(gitLabel[1], gitLabel[0]);
   for (const index of [
-    current["index.ts"].replace(badgeImport[1], badgeImport[0]),
-    current["index.ts"].replace(border[1], legacyBorder[1]),
-    current["index.ts"].replace("const badgeBudget = boxWidth - hintWidth - 9", "const badgeBudget = boxWidth - hintWidth - 10"),
+    canonical.replace(badgeImport[1], badgeImport[0]),
+    canonical.replace(border[1], legacyBorder[1]),
+    canonical.replace(badgeBudget[1], badgeBudget[0].replace("- 9", "- 10")),
   ]) {
     writeFileSync(join(app.dir, "index.ts"), index);
     const before = app.contents();
@@ -223,7 +229,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   expect(start).toBeGreaterThan(0);
   const end = text.indexOf("\n      return editor;", start);
   const wrap = new Function("editor", "tui", "getFgAnsiCode", "ansi", "bashModeActive", "isSigilIdeaDraft", "captureSigilGlyph",
-    "footerDataRef", "currentCtx", "visibleWidth", "truncateToWidth", "sliceByColumn",
+    "footerDataRef", "currentCtx", "ctx", "visibleWidth", "truncateToWidth", "sliceByColumn",
+    "renderSegment", "buildSegmentContext",
     transpiler.transformSync(text.slice(start, end)) + "\nreturn editor;");
   const { formatPlanStatus } = await import("../extensions/plan-mode/status");
   const gradient = formatPlanStatus(false, "medium");
@@ -233,6 +240,10 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   ]);
   const footer = { getExtensionStatuses: () => statuses, getGitBranch: () => "main" };
   const currentCtx = { model: { name: "gpt-5.4" } };
+  const renderSegment = (id: string) => id === "git"
+    ? { visible: true, content: "\uF126 main *4" }
+    : { visible: false, content: "" };
+  const buildSegmentContext = () => ({});
   const tui = { terminal: { rows: 30 }, requestRender() {} };
   const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
     tui, () => "\x1b[38;2;95;168;118m",
@@ -241,7 +252,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`,
       getBgAnsi: (r: number, g: number, b: number) => `\x1b[48;2;${r};${g};${b}m`,
     },
-    false, () => false, () => "+", footer, currentCtx, visibleWidth, truncateToWidth, sliceByColumn);
+    false, () => false, () => "+", footer, currentCtx, { ui: { theme: {} } }, visibleWidth, truncateToWidth, sliceByColumn,
+    renderSegment, buildSegmentContext);
   editor.focused = true;
   expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
@@ -249,7 +261,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       tui, () => "\x1b[38;2;95;168;118m",
       { reset: "\x1b[0m", getFgAnsi: (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m` },
       bashMode, () => captureMode, () => "+",
-      undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn);
+      undefined, undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn,
+      renderSegment, buildSegmentContext);
     const row = special.render(80)[1];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
@@ -273,7 +286,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText("");
   expect(editor.render(80)).toHaveLength(3);
   const top = editor.render(80)[0];
-  expect(plain(top)).toEndWith(" build mode ❯ main ──╮");
+  expect(plain(top)).toEndWith(" build mode ❯  main *4 ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
   expect(plain(top)).not.toContain("think:med");
   expect(plain(editor.render(80).at(-1))).not.toContain("gpt-5.4 ❯ think:med");
@@ -309,7 +322,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   for (const width of [80, 120]) {
     const rows = editor.render(width);
     const row = rows[0];
-    expect(plain(row)).toEndWith(" build mode ❯ main ──╮");
+    expect(plain(row)).toEndWith(" build mode ❯  main *4 ──╮");
     const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
     expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);
@@ -318,7 +331,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     expect(visibleWidth(row)).toBe(width);
   }
   statuses.set("agent-response-time", "—");
-  expect(plain(editor.render(80)[0])).toContain(" —    \uF121  build mode ❯ main");
+  expect(plain(editor.render(80)[0])).toContain(" —    \uF121  build mode ❯  main *4");
   statuses.set("agent-response-time", "1m 05s");
   editor.setText("界🙂".repeat(1000));
   for (const width of [40, 55, 80]) {
@@ -340,7 +353,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   const plan = formatPlanStatus(true, "high");
   statuses.set("agent-mode", plan.mode);
   statuses.set("agent-thinking", plan.thinking);
-  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯ main ──╮");
+  expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯  main *4 ──╮");
   expect(plain(editor.render(80).at(-1))).not.toContain("gpt-5.4 ❯ think:high");
   tui.terminal.rows = 12;
   expect(editor.render(40)[0]).toContain(plan.mode);

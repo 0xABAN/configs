@@ -13,7 +13,7 @@
           : lines[0];
         const topBorder = bc("╭───") + border;
         const hintWidth = visibleWidth(border.replace(/\x1b\[[0-9;]*m/g, "").replace(/─+$/, ""));
-        const badgeBudget = boxWidth - hintWidth - 9;
+        const badgeBudget = boxWidth - hintWidth - 8;
 
         const primary = [mode, branch].filter(Boolean).join(" ❯ ");
         const responseTime = statuses?.get("agent-response-time") ?? "";
@@ -22,6 +22,15 @@
           ? ansi.getBgAnsi(50, 109, 101) + ansi.getFgAnsi(243, 238, 223) + ` ${responseTime} ` + ansi.reset
           : "";
         let badges = [responseBadge, primary].filter(Boolean).join("   ");
+        if (visibleWidth(badges) > badgeBudget && responseBadge && branch) {
+          const branchReset = /\x1b\[(?:0|39)m/.exec(branch);
+          const branchOnly = branchReset
+            ? branch.slice(0, branchReset.index + branchReset[0].length)
+            : branch.replace(/\s+(?:[*+?]\d+)(?:\s+(?:[*+?]\d+))*$/, "");
+          const compactPrimary = [mode, branchOnly].filter(Boolean).join(" ❯ ");
+          const compactBadges = [responseBadge, compactPrimary].filter(Boolean).join("   ");
+          if (visibleWidth(compactBadges) <= badgeBudget) badges = compactBadges;
+        }
         // Drop response time, then the branch; never abbreviate the mode or its icon.
         if (visibleWidth(badges) > badgeBudget) badges = primary;
         if (visibleWidth(badges) > badgeBudget) badges = mode;

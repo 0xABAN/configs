@@ -156,6 +156,121 @@ BADGE_IMPORT = (
     "SelectList, truncateToWidth,",
     "SelectList, sliceByColumn, truncateToWidth,",
 )
+BADGE_BUDGET_EDIT = (
+    "        const badgeBudget = boxWidth - hintWidth - 9;",
+    "        const badgeBudget = boxWidth - hintWidth - 8;",
+)
+BADGE_FIT_EDIT = (
+    '''        let badges = [responseBadge, primary].filter(Boolean).join("   ");
+        // Drop response time, then the branch; never abbreviate the mode or its icon.''',
+    '''        let badges = [responseBadge, primary].filter(Boolean).join("   ");
+        if (visibleWidth(badges) > badgeBudget && responseBadge && branch) {
+          const branchReset = /\\x1b\\[(?:0|39)m/.exec(branch);
+          const branchOnly = branchReset
+            ? branch.slice(0, branchReset.index + branchReset[0].length)
+            : branch.replace(/\\s+(?:[*+?]\\d+)(?:\\s+(?:[*+?]\\d+))*$/, "");
+          const compactPrimary = [mode, branchOnly].filter(Boolean).join(" ❯ ");
+          const compactBadges = [responseBadge, compactPrimary].filter(Boolean).join("   ");
+          if (visibleWidth(compactBadges) <= badgeBudget) badges = compactBadges;
+        }
+        // Drop response time, then the branch; never abbreviate the mode or its icon.''',
+)
+BADGE_FIT_LEGACY_EDIT = (
+    '''        let badges = [responseBadge, primary].filter(Boolean).join("   ");
+        if (visibleWidth(badges) > badgeBudget && responseBadge && branch) {
+          const branchOnly = branch.includes(ansi.reset)
+            ? branch.slice(0, branch.indexOf(ansi.reset) + ansi.reset.length)
+            : branch.replace(/\\s+(?:[*+?]\\d+)(?:\\s+(?:[*+?]\\d+))*$/, "");
+          const compactPrimary = [mode, branchOnly].filter(Boolean).join(" ❯ ");
+          const compactBadges = [responseBadge, compactPrimary].filter(Boolean).join("   ");
+          if (visibleWidth(compactBadges) <= badgeBudget) badges = compactBadges;
+        }
+        // Drop response time, then the branch; never abbreviate the mode or its icon.''',
+    BADGE_FIT_EDIT[0],
+)
+GIT_LABEL_EDIT = (
+    '''        const branch = footerDataRef?.getGitBranch?.() ?? "";''',
+    '''        let branch = footerDataRef?.getGitBranch?.() ?? "";
+        if (typeof currentCtx !== "undefined" && currentCtx
+          && typeof buildSegmentContext === "function" && typeof renderSegment === "function") {
+          try {
+            const renderedGit = renderSegment("git", buildSegmentContext(currentCtx, ctx.ui.theme));
+            if (renderedGit.visible && renderedGit.content) branch = renderedGit.content;
+          } catch {
+            // Fall back to the branch name while the host context is settling.
+          }
+        }''',
+)
+
+
+def canonicalize_badge_budget(index: str) -> str:
+    """Normalize the badge budget while migrating the top border."""
+    old, new = BADGE_BUDGET_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor badge budget changed or duplicated")
+    return index.replace(new, old, 1) if new_count else index
+
+
+def upgrade_badge_budget(index: str) -> str:
+    """Give the response badge one extra narrow-layout column."""
+    old, new = BADGE_BUDGET_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if new_count == 1 and old_count == 0:
+        return index
+    if old_count != 1 or new_count:
+        raise ValueError("editor badge budget missing or duplicated")
+    return index.replace(old, new, 1)
+
+
+def canonicalize_badge_fit(index: str) -> str:
+    """Normalize narrow response-badge fitting before migration."""
+    legacy, old = BADGE_FIT_LEGACY_EDIT
+    legacy_count = index.count(legacy)
+    if legacy_count > 1:
+        raise ValueError("editor badge fitting changed or duplicated")
+    if legacy_count:
+        index = index.replace(legacy, old, 1)
+
+    new_count = index.count(BADGE_FIT_EDIT[1])
+    old_count = index.count(old)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor badge fitting changed or duplicated")
+    return index.replace(BADGE_FIT_EDIT[1], old, 1) if new_count else index
+
+
+def upgrade_badge_fit(index: str) -> str:
+    """Keep the response timer visible when the full git suffix is too wide."""
+    old, new = BADGE_FIT_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if new_count == 1 and old_count == 0:
+        return index
+    if old_count != 1 or new_count:
+        raise ValueError("editor badge fitting missing or duplicated")
+    return index.replace(old, new, 1)
+
+
+def canonicalize_git_label(index: str) -> str:
+    """Normalize a full git badge to the old branch-name anchor."""
+    old, new = GIT_LABEL_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor git badge changed or duplicated")
+    return index.replace(new, old, 1) if new_count else index
+
+
+def upgrade_git_label(index: str) -> str:
+    """Replace the branch-only badge with the full rendered git segment."""
+    old, new = GIT_LABEL_EDIT
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count != 1 or new_count:
+        raise ValueError("editor git badge missing or duplicated")
+    return index.replace(old, new, 1)
 
 
 def canonicalize_render_height(index: str) -> str:
@@ -196,8 +311,15 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # The final result restores it below, so replay leaves installed bytes intact.
     old_border, new_border = BORDER_EDIT
     index = sources["index.ts"]
+    index = canonicalize_badge_budget(index)
+    index = canonicalize_badge_fit(index)
+    index = canonicalize_git_label(index)
+    legacy_budget_border = new_border.replace(BADGE_BUDGET_EDIT[1], BADGE_BUDGET_EDIT[0])
+    legacy_fit_border = new_border.replace(BADGE_FIT_EDIT[1], BADGE_FIT_EDIT[0])
+    legacy_badge_border = legacy_budget_border.replace(BADGE_FIT_EDIT[1], BADGE_FIT_EDIT[0])
     compact_borders = (
-        new_border, PRE_CENTERED_SCROLL_BORDER, PRE_TPS_BORDER,
+        new_border, legacy_budget_border, legacy_fit_border, legacy_badge_border,
+        PRE_CENTERED_SCROLL_BORDER, PRE_TPS_BORDER,
         PRE_LEADING_TPS_BORDER, PRE_FULL_MODE_BORDER, PRE_RESPONSE_TIME_BORDER,
         PRE_MODEL_BRANCH_BORDER,
     )
@@ -288,6 +410,9 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     result["index.ts"] = upgrade_render_height(result["index.ts"])
     result["index.ts"] = (result["index.ts"].replace(old_border, new_border, 1)
                           .replace(old_import, new_import, 1))
+    result["index.ts"] = upgrade_git_label(result["index.ts"])
+    result["index.ts"] = upgrade_badge_budget(result["index.ts"])
+    result["index.ts"] = upgrade_badge_fit(result["index.ts"])
     return result
 
 
