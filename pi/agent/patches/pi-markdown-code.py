@@ -17,6 +17,7 @@ LEGACY_WRAP = (PAYLOADS / "tui/legacy/markdown-code-wrap.js.inc").read_text().rs
 LEGACY_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content.js.inc").read_text().rstrip("\n")
 LEGACY_ROUNDED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-rounded.js.inc").read_text().rstrip("\n")
 LEGACY_CONTAINED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-contained.js.inc").read_text().rstrip("\n")
+LEGACY_OUTLINED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-outlined.js.inc").read_text().rstrip("\n")
 LEGACY_THEME = (PAYLOADS / "tui/legacy/markdown-code-theme.js.inc").read_text().rstrip("\n")
 LEGACY_FORCED_DIM_THEME = (PAYLOADS / "tui/legacy/markdown-code-theme-forced-dim.js.inc").read_text().rstrip("\n")
 
@@ -96,9 +97,6 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
             }
         }''',
          r'''        const codeBlockBgFn = this.theme.codeBlockBackground;
-        const codeBlockBorderFn = this.theme.codeBlockBorder;
-        const panelWidth = Math.max(2, width - visibleWidth(leftMargin) - visibleWidth(rightMargin));
-        const panelInnerWidth = Math.max(0, panelWidth - 2);
         for (const line of wrappedLines) {
             if (isImageLine(line)) {
                 contentLines.push(line);
@@ -111,25 +109,8 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
                     : line.startsWith(CODE_BLOCK_MARKER) ? CODE_BLOCK_MARKER : "";
             const lineWithoutMarker = codeBlockMarker ? line.slice(codeBlockMarker.length) : line;
             const lineWithMargins = leftMargin + lineWithoutMarker + rightMargin;
-            if (codeBlockMarker && codeBlockBgFn && codeBlockBorderFn) {
-                let panelLine;
-                if (codeBlockMarker === CODE_BLOCK_TOP_MARKER) {
-                    panelLine = codeBlockBorderFn(`╭${"─".repeat(panelInnerWidth)}╮`);
-                }
-                else if (codeBlockMarker === CODE_BLOCK_BOTTOM_MARKER) {
-                    panelLine = codeBlockBorderFn(`╰${"─".repeat(panelInnerWidth)}╯`);
-                }
-                else {
-                    const contentPadding = Math.max(0, panelInnerWidth - visibleWidth(lineWithoutMarker));
-                    const panelContent = lineWithoutMarker + " ".repeat(contentPadding);
-                    panelLine = codeBlockBorderFn("│") + codeBlockBgFn(panelContent) + codeBlockBorderFn("│");
-                }
-                contentLines.push(leftMargin + panelLine + rightMargin);
-            }
-            else if (codeBlockMarker) {
-                const visibleLen = visibleWidth(lineWithMargins);
-                const paddingNeeded = Math.max(0, width - visibleLen);
-                contentLines.push(lineWithMargins + " ".repeat(paddingNeeded));
+            if (codeBlockMarker && codeBlockBgFn) {
+                contentLines.push(applyBackgroundToLine(lineWithMargins, width, codeBlockBgFn));
             }
             else if (bgFn) {
                 contentLines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
@@ -175,15 +156,17 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         result[THEME] = theme.replace(LEGACY_FORCED_DIM_THEME, theme_new, 1)
         return result
 
-    # Migrate the previous rounded panel before tightening its background bounds.
+    # Migrate the previous outlined panel to padded background rows.
+    legacy_panel_content = next((content for content in (LEGACY_OUTLINED_CONTENT, LEGACY_ROUNDED_CONTENT)
+                                 if markdown.count(content) == 1), None)
     if (markdown.count(marker_new) == 1
             and markdown.count(code_new) == 1
             and markdown.count(wrap_new) == 1
-            and markdown.count(LEGACY_ROUNDED_CONTENT) == 1
+            and legacy_panel_content is not None
             and markdown.count(content_new) == 0
             and theme.count(theme_new) == 1):
         result = dict(sources)
-        result[MARKDOWN] = markdown.replace(LEGACY_ROUNDED_CONTENT, content_new, 1)
+        result[MARKDOWN] = markdown.replace(legacy_panel_content, content_new, 1)
         return result
 
     # Migrate either shipped pre-rounded panel layout before applying the new frame.
