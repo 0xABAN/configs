@@ -144,7 +144,7 @@ BOTTOM_BORDER_EDIT = (
     read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
 )
 PRE_RENDER_HEIGHT = EDITS["index.ts"][2][1]
-PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+PREVIOUS_UNPADDED_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
         const contentWidth = boxWidth - 5;
         // Render the native editor with a 40% viewport while preserving the real terminal size.
         const terminalRows = tui.terminal.rows;
@@ -159,6 +159,28 @@ PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column p
         } finally {
           editor.tui.terminal = originalTerminal;
         }'''
+PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+        const contentWidth = boxWidth - 5;
+        // Render the native editor with a 40% viewport while preserving the real terminal size.
+        const terminalRows = tui.terminal.rows;
+        const visibleRowLimit = Math.max(5, Math.floor(terminalRows * 0.4));
+        const contentRowLimit = Math.max(1, visibleRowLimit - 2);
+        const renderTerminal = Object.create(tui.terminal);
+        Object.defineProperty(renderTerminal, "rows", { value: Math.ceil(contentRowLimit / 0.3) });
+        const originalTerminal = editor.tui.terminal;
+        editor.tui.terminal = renderTerminal;
+        let lines: string[];
+        try {
+          lines = originalRender(contentWidth);
+        } finally {
+          editor.tui.terminal = originalTerminal;
+        }
+
+        const contentRows = Math.max(1, Math.min(inputLineCount, contentRowLimit));
+        const blankRow = " ".repeat(Math.max(0, contentWidth));
+        lines.splice(1, 0, blankRow);
+        lines.splice(2 + contentRows, 0, blankRow);
+        inputLineCount = contentRows + 2;'''
 RENDER_HEIGHT_EDIT = (
     PRE_RENDER_HEIGHT,
     read_payload("powerline/editor-render.ts.inc").rstrip("\n"),
@@ -291,11 +313,12 @@ def upgrade_git_label(index: str) -> str:
 
 def canonicalize_render_height(index: str) -> str:
     """Normalize a taller editor render to the guarded native render block."""
-    previous_count = index.count(PREVIOUS_RENDER_HEIGHT)
-    if previous_count > 1:
-        raise ValueError("editor render-height patch changed or duplicated")
-    if previous_count:
-        index = index.replace(PREVIOUS_RENDER_HEIGHT, PRE_RENDER_HEIGHT, 1)
+    for previous in (PREVIOUS_RENDER_HEIGHT, PREVIOUS_UNPADDED_RENDER_HEIGHT):
+        previous_count = index.count(previous)
+        if previous_count > 1:
+            raise ValueError("editor render-height patch changed or duplicated")
+        if previous_count:
+            index = index.replace(previous, PRE_RENDER_HEIGHT, 1)
 
     old, new = RENDER_HEIGHT_EDIT
     old_count = index.count(old)

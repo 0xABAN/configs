@@ -285,7 +285,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(80)).toHaveLength(14);
   editor.setText("");
-  expect(editor.render(80)).toHaveLength(5);
+  expect(editor.render(80)).toHaveLength(4);
   const top = editor.render(80)[0];
   expect(plain(top)).toEndWith(" build mode ❯  main *4 ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
@@ -369,7 +369,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     tui.terminal.rows = height;
     for (const width of [40, 80]) {
       const completed = editor.render(width).map(plain);
-      const bottomBorderIndex = 4;
+      const bottomBorderIndex = 3;
       expect(completed[bottomBorderIndex].endsWith("╯")).toBe(true);
       expect(completed[bottomBorderIndex + 1].trim()).toBe("completion");
       expect(completed[bottomBorderIndex + 2].trim()).toBe("───");
