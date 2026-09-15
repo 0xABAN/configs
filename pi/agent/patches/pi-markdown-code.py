@@ -16,7 +16,9 @@ LEGACY_CODE_CASE_WITH_PADDING = (PAYLOADS / "tui/legacy/markdown-code-case-with-
 LEGACY_WRAP = (PAYLOADS / "tui/legacy/markdown-code-wrap.js.inc").read_text().rstrip("\n")
 LEGACY_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content.js.inc").read_text().rstrip("\n")
 LEGACY_ROUNDED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-rounded.js.inc").read_text().rstrip("\n")
+LEGACY_CONTAINED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-contained.js.inc").read_text().rstrip("\n")
 LEGACY_THEME = (PAYLOADS / "tui/legacy/markdown-code-theme.js.inc").read_text().rstrip("\n")
+LEGACY_FORCED_DIM_THEME = (PAYLOADS / "tui/legacy/markdown-code-theme-forced-dim.js.inc").read_text().rstrip("\n")
 
 LEGACY_MARKER_DECL = r'''const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
 const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''
@@ -119,10 +121,10 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
                 }
                 else {
                     const contentPadding = Math.max(0, panelInnerWidth - visibleWidth(lineWithoutMarker));
-                    panelLine = codeBlockBorderFn("│") + lineWithoutMarker
-                        + " ".repeat(contentPadding) + codeBlockBorderFn("│");
+                    const panelContent = lineWithoutMarker + " ".repeat(contentPadding);
+                    panelLine = codeBlockBorderFn("│") + codeBlockBgFn(panelContent) + codeBlockBorderFn("│");
                 }
-                contentLines.push(leftMargin + codeBlockBgFn(panelLine) + rightMargin);
+                contentLines.push(leftMargin + panelLine + rightMargin);
             }
             else if (codeBlockMarker) {
                 const visibleLen = visibleWidth(lineWithMargins);
@@ -144,14 +146,14 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
         ('''        codeBlock: (text) => theme.fg("mdCodeBlock", text),
         codeBlockBorder: (text) => theme.fg("mdCodeBlockBorder", text),''',
          '''        codeBlock: (text) => theme.fg("mdCodeBlock", text),
-        codeBlockBorder: (text) => theme.fg("dim", text),
+        codeBlockBorder: (text) => theme.fg("mdCodeBlockBorder", text),
         codeBlockBackground: (text) => theme.bg("userMessageBg", text),'''),
     ],
 }
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
-    marker_old, marker_new = EDITS[MARKDOWN][0]
+    _, marker_new = EDITS[MARKDOWN][0]
     _, code_new = EDITS[MARKDOWN][1]
     _, wrap_new = EDITS[MARKDOWN][2]
     _, content_new = EDITS[MARKDOWN][3]
@@ -160,17 +162,28 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     markdown = sources[MARKDOWN]
     theme = sources[THEME]
 
+    # Migrate the previous bounded panel and forced light-gray border together.
+    if (markdown.count(marker_new) == 1
+            and markdown.count(code_new) == 1
+            and markdown.count(wrap_new) == 1
+            and markdown.count(LEGACY_CONTAINED_CONTENT) == 1
+            and markdown.count(content_new) == 0
+            and theme.count(LEGACY_FORCED_DIM_THEME) == 1
+            and theme.count(theme_new) == 0):
+        result = dict(sources)
+        result[MARKDOWN] = markdown.replace(LEGACY_CONTAINED_CONTENT, content_new, 1)
+        result[THEME] = theme.replace(LEGACY_FORCED_DIM_THEME, theme_new, 1)
+        return result
+
     # Migrate the previous rounded panel before tightening its background bounds.
     if (markdown.count(marker_new) == 1
             and markdown.count(code_new) == 1
             and markdown.count(wrap_new) == 1
             and markdown.count(LEGACY_ROUNDED_CONTENT) == 1
             and markdown.count(content_new) == 0
-            and theme.count(LEGACY_THEME) == 1
-            and theme.count(theme_new) == 0):
+            and theme.count(theme_new) == 1):
         result = dict(sources)
         result[MARKDOWN] = markdown.replace(LEGACY_ROUNDED_CONTENT, content_new, 1)
-        result[THEME] = theme.replace(LEGACY_THEME, theme_new, 1)
         return result
 
     # Migrate either shipped pre-rounded panel layout before applying the new frame.
@@ -182,15 +195,13 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             and markdown.count(wrap_new) == 0
             and markdown.count(LEGACY_CONTENT) == 1
             and markdown.count(content_new) == 0
-            and theme.count(LEGACY_THEME) == 1
-            and theme.count(theme_new) == 0):
+            and theme.count(theme_new) == 1):
         result = dict(sources)
         result[MARKDOWN] = (markdown
             .replace(LEGACY_MARKER_DECL, marker_new, 1)
             .replace(legacy_case, code_new, 1)
             .replace(LEGACY_WRAP, wrap_new, 1)
             .replace(LEGACY_CONTENT, content_new, 1))
-        result[THEME] = theme.replace(LEGACY_THEME, theme_new, 1)
         return result
 
     states = []

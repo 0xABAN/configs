@@ -49,7 +49,7 @@
     "mdLinkUrl": "muted",
     "mdCode": "accent",
     "mdCodeBlock": "text",
-    "mdCodeBlockBorder": "accentDark",
+    "mdCodeBlockBorder": "#44474d",
     "mdQuote": "cream",
     "mdQuoteBorder": "accentDark",
     "mdHr": "accentDark",
