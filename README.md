@@ -45,10 +45,13 @@ remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
 near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
 status text, and Pi tool output use cream (`#dedec5`). Numeric literals retain
 the warning yellow (`#c7b777`) as a rare syntax accent; types and status warnings use sage (`#5fa876`).
-Neovim's existing syntax palette remains distinct by token role. The cursor
-and matching delimiters use light lime (`#a8d86e`) backgrounds with white text;
-active LSP reference/UI highlights use the same light lime. Syntax colors and
-the core teal UI accent remain unchanged.
+Neovim's existing syntax palette remains distinct by token role. Matching
+delimiters use light lime (`#a8d86e`) backgrounds with white text, including the
+bracket under the cursor. `nvim/plugin/match-cursor.lua` hides the terminal cursor
+over that cell only while a native match is active in Normal mode; moving away
+restores the ordinary cursor and its animation settings. Active LSP reference/UI
+highlights use the same light lime. Syntax colors and the core teal UI accent
+remain unchanged.
 Pi follows its existing token classes: literals such as booleans share the
 number role, built-ins share the type role, and some C++ types such as `int`
 remain keywords (teal). Pi's active highlights, success states, and additions
@@ -129,7 +132,8 @@ Ghostty/cmux settings, Pi settings, and Neovim UI/cursor configuration.
 Restore those files to recover the previous appearance, or select `woody`
 in Pi and Neovim to switch just their palettes.
 
-Checks: `nvim --headless -u NONE -l nvim/tests/osaka-jade.lua` and
+Checks: `nvim --headless -u NONE -l nvim/tests/osaka-jade.lua`,
+`nvim --headless -u NONE -l nvim/tests/match-cursor.lua`, and
 `ghostty +validate-config` after terminal activation. On macOS,
 `swift -suppress-warnings ghostty/tests/grain.swift` compiles the actual GLSL
 with system OpenGL and checks GPU pixels for alpha, grain, and text preservation.
