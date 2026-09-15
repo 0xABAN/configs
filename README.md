@@ -45,12 +45,12 @@ remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
 near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
 status text, and Pi tool output use cream (`#dedec5`). Numeric literals retain
 the warning yellow (`#c7b777`) as a rare syntax accent; types and status warnings use sage (`#5fa876`).
-Neovim syntax keywords, functions, booleans, links, matching delimiters, and
-LSP highlights use neon green (`#39ff14`). Pi follows its existing token classes:
-literals such as booleans share the number role, built-ins share the type role,
-and some C++ types such as `int` remain keywords (teal).
-Pi's active highlights, success states, and additions use the core teal, as do
-terminal ANSI green/cyan, Pi's diamond,
+Neovim's existing syntax palette remains distinct by token role. Matching
+delimiters and active LSP reference/UI highlights use neon green (`#39ff14`).
+Pi follows its existing token classes: literals such as booleans share the
+number role, built-ins share the type role, and some C++ types such as `int`
+remain keywords (teal). Pi's active highlights, success states, and additions
+use the core teal, as do terminal ANSI green/cyan, Pi's diamond,
 and its context ball/meter. Neovim separators and floating-window borders,
 and Pi's muted/Markdown borders, use the darker companion. Mode/thinking
 label gradients and error colors retain their existing palettes.

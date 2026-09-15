@@ -82,24 +82,24 @@ hi("Removed", { fg = c.red })
 hi("Changed", { fg = c.sage })
 
 hi("Comment", { fg = c.dim, italic = true })
-hi("Statement", { fg = c.neonGreen, bold = true })
+hi("Statement", { fg = c.blueGreen, bold = true })
 hi("Keyword", { link = "Statement" })
-hi("PreProc", { fg = c.neonGreen })
-hi("Function", { fg = c.neonGreen })
+hi("PreProc", { fg = c.accent })
+hi("Function", { fg = c.accent })
 hi("Identifier", { fg = c.cream })
 hi("String", { fg = c.cream })
 hi("Character", { link = "String" })
 hi("Number", { fg = c.yellow })
 hi("Float", { link = "Number" })
-hi("Boolean", { fg = c.neonGreen })
+hi("Boolean", { fg = c.blueGreen })
 hi("Type", { fg = c.sage })
 hi("Operator", { fg = c.muted })
 hi("Delimiter", { fg = c.text })
 hi("Special", { fg = c.text })
 hi("Constant", { fg = c.cream })
-hi("Todo", { fg = c.neonGreen, bold = true })
+hi("Todo", { fg = c.green, bold = true })
 hi("Error", { fg = c.red })
-hi("Underlined", { fg = c.neonGreen, underline = true })
+hi("Underlined", { fg = c.accent, underline = true })
 
 -- Treesitter captures inherit the same roles as legacy syntax and pi.
 local links = {
@@ -146,16 +146,10 @@ hi("DiagnosticWarn", { fg = c.sage })
 hi("DiagnosticInfo", { fg = c.blueGreen })
 hi("DiagnosticHint", { fg = c.green })
 
--- LSP semantic/reference highlights use one unmistakable active color.
+-- Active LSP references and UI annotations use one unmistakable color.
 for _, group in ipairs({
   "LspReferenceText", "LspReferenceRead", "LspReferenceWrite", "LspReferenceTarget",
   "LspInlayHint", "LspCodeLens", "LspCodeLensSeparator", "LspSignatureActiveParameter",
-  "@lsp.type.class", "@lsp.type.comment", "@lsp.type.decorator", "@lsp.type.enum",
-  "@lsp.type.enumMember", "@lsp.type.event", "@lsp.type.function", "@lsp.type.interface",
-  "@lsp.type.keyword", "@lsp.type.macro", "@lsp.type.method", "@lsp.type.modifier",
-  "@lsp.type.namespace", "@lsp.type.number", "@lsp.type.operator", "@lsp.type.parameter",
-  "@lsp.type.property", "@lsp.type.regexp", "@lsp.type.string", "@lsp.type.struct",
-  "@lsp.type.type", "@lsp.type.typeParameter", "@lsp.type.variable",
 }) do
   hi(group, { fg = c.neonGreen })
 end
