@@ -9,7 +9,9 @@ MARKDOWN = "node_modules/@earendil-works/pi-tui/dist/components/markdown.js"
 THEME = "dist/modes/interactive/theme/theme.js"
 TUI_PACKAGE = "node_modules/@earendil-works/pi-tui/package.json"
 
-CODE_CASE = (Path(__file__).with_name("payloads") / "tui/markdown-code-case.js.inc").read_text().rstrip("\n")
+PAYLOADS = Path(__file__).with_name("payloads")
+CODE_CASE = (PAYLOADS / "tui/markdown-code-case.js.inc").read_text().rstrip("\n")
+LEGACY_CODE_CASE = (PAYLOADS / "tui/legacy/markdown-code-case.js.inc").read_text().rstrip("\n")
 
 EDITS = {
     MARKDOWN: [
@@ -113,28 +115,33 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     states = []
     for name, edits in EDITS.items():
         source = sources[name]
-        for old, new in edits:
+        for index, (old, new) in enumerate(edits):
             old_count = source.count(old)
             new_count = source.count(new)
             if new_count == 1:
                 states.append("patched")
+            elif name == MARKDOWN and index == 1 and source.count(LEGACY_CODE_CASE) == 1:
+                states.append("legacy")
             elif new_count == 0 and old_count == 1:
                 states.append("original")
             else:
                 raise ValueError(f"{name}: markdown code anchor changed or duplicated")
 
-    if len(set(states)) != 1:
-        raise ValueError("partial markdown code patch; inspect before reapplying")
-    if states[0] == "patched":
+    if len(set(states)) == 1 and states[0] == "patched":
         return dict(sources)
-
-    result = dict(sources)
-    for name, edits in EDITS.items():
-        source = result[name]
-        for old, new in edits:
-            source = source.replace(old, new, 1)
-        result[name] = source
-    return result
+    if len(set(states)) == 1 and states[0] == "original":
+        result = dict(sources)
+        for name, edits in EDITS.items():
+            source = result[name]
+            for old, new in edits:
+                source = source.replace(old, new, 1)
+            result[name] = source
+        return result
+    if states.count("legacy") == 1 and all(state in {"legacy", "patched"} for state in states):
+        result = dict(sources)
+        result[MARKDOWN] = result[MARKDOWN].replace(LEGACY_CODE_CASE, CODE_CASE, 1)
+        return result
+    raise ValueError("partial markdown code patch; inspect before reapplying")
 
 
 def main() -> None:

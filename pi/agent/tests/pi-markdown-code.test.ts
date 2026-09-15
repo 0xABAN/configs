@@ -6,11 +6,12 @@ import { copySdk, describePatch, temporaryDirectory } from "./support/patch-fixt
 import { nativeSuite } from "./support/native-suite";
 
 const patcher = fileURLToPath(new URL("../patches/pi-markdown-code.py", import.meta.url));
-const { MARKDOWN, THEME, EDITS } = describePatch<{
+const { MARKDOWN, THEME, EDITS, LEGACY_CODE_CASE } = describePatch<{
   MARKDOWN: string;
   THEME: string;
   EDITS: Record<string, [string, string][]>;
-}>(patcher, "{'MARKDOWN':m['MARKDOWN'],'THEME':m['THEME'],'EDITS':m['EDITS']}");
+  LEGACY_CODE_CASE: string;
+}>(patcher, "{'MARKDOWN':m['MARKDOWN'],'THEME':m['THEME'],'EDITS':m['EDITS'],'LEGACY_CODE_CASE':m['LEGACY_CODE_CASE']}");
 const temp = temporaryDirectory("pi-markdown-code-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk && existsSync(join(sdk!, "node_modules/@earendil-works/pi-tui")));
@@ -33,6 +34,7 @@ function fixture(name: string) {
     const path = join(root, name);
     let source = readFileSync(path, "utf8");
     for (const [old, next] of edits) source = source.replace(next, old);
+    if (name === MARKDOWN) source = source.replace(LEGACY_CODE_CASE, edits[1]![0]!);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, source);
   }
@@ -50,6 +52,21 @@ test("patches native Markdown code panels idempotently", () => {
   expect(run(root).exitCode).toBe(0);
   expect(contents(root)).toEqual(after);
   expect(before[MARKDOWN]).not.toBe(after[MARKDOWN]);
+});
+
+test("migrates the prior code panel layout", () => {
+  const root = fixture("legacy");
+  for (const [name, edits] of Object.entries(EDITS)) {
+    const path = join(root, name);
+    let source = readFileSync(path, "utf8");
+    for (const [index, [old, next]] of edits.entries()) {
+      source = source.replace(old, name === MARKDOWN && index === 1 ? LEGACY_CODE_CASE : next);
+    }
+    writeFileSync(path, source);
+  }
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)[MARKDOWN]).toContain('lines.push(renderCodeLine(""));');
+  expect(readdirSync(join(root, ".config/theme-backups"))).toHaveLength(1);
 });
 
 test("rejects partial Markdown code patches without writing", () => {
@@ -92,10 +109,10 @@ realTest("native Markdown hides fences and fills wrapped code rows", async () =>
   const codeLines = lines.filter((line: string) => line.includes(background));
   expect(lines.join("\n")).not.toContain("```");
   expect(lines.join("\n")).not.toContain("ts");
-  expect(codeLines).toHaveLength(2);
+  expect(codeLines).toHaveLength(4);
   expect(codeLines.every((line: string) => visibleWidth(line) === 40)).toBe(true);
-  expect(codeLines[0]).toContain(syntax);
-  expect(stripTerminalSequences(codeLines[0])).toContain("const value = 42;");
+  expect(codeLines[1]).toContain(syntax);
+  expect(stripTerminalSequences(codeLines[1])).toContain("const value = 42;");
 
   const wrapped = new Markdown("```ts\nconst " + "x".repeat(80) + "\n```", 0, 0, theme).render(40);
   expect(wrapped.length).toBeGreaterThan(1);
