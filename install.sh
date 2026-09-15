@@ -141,6 +141,11 @@ if [[ -f "$ROOT/pi/agent/patches/pi-compact-layout.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-compact-layout.py"
 fi
 
+# Add idle breathing room while keeping active loaders flush to the editor.
+if [[ -f "$ROOT/pi/agent/patches/pi-editor-gap.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-editor-gap.py"
+fi
+
 # Re-apply local tints on installed pi packages
 if [[ -f "$ROOT/pi/agent/patches/rpiv-todo-gray.py" ]]; then
   python3 "$ROOT/pi/agent/patches/rpiv-todo-gray.py" || true

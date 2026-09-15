@@ -29,8 +29,8 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setWorkingMessage("");
 		ctx.ui.setWidget(WIDGET_KEY, undefined);
 		ctx.ui.setWidget(WIDGET_KEY, (tui) => {
-			// Loader.render() prefixes a blank row; the widget container already owns
-			// that leading gap, while the wrapper adds one row below the spinner.
+			// Loader.render() prefixes a blank row; the widget container owns that
+			// leading gap, so do not add a trailing row before the editor.
 			const loader = new Loader(
 				tui,
 				(s) => s,
@@ -41,9 +41,7 @@ export default function (pi: ExtensionAPI) {
 			const baseRender = loader.render.bind(loader);
 			loader.render = (width: number) => {
 				const lines = baseRender(width);
-				const content = lines[0] === "" ? lines.slice(1) : lines;
-				// The widget container owns the leading spacer; keep one row below the spinner.
-				return [...content, ""];
+				return lines[0] === "" ? lines.slice(1) : lines;
 			};
 			return Object.assign(loader, { dispose: () => loader.stop() });
 		});

@@ -82,7 +82,7 @@ gate for extreme window sizes.
 
 | Target | Supported input | Commands under `agent/patches/` |
 |--------|-----------------|--------------------------------|
-| Pi unbundled host and package-local TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-markdown-code.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
+| Pi unbundled host and package-local TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-markdown-code.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py`, `pi-editor-gap.py` |
 | Powerline | Git commit `8c9bda10fdfd2822e89334ec85f3da9f8ca49182` | `powerline-dj.py`, `powerline-layout.py`, `powerline-editor.py` |
 | rpiv-todo UI | `@juicesharp/rpiv-todo` `2.9.0`, after legacy tweaks | `rpiv-todo-ui.py` |
 | Subagents UI | `@tintinweb/pi-subagents` `0.19.0` | `subagents-ui.py` |
@@ -113,7 +113,7 @@ Do not change persistence as part of a visual cleanup.
 
 `install.sh` owns the serial order: powerline DJ/layout, host inset, editor,
 Markdown code panels, transcript, Intercom UI, dialogs, notices, compact layout,
-legacy Todo tweaks, Todo UI, then Subagents UI, then `pi/launcher.py`.
+editor gap, legacy Todo tweaks, Todo UI, then Subagents UI, then `pi/launcher.py`.
 The legacy Todo command remains best-effort; the other patch failures propagate.
 Keep pi-pretty before powerline in package settings because both install editors.
 
@@ -251,6 +251,7 @@ The patch-contract table above is the version authority. The patch purposes are:
 
 - Host inset: shared viewport margins; transcript: speaker/tool rows and metrics.
 - Markdown code panels: hidden fences, retained syntax highlighting, and full-width dark rows.
+- Editor gap: idle breathing room without separating active loaders from the editor.
 - Dialogs: native selector/input visibility; notices: activity wrapping;
   compact layout: small-window widget and footer budgets.
 - Powerline DJ/layout/editor: mode presentation, footer sizing and editor frame.

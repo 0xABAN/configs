@@ -55,7 +55,7 @@ nativeTest("native discovery loads entrypoints only; whimsical keeps loader and 
     expect([...widgets.keys()]).toEqual(["rpiv-todos", "whimsical-working"]);
     expect(first.intervalMs).toBe(90);
     expect(first.render(100)[0]).not.toBe("");
-    expect(first.render(100).at(-1)).toBe("");
+    expect(first.render(100).at(-1)).not.toBe("");
     expect(first.intervalId).not.toBeNull();
     await dispatch("session_before_compact");
     expect(widgets.has("whimsical-working")).toBe(false);
