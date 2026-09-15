@@ -18,6 +18,7 @@ HOST = "dist/modes/interactive/interactive-mode.js"
 MODULE = "dist/modes/interactive/components/activity-notice.js"
 SOURCE = read_payload('host/activity-notice.js.inc')
 LEGACY_SOURCE = read_payload('host/legacy/activity-notice.js.inc')
+LEGACY_PACKAGE_UPDATE_NOTICE = read_payload('host/legacy/activity-notice-package-borders.js.inc')
 PACKAGE_UPDATE_NOTICE = r'''    showPackageUpdateNotification(packages) {
         const action = theme.fg("accent", `${APP_NAME} update --extensions`);
         const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
@@ -26,6 +27,14 @@ PACKAGE_UPDATE_NOTICE = r'''    showPackageUpdateNotification(packages) {
         this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
         this.chatContainer.addChild(new Text(`${theme.bold(theme.fg("warning", "Package Updates Available"))}\n${updateInstruction}\n${theme.fg("muted", "Packages:")}\n${packageLines}`, 1, 0));
         this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
+        this.ui.requestRender();
+    }'''
+PACKAGE_UPDATE_NOTICE_NEW = r'''    showPackageUpdateNotification(packages) {
+        const action = theme.fg("accent", `${APP_NAME} update --extensions`);
+        const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
+        const packageLines = packages.map((pkg) => `- ${pkg}`).join("\n");
+        this.chatContainer.addChild(new Spacer(1));
+        this.chatContainer.addChild(new Text(`${theme.bold(theme.fg("toolOutput", "Package Updates Available"))}\n${updateInstruction}\n${theme.fg("muted", "Packages:")}\n${packageLines}`, 1, 0, (text) => theme.bg("userMessageBg", text)));
         this.ui.requestRender();
     }'''
 EDITS = [
@@ -38,7 +47,7 @@ EDITS = [
      'new ActivityNotice(theme.fg("error", `Error: ${errorMessage}`), () => this.outputPad + 2)'),
     ('new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0)',
      'new ActivityNotice(theme.fg("warning", `Warning: ${warningMessage}`), () => this.outputPad + 2)'),
-    (PACKAGE_UPDATE_NOTICE, PACKAGE_UPDATE_NOTICE.replace('"warning"', '"toolOutput"')),
+    (PACKAGE_UPDATE_NOTICE, PACKAGE_UPDATE_NOTICE_NEW),
 ]
 
 
@@ -49,14 +58,22 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         if source.count(new) == 1:
             remainder = remainder.replace(new, "", 1)
     states = []
-    for old, new in EDITS:
+    for index, (old, new) in enumerate(EDITS):
         if source.count(new) == 1 and old not in remainder:
             states.append("patched")
+        elif (index == len(EDITS) - 1
+                and source.count(new) == 0
+                and source.count(LEGACY_PACKAGE_UPDATE_NOTICE) == 1):
+            states.append("legacy")
         elif source.count(new) == 0 and source.count(old) == 1:
             states.append("original")
         else:
             raise ValueError(f"notification anchor changed or duplicated: {old[:70]}")
     # Migrate the complete previous notice patch; unknown helpers still refuse.
+    if states == ["patched"] * (len(EDITS) - 1) + ["legacy"]:
+        if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
+            raise ValueError("notification helper changed or missing")
+        return {**sources, HOST: source.replace(LEGACY_PACKAGE_UPDATE_NOTICE, EDITS[-1][1], 1), MODULE: SOURCE}
     if states == ["patched"] * (len(EDITS) - 1) + ["original"]:
         if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
             raise ValueError("notification helper changed or missing")

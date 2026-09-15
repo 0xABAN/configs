@@ -6,8 +6,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-activity-notices.py", import.meta.url));
-const { HOST, MODULE, EDITS } = describePatch<{ HOST: string; MODULE: string; EDITS: [string, string][] }>(
-  patcher, "{k:m[k] for k in ['HOST','MODULE','EDITS']}");
+const { HOST, MODULE, EDITS, LEGACY_PACKAGE_UPDATE_NOTICE } = describePatch<{
+  HOST: string;
+  MODULE: string;
+  EDITS: [string, string][];
+  LEGACY_PACKAGE_UPDATE_NOTICE: string;
+}>(patcher, "{'HOST':m['HOST'],'MODULE':m['MODULE'],'EDITS':m['EDITS'],'LEGACY_PACKAGE_UPDATE_NOTICE':m['LEGACY_PACKAGE_UPDATE_NOTICE']}");
 const temp = temporaryDirectory("pi-activity-notices-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -73,6 +77,20 @@ test("the exact previous notice helper upgrades without marking it as newly adde
   expect(contents(root)).toEqual(after);
 });
 
+test("the previous bordered package notice migrates to a gray background", () => {
+  const root = fixture("legacy-package-borders");
+  expect(run(root).exitCode).toBe(0);
+  const path = join(root, HOST);
+  const current = readFileSync(path, "utf8");
+  writeFileSync(path, current.replace(EDITS.at(-1)![1], LEGACY_PACKAGE_UPDATE_NOTICE));
+  expect(run(root).exitCode).toBe(0);
+  const after = contents(root)[0]!;
+  expect(after).toContain('theme.bg("userMessageBg", text)');
+  expect(after).not.toContain('new DynamicBorder((text) => theme.fg("toolOutput", text))');
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)[0]).toBe(after);
+});
+
 realTest("native notices align every wrapped line and preserve coalescing, warnings and errors", async () => {
   const root = join(temp, "real");
   copySdk(sdk!, root);
@@ -120,8 +138,10 @@ realTest("native notices align every wrapped line and preserve coalescing, warni
   const heading = updateLines.find((line: string) => line.includes("Package Updates Available"));
   expect(heading).toContain(colors.theme.getFgAnsi("toolOutput"));
   const borders = updateLines.filter((line: string) => /^─+$/.test(tui.stripTerminalSequences(line).trim()));
-  expect(borders).toHaveLength(2);
-  for (const line of borders) expect(line).toContain(colors.theme.getFgAnsi("toolOutput"));
+  expect(borders).toHaveLength(0);
+  const background = colors.theme.getBgAnsi("userMessageBg");
+  expect(heading).toContain(background);
+  expect(updateLines.find((line: string) => tui.stripTerminalSequences(line).includes("fixture-package"))).toContain(background);
   expect(updateLines.join("\n")).not.toContain(colors.theme.getFgAnsi("warning"));
   expect(updateLines.map(tui.stripTerminalSequences).join("\n")).toContain("fixture-package");
 
