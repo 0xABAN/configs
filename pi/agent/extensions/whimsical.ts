@@ -19,6 +19,8 @@ export default function (pi: ExtensionAPI) {
 	// clear+set bumps this key to the end of the widget Map (just above the editor).
 	let frames: string[] = [];
 	let active = false;
+	let agentRunning = false;
+	let resumeAfterCompaction = false;
 
 	const show = (ctx: ExtensionContext, reshuffle: boolean) => {
 		if (!ctx.hasUI) return;
@@ -27,8 +29,8 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setWorkingMessage("");
 		ctx.ui.setWidget(WIDGET_KEY, undefined);
 		ctx.ui.setWidget(WIDGET_KEY, (tui) => {
-			// Loader.render() prefixes a blank row (meant for statusContainer).
-			// Drop it so we don't stack empty lines under the todo panel.
+			// Loader.render() prefixes a blank row; the widget container already owns
+			// that leading gap, while the wrapper adds one row below the spinner.
 			const loader = new Loader(
 				tui,
 				(s) => s,
@@ -39,7 +41,9 @@ export default function (pi: ExtensionAPI) {
 			const baseRender = loader.render.bind(loader);
 			loader.render = (width: number) => {
 				const lines = baseRender(width);
-				return lines[0] === "" ? lines.slice(1) : lines;
+				const content = lines[0] === "" ? lines.slice(1) : lines;
+				// The widget container owns the leading spacer; keep one row below the spinner.
+				return [...content, ""];
 			};
 			return Object.assign(loader, { dispose: () => loader.stop() });
 		});
@@ -53,13 +57,38 @@ export default function (pi: ExtensionAPI) {
 		active = false;
 	};
 
-	pi.on("agent_start", async (_event, ctx) => show(ctx, true));
-	pi.on("turn_start", async (_event, ctx) => show(ctx, true));
+	const suspendForCompaction = (ctx: ExtensionContext) => {
+		if (!active || !agentRunning) return;
+		resumeAfterCompaction = true;
+		hide(ctx);
+	};
+
+	const resumeAfterCompactionIfNeeded = (ctx: ExtensionContext) => {
+		if (!resumeAfterCompaction) return;
+		resumeAfterCompaction = false;
+		if (agentRunning) show(ctx, false);
+	};
+
+	pi.on("agent_start", async (_event, ctx) => {
+		agentRunning = true;
+		show(ctx, true);
+	});
+	pi.on("turn_start", async (_event, ctx) => {
+		agentRunning = true;
+		show(ctx, true);
+	});
+	pi.on("session_before_compact", async (_event, ctx) => suspendForCompaction(ctx));
+	pi.on("session_compact", async (_event, ctx) => resumeAfterCompactionIfNeeded(ctx));
+	pi.on("session_compact_failed", async (_event, ctx) => resumeAfterCompactionIfNeeded(ctx));
 	// After todo overlay updates, re-append spinner so it stays under the list.
 	pi.on("tool_result", async (event, ctx) => {
 		if (!active) return;
 		if (event.toolName !== "todo") return;
 		show(ctx, false);
 	});
-	pi.on("agent_end", async (_event, ctx) => hide(ctx));
+	pi.on("agent_end", async (_event, ctx) => {
+		agentRunning = false;
+		resumeAfterCompaction = false;
+		hide(ctx);
+	});
 }

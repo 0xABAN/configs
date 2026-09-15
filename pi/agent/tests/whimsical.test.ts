@@ -55,7 +55,14 @@ nativeTest("native discovery loads entrypoints only; whimsical keeps loader and 
     expect([...widgets.keys()]).toEqual(["rpiv-todos", "whimsical-working"]);
     expect(first.intervalMs).toBe(90);
     expect(first.render(100)[0]).not.toBe("");
+    expect(first.render(100).at(-1)).toBe("");
     expect(first.intervalId).not.toBeNull();
+    await dispatch("session_before_compact");
+    expect(widgets.has("whimsical-working")).toBe(false);
+    expect(visibility.at(-1)).toBe(true);
+    await dispatch("session_compact");
+    expect(widgets.has("whimsical-working")).toBe(true);
+    expect(visibility.at(-1)).toBe(false);
     await dispatch("turn_start");
     expect(first.intervalId).toBeNull();
     const next = widgets.get("whimsical-working");
@@ -71,6 +78,9 @@ nativeTest("native discovery loads entrypoints only; whimsical keeps loader and 
     await dispatch("agent_end");
     expect(widgets.has("whimsical-working")).toBe(false);
     expect(visibility.at(-1)).toBe(true);
+    await dispatch("session_before_compact");
+    await dispatch("session_compact");
+    expect(widgets.has("whimsical-working")).toBe(false);
     await dispatch("agent_start", {}, { ...ctx, hasUI: false });
     expect(widgets.has("whimsical-working")).toBe(false);
 
