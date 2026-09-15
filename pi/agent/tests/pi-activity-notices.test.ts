@@ -6,12 +6,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/pi-activity-notices.py", import.meta.url));
-const { HOST, MODULE, EDITS, LEGACY_PACKAGE_UPDATE_NOTICE } = describePatch<{
+const { HOST, MODULE, EDITS, LEGACY_PACKAGE_UPDATE_NOTICE, LEGACY_GRAY_PACKAGE_UPDATE_NOTICE } = describePatch<{
   HOST: string;
   MODULE: string;
   EDITS: [string, string][];
   LEGACY_PACKAGE_UPDATE_NOTICE: string;
-}>(patcher, "{'HOST':m['HOST'],'MODULE':m['MODULE'],'EDITS':m['EDITS'],'LEGACY_PACKAGE_UPDATE_NOTICE':m['LEGACY_PACKAGE_UPDATE_NOTICE']}");
+  LEGACY_GRAY_PACKAGE_UPDATE_NOTICE: string;
+}>(patcher, "{'HOST':m['HOST'],'MODULE':m['MODULE'],'EDITS':m['EDITS'],'LEGACY_PACKAGE_UPDATE_NOTICE':m['LEGACY_PACKAGE_UPDATE_NOTICE'],'LEGACY_GRAY_PACKAGE_UPDATE_NOTICE':m['LEGACY_GRAY_PACKAGE_UPDATE_NOTICE']}");
 const temp = temporaryDirectory("pi-activity-notices-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk);
@@ -91,6 +92,17 @@ test("the previous bordered package notice migrates to a gray background", () =>
   expect(contents(root)[0]).toBe(after);
 });
 
+test("the previous gray package notice migrates to padded rows", () => {
+  const root = fixture("legacy-package-gray");
+  expect(run(root).exitCode).toBe(0);
+  const path = join(root, HOST);
+  const current = readFileSync(path, "utf8");
+  writeFileSync(path, current.replace(EDITS.at(-1)![1], LEGACY_GRAY_PACKAGE_UPDATE_NOTICE));
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)[0]).toContain('theme.bg("userMessageBg", text)');
+  expect(contents(root)[0]).toContain(", 1, 1, (text) =>");
+});
+
 realTest("native notices align every wrapped line and preserve coalescing, warnings and errors", async () => {
   const root = join(temp, "real");
   copySdk(sdk!, root);
@@ -140,6 +152,10 @@ realTest("native notices align every wrapped line and preserve coalescing, warni
   const borders = updateLines.filter((line: string) => /^─+$/.test(tui.stripTerminalSequences(line).trim()));
   expect(borders).toHaveLength(0);
   const background = colors.theme.getBgAnsi("userMessageBg");
+  const backgroundLines = updateLines.filter((line: string) => line.includes(background));
+  expect(backgroundLines).toHaveLength(6);
+  expect(tui.stripTerminalSequences(backgroundLines[0]).trim()).toBe("");
+  expect(tui.stripTerminalSequences(backgroundLines.at(-1)).trim()).toBe("");
   expect(heading).toContain(background);
   expect(updateLines.find((line: string) => tui.stripTerminalSequences(line).includes("fixture-package"))).toContain(background);
   expect(updateLines.join("\n")).not.toContain(colors.theme.getFgAnsi("warning"));

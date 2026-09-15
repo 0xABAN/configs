@@ -19,6 +19,7 @@ MODULE = "dist/modes/interactive/components/activity-notice.js"
 SOURCE = read_payload('host/activity-notice.js.inc')
 LEGACY_SOURCE = read_payload('host/legacy/activity-notice.js.inc')
 LEGACY_PACKAGE_UPDATE_NOTICE = read_payload('host/legacy/activity-notice-package-borders.js.inc')
+LEGACY_GRAY_PACKAGE_UPDATE_NOTICE = read_payload('host/legacy/activity-notice-package-gray.js.inc')
 PACKAGE_UPDATE_NOTICE = r'''    showPackageUpdateNotification(packages) {
         const action = theme.fg("accent", `${APP_NAME} update --extensions`);
         const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
@@ -34,7 +35,7 @@ PACKAGE_UPDATE_NOTICE_NEW = r'''    showPackageUpdateNotification(packages) {
         const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
         const packageLines = packages.map((pkg) => `- ${pkg}`).join("\n");
         this.chatContainer.addChild(new Spacer(1));
-        this.chatContainer.addChild(new Text(`${theme.bold(theme.fg("toolOutput", "Package Updates Available"))}\n${updateInstruction}\n${theme.fg("muted", "Packages:")}\n${packageLines}`, 1, 0, (text) => theme.bg("userMessageBg", text)));
+        this.chatContainer.addChild(new Text(`${theme.bold(theme.fg("toolOutput", "Package Updates Available"))}\n${updateInstruction}\n${theme.fg("muted", "Packages:")}\n${packageLines}`, 1, 1, (text) => theme.bg("userMessageBg", text)));
         this.ui.requestRender();
     }'''
 EDITS = [
@@ -57,13 +58,15 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     for _, new in EDITS:
         if source.count(new) == 1:
             remainder = remainder.replace(new, "", 1)
+    legacy_package_update_notice = next((notice for notice in (LEGACY_PACKAGE_UPDATE_NOTICE, LEGACY_GRAY_PACKAGE_UPDATE_NOTICE)
+                                         if source.count(notice) == 1), None)
     states = []
     for index, (old, new) in enumerate(EDITS):
         if source.count(new) == 1 and old not in remainder:
             states.append("patched")
         elif (index == len(EDITS) - 1
                 and source.count(new) == 0
-                and source.count(LEGACY_PACKAGE_UPDATE_NOTICE) == 1):
+                and legacy_package_update_notice is not None):
             states.append("legacy")
         elif source.count(new) == 0 and source.count(old) == 1:
             states.append("original")
@@ -73,7 +76,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     if states == ["patched"] * (len(EDITS) - 1) + ["legacy"]:
         if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
             raise ValueError("notification helper changed or missing")
-        return {**sources, HOST: source.replace(LEGACY_PACKAGE_UPDATE_NOTICE, EDITS[-1][1], 1), MODULE: SOURCE}
+        return {**sources, HOST: source.replace(legacy_package_update_notice, EDITS[-1][1], 1), MODULE: SOURCE}
     if states == ["patched"] * (len(EDITS) - 1) + ["original"]:
         if sources.get(MODULE) not in (SOURCE, LEGACY_SOURCE):
             raise ValueError("notification helper changed or missing")
