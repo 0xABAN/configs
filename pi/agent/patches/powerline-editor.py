@@ -52,7 +52,9 @@ EDITS = {
         result.push(inset + bc("╭───") + lines[0] + bc("╮"));
 
         for (let i = 1; i < bottomBorderIndex; i++)'''),
-        ('''          result.push(`${prefix}${lines[i] || ""}`);''', '''          result.push(inset + bc("│") + prefix + (lines[i] || "") + bc("│"));'''),
+        ('''          const prefix = i === 1 ? promptPrefix : contPrefix;
+          result.push(`${prefix}${lines[i] || ""}`);''', '''          const prefix = i === 1 ? promptPrefix : contPrefix;
+          result.push(inset + bc("│") + prefix + (lines[i] || "") + bc("│"));'''),
         ('''          result.push(`${promptPrefix}${" ".repeat(contentWidth)}`);''', '''          result.push(inset + bc("│") + promptPrefix + " ".repeat(contentWidth) + bc("│"));'''),
         ('''        result.push(" " + bc("─".repeat(width - 2)));
 
@@ -62,7 +64,6 @@ EDITS = {
         // Completion rows stay outside the box, aligned to the input origin.
         for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
           result.push(inset + "    " + (lines[i] || ""));'''),
-        ('''          const prefix = i === 1 ? promptPrefix : contPrefix;''', '''          const prefix = i === 2 ? promptPrefix : contPrefix;'''),
     ],
     "bash-mode/editor.ts": [
         (r'''    const availableWidth = Math.max(0, width - visibleWidth(text) - 1);
@@ -144,22 +145,7 @@ BOTTOM_BORDER_EDIT = (
     read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
 )
 PRE_RENDER_HEIGHT = EDITS["index.ts"][2][1]
-PREVIOUS_UNPADDED_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
-        const contentWidth = boxWidth - 5;
-        // Render the native editor with a 40% viewport while preserving the real terminal size.
-        const terminalRows = tui.terminal.rows;
-        const visibleRowLimit = Math.max(5, Math.floor(terminalRows * 0.4));
-        const renderTerminal = Object.create(tui.terminal);
-        Object.defineProperty(renderTerminal, "rows", { value: Math.ceil(visibleRowLimit / 0.3) });
-        const originalTerminal = editor.tui.terminal;
-        editor.tui.terminal = renderTerminal;
-        let lines: string[];
-        try {
-          lines = originalRender(contentWidth);
-        } finally {
-          editor.tui.terminal = originalTerminal;
-        }'''
-PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+PREVIOUS_DOUBLE_PADDING_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
         const contentWidth = boxWidth - 5;
         // Render the native editor with a 40% viewport while preserving the real terminal size.
         const terminalRows = tui.terminal.rows;
@@ -181,10 +167,48 @@ PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column p
         lines.splice(1, 0, blankRow);
         lines.splice(2 + contentRows, 0, blankRow);
         inputLineCount = contentRows + 2;'''
+PREVIOUS_SINGLE_PADDING_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+        const contentWidth = boxWidth - 5;
+        // Render the native editor with a 40% viewport while preserving the real terminal size.
+        const terminalRows = tui.terminal.rows;
+        const visibleRowLimit = Math.max(5, Math.floor(terminalRows * 0.4));
+        const contentRowLimit = Math.max(1, visibleRowLimit - 1);
+        const renderTerminal = Object.create(tui.terminal);
+        Object.defineProperty(renderTerminal, "rows", { value: Math.ceil(contentRowLimit / 0.3) });
+        const originalTerminal = editor.tui.terminal;
+        editor.tui.terminal = renderTerminal;
+        let lines: string[];
+        try {
+          lines = originalRender(contentWidth);
+        } finally {
+          editor.tui.terminal = originalTerminal;
+        }
+
+        const contentRows = Math.max(1, Math.min(inputLineCount, contentRowLimit));
+        const blankRow = " ".repeat(Math.max(0, contentWidth));
+        lines.splice(1, 0, blankRow);
+        inputLineCount = contentRows + 1;'''
+PREVIOUS_UNPADDED_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+        const contentWidth = boxWidth - 5;
+        // Render the native editor with a 40% viewport while preserving the real terminal size.
+        const terminalRows = tui.terminal.rows;
+        const visibleRowLimit = Math.max(5, Math.floor(terminalRows * 0.4));
+        const renderTerminal = Object.create(tui.terminal);
+        Object.defineProperty(renderTerminal, "rows", { value: Math.ceil(visibleRowLimit / 0.3) });
+        const originalTerminal = editor.tui.terminal;
+        editor.tui.terminal = renderTerminal;
+        let lines: string[];
+        try {
+          lines = originalRender(contentWidth);
+        } finally {
+          editor.tui.terminal = originalTerminal;
+        }'''
 RENDER_HEIGHT_EDIT = (
     PRE_RENDER_HEIGHT,
     read_payload("powerline/editor-render.ts.inc").rstrip("\n"),
 )
+PREVIOUS_PADDED_INPUT_ROW = '''          const prefix = i === 2 ? promptPrefix : contPrefix;
+          result.push(inset + bc("│") + prefix + (lines[i] || "") + bc("│"));'''
 PREVIOUS_BOTTOM_BORDER = (
     BOTTOM_BORDER_EDIT[1] + "\n"
     + EDITS["index.ts"][7][1].split("\n", 1)[1]
@@ -313,7 +337,9 @@ def upgrade_git_label(index: str) -> str:
 
 def canonicalize_render_height(index: str) -> str:
     """Normalize a taller editor render to the guarded native render block."""
-    for previous in (PREVIOUS_RENDER_HEIGHT, PREVIOUS_UNPADDED_RENDER_HEIGHT):
+    for previous in (PREVIOUS_DOUBLE_PADDING_RENDER_HEIGHT,
+                     PREVIOUS_SINGLE_PADDING_RENDER_HEIGHT,
+                     PREVIOUS_UNPADDED_RENDER_HEIGHT):
         previous_count = index.count(previous)
         if previous_count > 1:
             raise ValueError("editor render-height patch changed or duplicated")
@@ -339,20 +365,13 @@ def upgrade_render_height(index: str) -> str:
 
 
 def canonicalize_prompt_row(index: str) -> str:
-    """Migrate an already-installed editor to the padded prompt row."""
-    old, new = EDITS["index.ts"][-1]
-    old_count = index.count(old)
-    new_count = index.count(new)
-    if old_count > 1 or new_count > 1 or (old_count and new_count):
+    """Migrate an already-installed padded prompt row to the native position."""
+    current = EDITS["index.ts"][5][1]
+    padded_count = index.count(PREVIOUS_PADDED_INPUT_ROW)
+    current_count = index.count(current)
+    if padded_count > 1 or current_count > 1 or (padded_count and current_count):
         raise ValueError("editor prompt row changed or duplicated")
-    if new_count or not old_count:
-        return index
-
-    prior_edits = EDITS["index.ts"][:-1]
-    if all(index.count(next_new) == 1 and index.count(next_old) == 0
-           for next_old, next_new in prior_edits):
-        return index.replace(old, new, 1)
-    return index
+    return index.replace(PREVIOUS_PADDED_INPUT_ROW, current, 1) if padded_count else index
 
 
 def canonicalize_bottom_border(index: str) -> str:

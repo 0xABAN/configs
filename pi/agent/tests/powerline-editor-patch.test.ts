@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, gitLabel, badgeBudget } = describePatch<{
+const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, gitLabel, badgeBudget, renderHeight, previousDouble, previousPadded } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
   legacyBorder: [string, string];
@@ -16,7 +16,10 @@ const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, 
   preVisibleRows: string;
   gitLabel: [string, string];
   badgeBudget: [string, string];
-}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS'],'gitLabel':m['GIT_LABEL_EDIT'],'badgeBudget':m['BADGE_BUDGET_EDIT']}",
+  renderHeight: [string, string];
+  previousDouble: string;
+  previousPadded: string;
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS'],'gitLabel':m['GIT_LABEL_EDIT'],'badgeBudget':m['BADGE_BUDGET_EDIT'],'renderHeight':m['RENDER_HEIGHT_EDIT'],'previousDouble':m['PREVIOUS_DOUBLE_PADDING_RENDER_HEIGHT'],'previousPadded':m['PREVIOUS_PADDED_INPUT_ROW']}",
   "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
 const root = temporaryDirectory("powerline-editor-");
 const sdk = process.env.PI_SDK_ROOT;
@@ -74,6 +77,23 @@ test("existing editor height migrates from 30% to 40%", () => {
   ));
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(current);
+});
+
+test("existing padded editor rows migrate to no padding", () => {
+  const previousSingle = previousDouble
+    .replace("visibleRowLimit - 2", "visibleRowLimit - 1")
+    .replace("        lines.splice(2 + contentRows, 0, blankRow);\n        inputLineCount = contentRows + 2;", "        inputLineCount = contentRows + 1;");
+  for (const [name, previousRender] of [["double", previousDouble], ["single", previousSingle]] as const) {
+    const app = sandbox(`legacy-${name}-padding`);
+    expect(app.run().exitCode).toBe(0);
+    const current = app.contents();
+    const previous = current["index.ts"]
+      .replace(renderHeight[1], previousRender)
+      .replace(edits["index.ts"][5][1], previousPadded);
+    writeFileSync(join(app.dir, "index.ts"), previous);
+    expect(app.run().exitCode).toBe(0);
+    expect(app.contents()).toEqual(current);
+  }
 });
 
 test("existing editor inset migrates without double-padding the shared viewport", () => {
@@ -255,8 +275,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     false, () => false, () => "+", footer, currentCtx, { ui: { theme: {} } }, visibleWidth, truncateToWidth, sliceByColumn,
     renderSegment, buildSegmentContext);
   editor.focused = true;
-  expect(editor.render(80)[1]).not.toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
-  expect(editor.render(80)[2]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
+  expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
     const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
       tui, () => "\x1b[38;2;95;168;118m",
@@ -264,7 +283,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       bashMode, () => captureMode, () => "+",
       undefined, undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn,
       renderSegment, buildSegmentContext);
-    const row = special.render(80)[2];
+    const row = special.render(80)[1];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
   }
@@ -285,7 +304,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(80)).toHaveLength(14);
   editor.setText("");
-  expect(editor.render(80)).toHaveLength(4);
+  expect(editor.render(80)).toHaveLength(3);
   const top = editor.render(80)[0];
   expect(plain(top)).toEndWith(" build mode ❯  main *4 ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
@@ -369,7 +388,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     tui.terminal.rows = height;
     for (const width of [40, 80]) {
       const completed = editor.render(width).map(plain);
-      const bottomBorderIndex = 3;
+      const bottomBorderIndex = 2;
       expect(completed[bottomBorderIndex].endsWith("╯")).toBe(true);
       expect(completed[bottomBorderIndex + 1].trim()).toBe("completion");
       expect(completed[bottomBorderIndex + 2].trim()).toBe("───");
