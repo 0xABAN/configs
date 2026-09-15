@@ -35,8 +35,10 @@ test("mode and thinking share softened build and purple plan gradients", async (
 
 	const { colors } = JSON.parse(readFileSync(new URL("../extensions/powerline-footer/theme.json", import.meta.url), "utf8"));
 	expect(colors.model).toBe("#D8DAD8");
+	expect(colors.shellMode).toBe("#5FA876");
 	expect(colors.gitClean).toBe("#dedec5");
 	expect(colors.context).toBe("#439187");
+	expect(colors.contextWarn).toBe("#5FA876");
 	expect(colors.queue).toBe("#439187");
 	expect(colors.thinkingLow).toBe("#439187");
 	expect(colors.thinkingMedium).toBe("#439187");

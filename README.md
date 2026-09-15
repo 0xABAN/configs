@@ -43,8 +43,8 @@ selections (including Pi), Neovim Visual mode, and completion selections
 use the core teal (`#439187`) with white text (`#ffffff`). Search/diff backgrounds
 remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
 near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
-status text, and Pi tool output use cream (`#dedec5`). Numbers and types use
-the warning yellow (`#c7b777`) as a small syntax accent in Neovim and Pi.
+status text, and Pi tool output use cream (`#dedec5`). Numeric literals retain
+the warning yellow (`#c7b777`) as a rare syntax accent; types and status warnings use sage (`#5fa876`).
 Pi follows its existing token classes: literals such as booleans share the
 number role, built-ins share the type role, and some C++ types such as `int`
 remain keywords (teal). Neovim booleans remain teal.
@@ -52,7 +52,7 @@ Keywords, active highlights, functions, links, success states, and
 additions use the core teal, as do terminal ANSI green/cyan, Pi's diamond,
 and its context ball/meter. Neovim separators and floating-window borders,
 and Pi's muted/Markdown borders, use the darker companion. Mode/thinking
-label gradients and warning/error colors retain their existing palettes.
+label gradients and error colors retain their existing palettes.
 Outside selections, large surfaces never use green fills.
 Supporting neutrals and subdued warning/error colors are chosen to fit;
 ANSI colors use the same restrained treatment. No theme plugins required.
@@ -239,7 +239,7 @@ PI_SDK_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent" \
 ### Transcript preview
 
 The Pi 0.85.1 transcript patch adds `◆ You` / `● Pi` headers and compact
-geometric action trees. Pi's `●` uses warning yellow (`#c7b777`); `◆ You` and
+geometric action trees. Pi's `●` uses sage (`#5fa876`); `◆ You` and
 action icons keep the teal accent. Speaker names retain the normal text color.
 Single tools have no count heading or tree connector. Two or more
 consecutive visible tool rows share a counted action tree, with status and action

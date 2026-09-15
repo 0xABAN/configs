@@ -1,7 +1,7 @@
 {
   "colors": {
     "model": "#D8DAD8",
-    "shellMode": "#c7b777",
+    "shellMode": "#5FA876",
     "path": "#dedec5",
     "gitDirty": "#dedec5",
     "gitClean": "#dedec5",
@@ -10,7 +10,7 @@
     "thinkingLow": "#439187",
     "thinkingMedium": "#439187",
     "context": "#439187",
-    "contextWarn": "#c7b777",
+    "contextWarn": "#5FA876",
     "contextError": "#c7837c",
     "cost": "#85877e",
     "tokens": "#85877e",

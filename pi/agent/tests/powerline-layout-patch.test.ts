@@ -195,7 +195,7 @@ realTest("ball and meter share the real context segment color at every threshold
   const end = text.indexOf("const contextTotalSegment", start);
   const codes = {
     context: "\x1b[38;2;67;145;135m",
-    contextWarn: "\x1b[38;2;199;183;119m",
+    contextWarn: "\x1b[38;2;95;168;118m",
     contextError: "\x1b[38;2;199;131;124m",
   };
   const segment = new Function("getIcons", "color", "withIcon", "formatTokens",

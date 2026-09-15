@@ -261,7 +261,7 @@ function transcript(m: any, app: any, width = 90) {
   return app.chatContainer.render(width).map(m.tui.stripTerminalSequences).join("\n");
 }
 
-realTest("only the Pi speaker icon uses warning yellow", async () => {
+realTest("only the Pi speaker icon uses warning sage", async () => {
   const m = await real();
   const theme = m.colors.theme;
   const header = m.speakerHeader("Pi", undefined, 1, 80);

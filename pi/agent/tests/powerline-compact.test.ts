@@ -24,7 +24,7 @@ async function harness(previous = false) {
   const { visibleWidth, truncateToWidth } = await import(`${sdk}/node_modules/@earendil-works/pi-tui/dist/index.js`);
   const segmentSource = readFileSync(join(fixture, "segments.ts"), "utf8");
   const segmentCode = segmentSource.slice(segmentSource.indexOf("// configs:powerline-meter-v1"), segmentSource.indexOf("const contextTotalSegment"));
-  const theme = { fg: (role: string, text: string) => `\x1b[38;2;${role === "error" || role === "contextError" ? "199;131;124" : role === "warning" || role === "contextWarn" ? "199;183;119" : "67;145;135"}m${text}\x1b[0m` };
+  const theme = { fg: (role: string, text: string) => `\x1b[38;2;${role === "error" || role === "contextError" ? "199;131;124" : role === "warning" || role === "contextWarn" ? "95;168;118" : "67;145;135"}m${text}\x1b[0m` };
   const context = new Function("getIcons", "color", "withIcon", "formatTokens", transpiler.transformSync(segmentCode) + "\nreturn contextPctSegment;")(
     () => ({}), (_ctx: unknown, role: string, text: string) => theme.fg(role, text), (_icon: string, text: string) => text, String,
   );
@@ -129,7 +129,7 @@ test("short bash and queue previews retain failures, counts and outcomes", async
 
 test("compact context keeps unknown/approximate values and threshold colors", async () => {
   const app = await harness();
-  for (const [percent, color] of [[null, "67;145;135"], [52, "67;145;135"], [71, "199;183;119"], [91, "199;131;124"]] as const) {
+  for (const [percent, color] of [[null, "67;145;135"], [52, "67;145;135"], [71, "95;168;118"], [91, "199;131;124"]] as const) {
     app.env.ctx.contextPercent = percent;
     app.env.ctx.contextTokens = percent === null ? null : percent * 10;
     app.factories.get("powerline-top").invalidate();

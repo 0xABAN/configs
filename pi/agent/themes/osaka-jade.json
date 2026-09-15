@@ -14,6 +14,7 @@
     "cream": "#dedec5",
     "text": "#D8DAD8",
     "green": "#439187",
+    "sage": "#5FA876",
     "yellow": "#c7b777",
     "red": "#c7837c"
   },
@@ -24,7 +25,7 @@
     "borderMuted": "accentDark",
     "success": "green",
     "error": "red",
-    "warning": "yellow",
+    "warning": "sage",
     "muted": "muted",
     "dim": "dim",
     "text": "text",
@@ -62,7 +63,7 @@
     "syntaxVariable": "cream",
     "syntaxString": "cream",
     "syntaxNumber": "yellow",
-    "syntaxType": "yellow",
+    "syntaxType": "sage",
     "syntaxOperator": "muted",
     "syntaxPunctuation": "text",
     "thinkingOff": "selection",
@@ -72,7 +73,7 @@
     "thinkingHigh": "green",
     "thinkingXhigh": "green",
     "thinkingMax": "green",
-    "bashMode": "yellow"
+    "bashMode": "sage"
   },
   "export": {
     "pageBg": "#121319",

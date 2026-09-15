@@ -25,6 +25,7 @@ local c = {
   cream = "#dedec5",
   text = "#D8DAD8",
   green = "#439187",
+  sage = "#5FA876",
   yellow = "#c7b777",
   red = "#c7837c",
 }
@@ -63,7 +64,7 @@ hi("MatchParen", { fg = c.green, bold = true, underline = true })
 hi("Directory", { fg = c.accent })
 hi("Title", { fg = c.cream, bold = true })
 hi("ErrorMsg", { fg = c.red })
-hi("WarningMsg", { fg = c.yellow })
+hi("WarningMsg", { fg = c.sage })
 hi("Question", { fg = c.green })
 hi("ModeMsg", { fg = c.accent })
 hi("MoreMsg", { fg = c.accent })
@@ -77,7 +78,7 @@ hi("DiffChange", { bg = c.panel })
 hi("DiffText", { fg = c.bright, bg = c.selection, bold = true })
 hi("Added", { fg = c.green })
 hi("Removed", { fg = c.red })
-hi("Changed", { fg = c.yellow })
+hi("Changed", { fg = c.sage })
 
 hi("Comment", { fg = c.dim, italic = true })
 hi("Statement", { fg = c.blueGreen, bold = true })
@@ -90,7 +91,7 @@ hi("Character", { link = "String" })
 hi("Number", { fg = c.yellow })
 hi("Float", { link = "Number" })
 hi("Boolean", { fg = c.blueGreen })
-hi("Type", { fg = c.yellow })
+hi("Type", { fg = c.sage })
 hi("Operator", { fg = c.muted })
 hi("Delimiter", { fg = c.text })
 hi("Special", { fg = c.text })
@@ -140,6 +141,6 @@ for group, target in pairs(links) do
 end
 
 hi("DiagnosticError", { fg = c.red })
-hi("DiagnosticWarn", { fg = c.yellow })
+hi("DiagnosticWarn", { fg = c.sage })
 hi("DiagnosticInfo", { fg = c.blueGreen })
 hi("DiagnosticHint", { fg = c.green })
