@@ -12,12 +12,20 @@ TUI_PACKAGE = "node_modules/@earendil-works/pi-tui/package.json"
 PAYLOADS = Path(__file__).with_name("payloads")
 CODE_CASE = (PAYLOADS / "tui/markdown-code-case.js.inc").read_text().rstrip("\n")
 LEGACY_CODE_CASE = (PAYLOADS / "tui/legacy/markdown-code-case.js.inc").read_text().rstrip("\n")
+LEGACY_CODE_CASE_WITH_PADDING = (PAYLOADS / "tui/legacy/markdown-code-case-with-padding.js.inc").read_text().rstrip("\n")
+LEGACY_WRAP = (PAYLOADS / "tui/legacy/markdown-code-wrap.js.inc").read_text().rstrip("\n")
+LEGACY_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content.js.inc").read_text().rstrip("\n")
+
+LEGACY_MARKER_DECL = r'''const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
+const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''
 
 EDITS = {
     MARKDOWN: [
         (r'''const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;''',
          r'''const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
-const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''),
+const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";
+const CODE_BLOCK_TOP_MARKER = CODE_BLOCK_MARKER + "T";
+const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
         (r'''            case "code": {
                 const indent = this.theme.codeBlockIndent ?? "  ";
                 lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
@@ -55,10 +63,15 @@ const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''),
                 wrappedLines.push(line);
             }
             else {
-                const isCodeBlockLine = line.includes(CODE_BLOCK_MARKER);
-                const lineWithoutMarker = line.replaceAll(CODE_BLOCK_MARKER, "");
-                for (const wrappedLine of wrapTextWithAnsi(lineWithoutMarker, contentWidth)) {
-                    wrappedLines.push(isCodeBlockLine ? CODE_BLOCK_MARKER + wrappedLine : wrappedLine);
+                const codeBlockMarker = line.startsWith(CODE_BLOCK_TOP_MARKER)
+                    ? CODE_BLOCK_TOP_MARKER
+                    : line.startsWith(CODE_BLOCK_BOTTOM_MARKER)
+                        ? CODE_BLOCK_BOTTOM_MARKER
+                        : line.startsWith(CODE_BLOCK_MARKER) ? CODE_BLOCK_MARKER : "";
+                const lineWithoutMarker = codeBlockMarker ? line.slice(codeBlockMarker.length) : line;
+                const wrapWidth = codeBlockMarker ? Math.max(1, contentWidth - 2) : contentWidth;
+                for (const wrappedLine of wrapTextWithAnsi(lineWithoutMarker, wrapWidth)) {
+                    wrappedLines.push(codeBlockMarker ? codeBlockMarker + wrappedLine : wrappedLine);
                 }
             }
         }'''),
@@ -79,15 +92,37 @@ const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''),
             }
         }''',
          r'''        const codeBlockBgFn = this.theme.codeBlockBackground;
+        const codeBlockBorderFn = this.theme.codeBlockBorder;
+        const panelWidth = Math.max(2, width - visibleWidth(leftMargin) - visibleWidth(rightMargin));
+        const panelInnerWidth = Math.max(0, panelWidth - 2);
         for (const line of wrappedLines) {
             if (isImageLine(line)) {
                 contentLines.push(line);
                 continue;
             }
-            const isCodeBlockLine = line.includes(CODE_BLOCK_MARKER);
-            const lineWithoutMarker = line.replaceAll(CODE_BLOCK_MARKER, "");
+            const codeBlockMarker = line.startsWith(CODE_BLOCK_TOP_MARKER)
+                ? CODE_BLOCK_TOP_MARKER
+                : line.startsWith(CODE_BLOCK_BOTTOM_MARKER)
+                    ? CODE_BLOCK_BOTTOM_MARKER
+                    : line.startsWith(CODE_BLOCK_MARKER) ? CODE_BLOCK_MARKER : "";
+            const lineWithoutMarker = codeBlockMarker ? line.slice(codeBlockMarker.length) : line;
             const lineWithMargins = leftMargin + lineWithoutMarker + rightMargin;
-            if (isCodeBlockLine && codeBlockBgFn) {
+            if (codeBlockMarker && codeBlockBgFn && codeBlockBorderFn) {
+                let panelLine;
+                if (codeBlockMarker === CODE_BLOCK_TOP_MARKER) {
+                    panelLine = codeBlockBorderFn(`╭${"─".repeat(panelInnerWidth)}╮`);
+                }
+                else if (codeBlockMarker === CODE_BLOCK_BOTTOM_MARKER) {
+                    panelLine = codeBlockBorderFn(`╰${"─".repeat(panelInnerWidth)}╯`);
+                }
+                else {
+                    const contentPadding = Math.max(0, panelInnerWidth - visibleWidth(lineWithoutMarker));
+                    panelLine = codeBlockBorderFn("│") + lineWithoutMarker
+                        + " ".repeat(contentPadding) + codeBlockBorderFn("│");
+                }
+                contentLines.push(leftMargin + codeBlockBgFn(panelLine) + rightMargin);
+            }
+            else if (codeBlockMarker && codeBlockBgFn) {
                 contentLines.push(applyBackgroundToLine(lineWithMargins, width, codeBlockBgFn));
             }
             else if (bgFn) {
@@ -112,16 +147,42 @@ const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''),
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
+    marker_old, marker_new = EDITS[MARKDOWN][0]
+    _, code_new = EDITS[MARKDOWN][1]
+    _, wrap_new = EDITS[MARKDOWN][2]
+    _, content_new = EDITS[MARKDOWN][3]
+    theme_old, theme_new = EDITS[THEME][0]
+    legacy_cases = (LEGACY_CODE_CASE, LEGACY_CODE_CASE_WITH_PADDING)
+    markdown = sources[MARKDOWN]
+    theme = sources[THEME]
+
+    # Migrate either shipped panel layout before applying the new border frame.
+    legacy_case = next((case for case in legacy_cases if markdown.count(case) == 1), None)
+    if (legacy_case is not None
+            and markdown.count(LEGACY_MARKER_DECL) == 1
+            and markdown.count(marker_new) == 0
+            and markdown.count(LEGACY_WRAP) == 1
+            and markdown.count(wrap_new) == 0
+            and markdown.count(LEGACY_CONTENT) == 1
+            and markdown.count(content_new) == 0
+            and theme.count(theme_new) == 1
+            and theme.count(theme_old) >= 1):
+        result = dict(sources)
+        result[MARKDOWN] = (markdown
+            .replace(LEGACY_MARKER_DECL, marker_new, 1)
+            .replace(legacy_case, code_new, 1)
+            .replace(LEGACY_WRAP, wrap_new, 1)
+            .replace(LEGACY_CONTENT, content_new, 1))
+        return result
+
     states = []
     for name, edits in EDITS.items():
         source = sources[name]
-        for index, (old, new) in enumerate(edits):
+        for old, new in edits:
             old_count = source.count(old)
             new_count = source.count(new)
             if new_count == 1:
                 states.append("patched")
-            elif name == MARKDOWN and index == 1 and source.count(LEGACY_CODE_CASE) == 1:
-                states.append("legacy")
             elif new_count == 0 and old_count == 1:
                 states.append("original")
             else:
@@ -136,10 +197,6 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             for old, new in edits:
                 source = source.replace(old, new, 1)
             result[name] = source
-        return result
-    if states.count("legacy") == 1 and all(state in {"legacy", "patched"} for state in states):
-        result = dict(sources)
-        result[MARKDOWN] = result[MARKDOWN].replace(LEGACY_CODE_CASE, CODE_CASE, 1)
         return result
     raise ValueError("partial markdown code patch; inspect before reapplying")
 
