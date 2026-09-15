@@ -111,6 +111,11 @@ if [[ -f "$ROOT/pi/agent/patches/powerline-editor.py" ]]; then
   python3 "$ROOT/pi/agent/patches/powerline-editor.py"
 fi
 
+# Render fenced Markdown code as full-width dark panels while retaining highlighting.
+if [[ -f "$ROOT/pi/agent/patches/pi-markdown-code.py" ]]; then
+  python3 "$ROOT/pi/agent/patches/pi-markdown-code.py"
+fi
+
 # Display-only transcript preview: keep native tools, history and expansion intact.
 if [[ -f "$ROOT/pi/agent/patches/pi-transcript.py" ]]; then
   python3 "$ROOT/pi/agent/patches/pi-transcript.py"

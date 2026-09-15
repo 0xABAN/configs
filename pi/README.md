@@ -13,7 +13,7 @@ Installation and appearance settings are in the [repository guide](../README.md)
 | `agent/extensions/whimsical/` | Animation catalog, frame generation, and compaction-loader adapter |
 | `agent/patches/*.py` | Target-specific anchors, compatibility rules, and patch commands |
 | `agent/patches/patch_support.py` | SDK discovery, exact source loading, backup/write mechanics, and counted replacements |
-| `agent/patches/payloads/` | Renderer source grouped by `host`, `powerline`, `todo`, `subagents`, and `intercom` |
+| `agent/patches/payloads/` | Renderer source grouped by `host`, `powerline`, `tui`, `todo`, `subagents`, and `intercom` |
 | `agent/tests/` | Feature and patch contract tests |
 | `agent/tests/support/` | Disposable fixtures, isolated native runners, and the plan-mode harness |
 | `agent/themes/`, `agents/`, `skills/`, `prompts/` | Theme data and agent instructions |
@@ -82,7 +82,7 @@ gate for extreme window sizes.
 
 | Target | Supported input | Commands under `agent/patches/` |
 |--------|-----------------|--------------------------------|
-| Pi unbundled host and package-local TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
+| Pi unbundled host and package-local TUI | Pi `0.85.1` | `pi-horizontal-inset.py`, `pi-markdown-code.py`, `pi-transcript.py`, `pi-extension-dialogs.py`, `pi-activity-notices.py`, `pi-compact-layout.py` |
 | Powerline | Git commit `8c9bda10fdfd2822e89334ec85f3da9f8ca49182` | `powerline-dj.py`, `powerline-layout.py`, `powerline-editor.py` |
 | rpiv-todo UI | `@juicesharp/rpiv-todo` `2.9.0`, after legacy tweaks | `rpiv-todo-ui.py` |
 | Subagents UI | `@tintinweb/pi-subagents` `0.19.0` | `subagents-ui.py` |
@@ -112,8 +112,8 @@ The Todo UI patch recognizes only the exact clear-block reinjection it supports.
 Do not change persistence as part of a visual cleanup.
 
 `install.sh` owns the serial order: powerline DJ/layout, host inset, editor,
-transcript, Intercom UI, dialogs, notices, compact layout, legacy Todo tweaks, Todo UI, then
-Subagents UI, then `pi/launcher.py`.
+Markdown code panels, transcript, Intercom UI, dialogs, notices, compact layout,
+legacy Todo tweaks, Todo UI, then Subagents UI, then `pi/launcher.py`.
 The legacy Todo command remains best-effort; the other patch failures propagate.
 Keep pi-pretty before powerline in package settings because both install editors.
 
@@ -250,6 +250,7 @@ checks in the reported Bun count.
 The patch-contract table above is the version authority. The patch purposes are:
 
 - Host inset: shared viewport margins; transcript: speaker/tool rows and metrics.
+- Markdown code panels: hidden fences, retained syntax highlighting, and full-width dark rows.
 - Dialogs: native selector/input visibility; notices: activity wrapping;
   compact layout: small-window widget and footer budgets.
 - Powerline DJ/layout/editor: mode presentation, footer sizing and editor frame.
