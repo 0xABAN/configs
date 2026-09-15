@@ -62,6 +62,7 @@ EDITS = {
         // Completion rows stay outside the box, aligned to the input origin.
         for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
           result.push(inset + "    " + (lines[i] || ""));'''),
+        ('''          const prefix = i === 1 ? promptPrefix : contPrefix;''', '''          const prefix = i === 2 ? promptPrefix : contPrefix;'''),
     ],
     "bash-mode/editor.ts": [
         (r'''    const availableWidth = Math.max(0, width - visibleWidth(text) - 1);
@@ -143,6 +144,21 @@ BOTTOM_BORDER_EDIT = (
     read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
 )
 PRE_RENDER_HEIGHT = EDITS["index.ts"][2][1]
+PREVIOUS_RENDER_HEIGHT = '''        // Reserve both walls and the three-column prompt before wrapping input.
+        const contentWidth = boxWidth - 5;
+        // Render the native editor with a 40% viewport while preserving the real terminal size.
+        const terminalRows = tui.terminal.rows;
+        const visibleRowLimit = Math.max(5, Math.floor(terminalRows * 0.4));
+        const renderTerminal = Object.create(tui.terminal);
+        Object.defineProperty(renderTerminal, "rows", { value: Math.ceil(visibleRowLimit / 0.3) });
+        const originalTerminal = editor.tui.terminal;
+        editor.tui.terminal = renderTerminal;
+        let lines: string[];
+        try {
+          lines = originalRender(contentWidth);
+        } finally {
+          editor.tui.terminal = originalTerminal;
+        }'''
 RENDER_HEIGHT_EDIT = (
     PRE_RENDER_HEIGHT,
     read_payload("powerline/editor-render.ts.inc").rstrip("\n"),
@@ -275,6 +291,12 @@ def upgrade_git_label(index: str) -> str:
 
 def canonicalize_render_height(index: str) -> str:
     """Normalize a taller editor render to the guarded native render block."""
+    previous_count = index.count(PREVIOUS_RENDER_HEIGHT)
+    if previous_count > 1:
+        raise ValueError("editor render-height patch changed or duplicated")
+    if previous_count:
+        index = index.replace(PREVIOUS_RENDER_HEIGHT, PRE_RENDER_HEIGHT, 1)
+
     old, new = RENDER_HEIGHT_EDIT
     old_count = index.count(old)
     new_count = index.count(new)
@@ -291,6 +313,23 @@ def upgrade_render_height(index: str) -> str:
     if old_count != 1 or new_count:
         raise ValueError("editor render-height patch missing or duplicated")
     return index.replace(old, new, 1)
+
+
+def canonicalize_prompt_row(index: str) -> str:
+    """Migrate an already-installed editor to the padded prompt row."""
+    old, new = EDITS["index.ts"][-1]
+    old_count = index.count(old)
+    new_count = index.count(new)
+    if old_count > 1 or new_count > 1 or (old_count and new_count):
+        raise ValueError("editor prompt row changed or duplicated")
+    if new_count or not old_count:
+        return index
+
+    prior_edits = EDITS["index.ts"][:-1]
+    if all(index.count(next_new) == 1 and index.count(next_old) == 0
+           for next_old, next_new in prior_edits):
+        return index.replace(old, new, 1)
+    return index
 
 
 def canonicalize_bottom_border(index: str) -> str:
@@ -345,6 +384,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     else:
         index = canonicalize_bottom_border(index)
     index = canonicalize_render_height(index)
+    index = canonicalize_prompt_row(index)
     visible_rows = EDITS["index.ts"][3][1]
     height_variants = (PRE_VISIBLE_ROWS, visible_rows)
     height_counts = [index.count(variant) for variant in height_variants]

@@ -255,7 +255,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     false, () => false, () => "+", footer, currentCtx, { ui: { theme: {} } }, visibleWidth, truncateToWidth, sliceByColumn,
     renderSegment, buildSegmentContext);
   editor.focused = true;
-  expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
+  expect(editor.render(80)[1]).not.toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
+  expect(editor.render(80)[2]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
     const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
       tui, () => "\x1b[38;2;95;168;118m",
@@ -263,7 +264,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       bashMode, () => captureMode, () => "+",
       undefined, undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn,
       renderSegment, buildSegmentContext);
-    const row = special.render(80)[1];
+    const row = special.render(80)[2];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
   }
@@ -284,7 +285,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText(Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n"));
   expect(editor.render(80)).toHaveLength(14);
   editor.setText("");
-  expect(editor.render(80)).toHaveLength(3);
+  expect(editor.render(80)).toHaveLength(5);
   const top = editor.render(80)[0];
   expect(plain(top)).toEndWith(" build mode ❯  main *4 ──╮");
   expect(top).toContain(statuses.get("agent-mode")!);
@@ -368,7 +369,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     tui.terminal.rows = height;
     for (const width of [40, 80]) {
       const completed = editor.render(width).map(plain);
-      const bottomBorderIndex = 2;
+      const bottomBorderIndex = 4;
       expect(completed[bottomBorderIndex].endsWith("╯")).toBe(true);
       expect(completed[bottomBorderIndex + 1].trim()).toBe("completion");
       expect(completed[bottomBorderIndex + 2].trim()).toBe("───");
