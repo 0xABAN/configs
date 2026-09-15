@@ -91,6 +91,7 @@ for (const helper of [
   "transcript-before-native-padding.js.inc",
   "transcript-before-inline-metrics.js.inc",
   "transcript-before-user-separator.js.inc",
+  "transcript-before-separator-padding.js.inc",
   "transcript-before-single-action.js.inc",
   "transcript-before-single-action-dash-removal.js.inc",
 ]) {
@@ -271,7 +272,7 @@ realTest("only the Pi speaker icon uses warning sage", async () => {
   expect(m.actionLines({ toolName: "read", args: { path: "a.ts" } }, 80)[0]).toContain(theme.fg("accent", "□"));
 });
 
-realTest("user separators use live cream color and the editor viewport without another gutter", async () => {
+realTest("user separators match the editor body gutter", async () => {
   const m = await real();
   const previousPath = join(fixture, "dist/modes/interactive/components/transcript-before-separator.js");
   writeFileSync(previousPath, readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-user-separator.js.inc", import.meta.url), "utf8"));
@@ -295,11 +296,13 @@ realTest("user separators use live cream color and the editor viewport without a
     height = rows;
     padding = gutter;
     const rendered = app.chatContainer.render(width);
-    const separator = m.colors.theme.fg("toolOutput", "─".repeat(width));
+    const bodyPadding = width < 80 ? m.transcriptPadding(gutter, width) : Math.min(gutter + 2, width - 1);
+    const separator = " ".repeat(bodyPadding) + m.colors.theme.fg("toolOutput", "─".repeat(Math.max(1, width - bodyPadding * 2))) + " ".repeat(bodyPadding);
     expect(separator).toContain("\x1b[38;2;222;222;197m");
     expect(rendered.filter((line: string) => line === separator)).toHaveLength(2);
     expect(rendered.at(-1)).toBe(separator); // Visible even before Pi responds.
-    expect(rendered.filter((line: string) => line !== separator)).toEqual(old.render(width));
+    const oldSeparator = m.colors.theme.fg("toolOutput", "─".repeat(width));
+    expect(rendered.filter((line: string) => line !== separator)).toEqual(old.render(width).filter((line: string) => line !== oldSeparator));
     expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     expect(app.chatContainer.children).toEqual(children);
   }
@@ -308,7 +311,10 @@ realTest("user separators use live cream color and the editor viewport without a
   try {
     m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/woody.json", import.meta.url)), "truecolor"));
     app.chatContainer.invalidate();
-    expect(app.chatContainer.render(90).at(-1)).toBe(m.colors.theme.fg("toolOutput", "─".repeat(90)));
+    const bodyPadding = Math.min(padding + 2, 90 - 1);
+    const separator = app.chatContainer.render(90).at(-1)!;
+    expect(m.tui.stripTerminalSequences(separator)).toBe(" ".repeat(bodyPadding) + "─".repeat(90 - bodyPadding * 2) + " ".repeat(bodyPadding));
+    expect(separator).toContain(m.colors.theme.getFgAnsi("toolOutput"));
   } finally {
     m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
     app.chatContainer.invalidate();
@@ -343,9 +349,10 @@ realTest("real streaming and replay share Pi/You headers, grouped actions and na
   const text = transcript(m, live);
   expect(text.match(/● Pi/g)).toHaveLength(1);
   expect(text.match(/◆ You/g)).toHaveLength(1);
-  expect(text.split("\n").filter((line: string) => line === "─".repeat(90))).toHaveLength(1);
-  expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf("─".repeat(90)));
-  expect(text.indexOf("─".repeat(90))).toBeLessThan(text.indexOf("● Pi"));
+  const separator = " ".repeat(3) + "─".repeat(84) + " ".repeat(3);
+  expect(text.split("\n").filter((line: string) => line === separator)).toHaveLength(1);
+  expect(text.indexOf("Trace authentication.")).toBeLessThan(text.indexOf(separator));
+  expect(text.indexOf(separator)).toBeLessThan(text.indexOf("● Pi"));
   expect(text).toContain("2 actions");
   expect(text).not.toContain("1 action");
   expect(text).toContain("├─ ✓ □ Read");
@@ -638,7 +645,9 @@ realTest("regular and fullscreen hosts render the same transcript inside the exi
       const separator = lines.map(m.tui.stripTerminalSequences).find((line: string) => line.trimStart().startsWith("──"));
       // 0.85.1 paints the always-visible scrollbar even without overflowing content.
       // Compare the transcript columns separately from that native track column.
-      expect(separator?.slice(0, width - inset - track)).toBe(" ".repeat(inset) + "─".repeat(width - 2 * inset - track));
+      const contentWidth = width - 2 * inset - track;
+      const bodyPadding = contentWidth < 80 ? m.transcriptPadding(1, contentWidth) : Math.min(3, contentWidth - 1);
+      expect(separator?.slice(inset, width - inset - track)).toBe(" ".repeat(bodyPadding) + "─".repeat(contentWidth - 2 * bodyPadding) + " ".repeat(bodyPadding));
       expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
   }

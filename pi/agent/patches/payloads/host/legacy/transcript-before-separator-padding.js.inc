@@ -255,9 +255,8 @@ export class TranscriptContainer extends Container {
             if (child.transcriptRole === "pi") speaker = "pi";
             else if (child.transcriptRole === "user") {
                 speaker = "user";
-                // Match the textarea's body gutter on both sides.
-                lines.push(...USER_SEPARATOR.render(Math.max(1, width - bodyPadding * 2))
-                    .map(line => indent + line + indent));
+                // Like the textarea, use the shared viewport without a second gutter.
+                lines.push(...USER_SEPARATOR.render(width));
             }
             else if (child.transcriptRole !== "tool") speaker = undefined;
         }

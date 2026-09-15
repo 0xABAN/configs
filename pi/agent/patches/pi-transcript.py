@@ -27,6 +27,7 @@ PRE_TOOL_ROWS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-tool-r
 PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-native-padding.js.inc')
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
+PRE_SEPARATOR_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-separator-padding.js.inc')
 PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
 PRE_DASH_REMOVAL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action-dash-removal.js.inc')
 # Derive the exact older background helpers from the frozen separator revision,
@@ -231,7 +232,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             (EDITS, (MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
                      PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-                     PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
+                     PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
+                     PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
         ]
@@ -264,7 +266,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-            PRE_USER_BACKGROUND_MODULE_SOURCE, PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
+            PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
+            PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
         ):
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:
