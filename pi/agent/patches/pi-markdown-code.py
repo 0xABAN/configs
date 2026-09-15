@@ -15,6 +15,8 @@ LEGACY_CODE_CASE = (PAYLOADS / "tui/legacy/markdown-code-case.js.inc").read_text
 LEGACY_CODE_CASE_WITH_PADDING = (PAYLOADS / "tui/legacy/markdown-code-case-with-padding.js.inc").read_text().rstrip("\n")
 LEGACY_WRAP = (PAYLOADS / "tui/legacy/markdown-code-wrap.js.inc").read_text().rstrip("\n")
 LEGACY_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content.js.inc").read_text().rstrip("\n")
+LEGACY_ROUNDED_CONTENT = (PAYLOADS / "tui/legacy/markdown-code-content-rounded.js.inc").read_text().rstrip("\n")
+LEGACY_THEME = (PAYLOADS / "tui/legacy/markdown-code-theme.js.inc").read_text().rstrip("\n")
 
 LEGACY_MARKER_DECL = r'''const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
 const CODE_BLOCK_MARKER = "\x1b_PiCodeBlock\x07";'''
@@ -122,8 +124,10 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
                 }
                 contentLines.push(leftMargin + codeBlockBgFn(panelLine) + rightMargin);
             }
-            else if (codeBlockMarker && codeBlockBgFn) {
-                contentLines.push(applyBackgroundToLine(lineWithMargins, width, codeBlockBgFn));
+            else if (codeBlockMarker) {
+                const visibleLen = visibleWidth(lineWithMargins);
+                const paddingNeeded = Math.max(0, width - visibleLen);
+                contentLines.push(lineWithMargins + " ".repeat(paddingNeeded));
             }
             else if (bgFn) {
                 contentLines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
@@ -140,7 +144,7 @@ const CODE_BLOCK_BOTTOM_MARKER = CODE_BLOCK_MARKER + "B";'''),
         ('''        codeBlock: (text) => theme.fg("mdCodeBlock", text),
         codeBlockBorder: (text) => theme.fg("mdCodeBlockBorder", text),''',
          '''        codeBlock: (text) => theme.fg("mdCodeBlock", text),
-        codeBlockBorder: (text) => theme.fg("mdCodeBlockBorder", text),
+        codeBlockBorder: (text) => theme.fg("dim", text),
         codeBlockBackground: (text) => theme.bg("userMessageBg", text),'''),
     ],
 }
@@ -151,12 +155,25 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     _, code_new = EDITS[MARKDOWN][1]
     _, wrap_new = EDITS[MARKDOWN][2]
     _, content_new = EDITS[MARKDOWN][3]
-    theme_old, theme_new = EDITS[THEME][0]
+    _, theme_new = EDITS[THEME][0]
     legacy_cases = (LEGACY_CODE_CASE, LEGACY_CODE_CASE_WITH_PADDING)
     markdown = sources[MARKDOWN]
     theme = sources[THEME]
 
-    # Migrate either shipped panel layout before applying the new border frame.
+    # Migrate the previous rounded panel before tightening its background bounds.
+    if (markdown.count(marker_new) == 1
+            and markdown.count(code_new) == 1
+            and markdown.count(wrap_new) == 1
+            and markdown.count(LEGACY_ROUNDED_CONTENT) == 1
+            and markdown.count(content_new) == 0
+            and theme.count(LEGACY_THEME) == 1
+            and theme.count(theme_new) == 0):
+        result = dict(sources)
+        result[MARKDOWN] = markdown.replace(LEGACY_ROUNDED_CONTENT, content_new, 1)
+        result[THEME] = theme.replace(LEGACY_THEME, theme_new, 1)
+        return result
+
+    # Migrate either shipped pre-rounded panel layout before applying the new frame.
     legacy_case = next((case for case in legacy_cases if markdown.count(case) == 1), None)
     if (legacy_case is not None
             and markdown.count(LEGACY_MARKER_DECL) == 1
@@ -165,14 +182,15 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             and markdown.count(wrap_new) == 0
             and markdown.count(LEGACY_CONTENT) == 1
             and markdown.count(content_new) == 0
-            and theme.count(theme_new) == 1
-            and theme.count(theme_old) >= 1):
+            and theme.count(LEGACY_THEME) == 1
+            and theme.count(theme_new) == 0):
         result = dict(sources)
         result[MARKDOWN] = (markdown
             .replace(LEGACY_MARKER_DECL, marker_new, 1)
             .replace(legacy_case, code_new, 1)
             .replace(LEGACY_WRAP, wrap_new, 1)
             .replace(LEGACY_CONTENT, content_new, 1))
+        result[THEME] = theme.replace(LEGACY_THEME, theme_new, 1)
         return result
 
     states = []

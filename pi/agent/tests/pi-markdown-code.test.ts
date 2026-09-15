@@ -15,6 +15,8 @@ const {
   LEGACY_CODE_CASE_WITH_PADDING,
   LEGACY_WRAP,
   LEGACY_CONTENT,
+  LEGACY_ROUNDED_CONTENT,
+  LEGACY_THEME,
 } = describePatch<{
   MARKDOWN: string;
   THEME: string;
@@ -24,7 +26,9 @@ const {
   LEGACY_CODE_CASE_WITH_PADDING: string;
   LEGACY_WRAP: string;
   LEGACY_CONTENT: string;
-}>(patcher, "{'MARKDOWN':m['MARKDOWN'],'THEME':m['THEME'],'EDITS':m['EDITS'],'LEGACY_MARKER_DECL':m['LEGACY_MARKER_DECL'],'LEGACY_CODE_CASE':m['LEGACY_CODE_CASE'],'LEGACY_CODE_CASE_WITH_PADDING':m['LEGACY_CODE_CASE_WITH_PADDING'],'LEGACY_WRAP':m['LEGACY_WRAP'],'LEGACY_CONTENT':m['LEGACY_CONTENT']}");
+  LEGACY_ROUNDED_CONTENT: string;
+  LEGACY_THEME: string;
+}>(patcher, "{'MARKDOWN':m['MARKDOWN'],'THEME':m['THEME'],'EDITS':m['EDITS'],'LEGACY_MARKER_DECL':m['LEGACY_MARKER_DECL'],'LEGACY_CODE_CASE':m['LEGACY_CODE_CASE'],'LEGACY_CODE_CASE_WITH_PADDING':m['LEGACY_CODE_CASE_WITH_PADDING'],'LEGACY_WRAP':m['LEGACY_WRAP'],'LEGACY_CONTENT':m['LEGACY_CONTENT'],'LEGACY_ROUNDED_CONTENT':m['LEGACY_ROUNDED_CONTENT'],'LEGACY_THEME':m['LEGACY_THEME']}");
 const temp = temporaryDirectory("pi-markdown-code-");
 const sdk = process.env.PI_SDK_ROOT;
 const { unitTest: test, nativeTest: realTest } = nativeSuite(import.meta.path, !!sdk && existsSync(join(sdk!, "node_modules/@earendil-works/pi-tui")));
@@ -53,7 +57,10 @@ function fixture(name: string) {
         .replace(LEGACY_CODE_CASE_WITH_PADDING, edits[1]![0]!)
         .replace(LEGACY_CODE_CASE, edits[1]![0]!)
         .replace(LEGACY_WRAP, edits[2]![0]!)
-        .replace(LEGACY_CONTENT, edits[3]![0]!);
+        .replace(LEGACY_CONTENT, edits[3]![0]!)
+        .replace(LEGACY_ROUNDED_CONTENT, edits[3]![0]!);
+    } else if (name === THEME) {
+      source = source.replace(LEGACY_THEME, edits[0]![0]!);
     }
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, source);
@@ -67,7 +74,7 @@ test("patches native Markdown code panels idempotently", () => {
   expect(run(root).exitCode).toBe(0);
   const after = contents(root);
   expect(after[MARKDOWN]).toContain("CODE_BLOCK_MARKER");
-  expect(after[THEME]).toContain("codeBlockBackground");
+  expect(after[THEME]).toContain('codeBlockBorder: (text) => theme.fg("dim", text)');
   expect(readdirSync(join(root, ".config/theme-backups"))).toHaveLength(1);
   expect(run(root).exitCode).toBe(0);
   expect(contents(root)).toEqual(after);
@@ -86,7 +93,7 @@ test("migrates both prior code panel layouts", () => {
             : index === 1 ? legacyCase
               : index === 2 ? LEGACY_WRAP
                 : index === 3 ? LEGACY_CONTENT : next
-          : next;
+          : file === THEME ? LEGACY_THEME : next;
         source = source.replace(old, legacy);
       }
       writeFileSync(path, source);
@@ -95,6 +102,24 @@ test("migrates both prior code panel layouts", () => {
     expect(contents(root)[MARKDOWN]).toContain('lines.push(renderCodeBorder("T"));');
     expect(readdirSync(join(root, ".config/theme-backups"))).toHaveLength(1);
   }
+});
+
+test("migrates the prior rounded panel background", () => {
+  const root = fixture("legacy-rounded");
+  for (const [file, edits] of Object.entries(EDITS)) {
+    const path = join(root, file);
+    let source = readFileSync(path, "utf8");
+    for (const [index, [old, next]] of edits.entries()) {
+      const legacy = file === MARKDOWN
+        ? index === 3 ? LEGACY_ROUNDED_CONTENT : next
+        : file === THEME ? LEGACY_THEME : next;
+      source = source.replace(old, legacy);
+    }
+    writeFileSync(path, source);
+  }
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)[THEME]).toContain('codeBlockBorder: (text) => theme.fg("dim", text)');
+  expect(contents(root)[MARKDOWN]).toContain('else if (codeBlockMarker) {');
 });
 
 test("rejects partial Markdown code patches without writing", () => {
@@ -121,7 +146,7 @@ realTest("native Markdown hides fences and fills wrapped code rows", async () =>
     linkUrl: (text: string) => text,
     code: (text: string) => text,
     codeBlock: (text: string) => text,
-    codeBlockBorder: (text: string) => text,
+    codeBlockBorder: (text: string) => `\x1b[38;2;98;101;106m${text}\x1b[39m`,
     codeBlockBackground: (text: string) => `${background}${text}\x1b[49m`,
     quote: (text: string) => text,
     quoteBorder: (text: string) => text,
@@ -133,17 +158,20 @@ realTest("native Markdown hides fences and fills wrapped code rows", async () =>
     underline: (text: string) => text,
     highlightCode: (code: string) => code.split("\n").map((line) => `${syntax}${line}\x1b[39m`),
   };
-  const lines = new Markdown("```ts\nconst value = 42;\n\n```", 0, 0, theme).render(40);
+  const lines = new Markdown("```ts\nconst value = 42;\n\n```", 1, 0, theme).render(40);
   const codeLines = lines.filter((line: string) => line.includes(background));
   expect(lines.join("\n")).not.toContain("```");
   expect(lines.join("\n")).not.toContain("ts");
   expect(codeLines).toHaveLength(4);
   expect(codeLines.every((line: string) => visibleWidth(line) === 40)).toBe(true);
   const plainCodeLines = codeLines.map((line: string) => stripTerminalSequences(line));
-  expect(plainCodeLines[0]).toBe("╭" + "─".repeat(38) + "╮");
-  expect(plainCodeLines[1].startsWith("│")).toBe(true);
-  expect(plainCodeLines[1].endsWith("│")).toBe(true);
-  expect(plainCodeLines[3]).toBe("╰" + "─".repeat(38) + "╯");
+  expect(plainCodeLines[0]).toBe(" ╭" + "─".repeat(36) + "╮ ");
+  expect(plainCodeLines[1].startsWith(" │")).toBe(true);
+  expect(plainCodeLines[1].endsWith("│ ")).toBe(true);
+  expect(plainCodeLines[3]).toBe(" ╰" + "─".repeat(36) + "╯ ");
+  expect(codeLines[0].startsWith(" ")).toBe(true);
+  expect(codeLines[0].indexOf(background)).toBeGreaterThan(0);
+  expect(codeLines[0].endsWith(" ")).toBe(true);
   expect(codeLines[1]).toContain(syntax);
   expect(plainCodeLines[1]).toContain("const value = 42;");
 
