@@ -25,7 +25,7 @@ local c = {
   cream = "#dedec5",
   text = "#D8DAD8",
   green = "#439187",
-  neonGreen = "#39FF14",
+  brightJade = "#51AEA2",
   sage = "#5FA876",
   yellow = "#c7b777",
   red = "#c7837c",
@@ -39,7 +39,7 @@ hi("Normal", { fg = c.text, bg = "NONE" })
 hi("NormalNC", { link = "Normal" })
 hi("NormalFloat", { fg = c.text, bg = c.panel })
 hi("FloatBorder", { fg = c.accentDark, bg = c.panel })
-hi("Cursor", { fg = c.white, bg = c.neonGreen })
+hi("Cursor", { fg = c.white, bg = c.brightJade })
 hi("CursorLine", { bg = c.panel })
 hi("CursorLineNr", { fg = c.blueGreen, bold = true })
 hi("LineNr", { fg = c.dim })
@@ -61,7 +61,7 @@ hi("Visual", { fg = c.white, bg = c.selectionGreen })
 hi("VisualNOS", { link = "Visual" })
 hi("Search", { fg = c.bright, bg = c.selection, underline = true })
 hi("IncSearch", { fg = c.bg, bg = c.bright })
-hi("MatchParen", { fg = c.white, bg = c.neonGreen, bold = true, underline = true })
+hi("MatchParen", { fg = c.white, bg = c.brightJade, bold = true, underline = true })
 hi("Directory", { fg = c.accent })
 hi("Title", { fg = c.cream, bold = true })
 hi("ErrorMsg", { fg = c.red })
@@ -151,5 +151,5 @@ for _, group in ipairs({
   "LspReferenceText", "LspReferenceRead", "LspReferenceWrite", "LspReferenceTarget",
   "LspInlayHint", "LspCodeLens", "LspCodeLensSeparator", "LspSignatureActiveParameter",
 }) do
-  hi(group, { fg = c.neonGreen })
+  hi(group, { fg = c.brightJade })
 end

@@ -46,8 +46,9 @@ near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
 status text, and Pi tool output use cream (`#dedec5`). Numeric literals retain
 the warning yellow (`#c7b777`) as a rare syntax accent; types and status warnings use sage (`#5fa876`).
 Neovim's existing syntax palette remains distinct by token role. The cursor
-and matching delimiters use neon green (`#39ff14`) backgrounds with white text;
-active LSP reference/UI highlights use neon green.
+and matching delimiters use bright jade (`#51aea2`) backgrounds with white text;
+active LSP reference/UI highlights use the same bright jade. This lightens the
+core teal without changing its hue or the syntax palette.
 Pi follows its existing token classes: literals such as booleans share the
 number role, built-ins share the type role, and some C++ types such as `int`
 remain keywords (teal). Pi's active highlights, success states, and additions
