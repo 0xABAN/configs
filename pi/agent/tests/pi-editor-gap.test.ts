@@ -5,12 +5,26 @@ import { fileURLToPath } from "node:url";
 import { copySdk, describePatch, temporaryDirectory } from "./support/patch-fixtures";
 
 const patcher = fileURLToPath(new URL("../patches/pi-editor-gap.py", import.meta.url));
-const { HOST, SOURCE, EDIT, MARKER } = describePatch<{
+const {
+  HOST,
+  SOURCE,
+  LEGACY_SOURCE,
+  EDITOR_ORIGINAL,
+  WIDGET_ORIGINAL,
+  MARKER,
+  LEGACY_MARKER,
+} = describePatch<{
   HOST: string;
   SOURCE: string;
-  EDIT: [string, string, number];
+  LEGACY_SOURCE: string;
+  EDITOR_ORIGINAL: string;
+  WIDGET_ORIGINAL: string;
   MARKER: string;
-}>(patcher, "{'HOST':m['HOST'],'SOURCE':m['SOURCE'],'EDIT':m['EDIT'],'MARKER':m['MARKER']}");
+  LEGACY_MARKER: string;
+}>(
+  patcher,
+  "{'HOST':m['HOST'],'SOURCE':m['SOURCE'],'LEGACY_SOURCE':m['LEGACY_SOURCE'],'EDITOR_ORIGINAL':m['EDITOR_ORIGINAL'],'WIDGET_ORIGINAL':m['WIDGET_ORIGINAL'],'MARKER':m['MARKER'],'LEGACY_MARKER':m['LEGACY_MARKER']}",
+);
 const sdk = process.env.PI_SDK_ROOT;
 const temp = temporaryDirectory("pi-editor-gap-");
 
@@ -20,30 +34,42 @@ function run(root: string) {
   });
 }
 
-function fixture(name: string) {
+function fixture(name: string, legacy = false) {
   if (!sdk) throw new Error("PI_SDK_ROOT is required");
   const root = join(temp, name);
   copySdk(sdk, root);
   const path = join(root, HOST);
-  writeFileSync(path, readFileSync(path, "utf8").replace(SOURCE, EDIT[0]));
+  let source = readFileSync(path, "utf8");
+  source = source.replace(SOURCE, WIDGET_ORIGINAL).replace(LEGACY_SOURCE, EDITOR_ORIGINAL);
+  if (legacy) source = source.replace(EDITOR_ORIGINAL, LEGACY_SOURCE);
+  writeFileSync(path, source);
   return root;
 }
 
-test("adds an idle editor gap without separating active loaders", () => {
+test("adds one idle separator and suppresses it during compaction", () => {
   const root = fixture("valid");
   expect(run(root).exitCode).toBe(0);
   const patched = readFileSync(join(root, HOST), "utf8");
   expect(patched).toContain(MARKER);
-  expect(patched).toContain("this.session.isCompacting");
-  expect(patched).toContain("this.extensionWidgetsAbove.size > 0");
+  expect(patched).toContain("spacerWhenEmpty && !this.session.isCompacting");
+  expect(patched).not.toContain(LEGACY_MARKER);
   expect(run(root).exitCode).toBe(0);
   expect(readFileSync(join(root, HOST), "utf8")).toBe(patched);
+});
+
+test("migrates the previous editor-render patch", () => {
+  const root = fixture("legacy", true);
+  expect(run(root).exitCode).toBe(0);
+  const patched = readFileSync(join(root, HOST), "utf8");
+  expect(patched).toContain(MARKER);
+  expect(patched).not.toContain(LEGACY_MARKER);
+  expect(patched).toContain(EDITOR_ORIGINAL);
 });
 
 test("rejects a partial editor gap patch", () => {
   const root = fixture("partial");
   const path = join(root, HOST);
-  writeFileSync(path, readFileSync(path, "utf8").replace(EDIT[0], EDIT[0] + "\n" + MARKER));
+  writeFileSync(path, readFileSync(path, "utf8").replace(WIDGET_ORIGINAL, WIDGET_ORIGINAL + "\n" + MARKER));
   const before = readFileSync(path, "utf8");
   expect(run(root).exitCode).not.toBe(0);
   expect(readFileSync(path, "utf8")).toBe(before);

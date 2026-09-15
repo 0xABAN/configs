@@ -1,30 +1,51 @@
 #!/usr/bin/env python3
-"""Add one idle gap before Pi's editor without separating active loaders."""
+"""Keep Pi's idle editor separator out of active compaction layout."""
 import json
 
 from patch_support import backup_sources, discover_pi_root, read_payload, replace_counted, write_sources
 
 HOST = "dist/modes/interactive/interactive-mode.js"
 SOURCE = read_payload("host/editor-gap.js.inc")
-MARKER = "// configs:editor-gap-v1"
-EDIT = (
-    '''        this.editor = this.defaultEditor;
+LEGACY_SOURCE = read_payload("host/legacy/editor-gap-v1.js.inc")
+MARKER = "// configs:editor-gap-v2"
+LEGACY_MARKER = "// configs:editor-gap-v1"
+EDITOR_ORIGINAL = '''        this.editor = this.defaultEditor;
         this.editorContainer = new Container();
-        this.editorContainer.addChild(this.editor);''',
-    SOURCE,
-    1,
-)
+        this.editorContainer.addChild(this.editor);'''
+WIDGET_ORIGINAL = '''    renderWidgetContainer(container, widgets, spacerWhenEmpty, leadingSpacer) {
+        container.clear();
+        if (widgets.size === 0) {
+            if (spacerWhenEmpty) {
+                container.addChild(new CompactWidgetSpacer(this.ui));
+            }
+            return;
+        }
+        if (leadingSpacer) {
+            container.addChild(new CompactWidgetSpacer(this.ui));
+        }
+        for (const component of widgets.values()) {
+            container.addChild(component);
+        }
+    }'''
 
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     source = sources[HOST]
     if MARKER in source:
-        if source.count(MARKER) != 1 or source.count(SOURCE) != 1:
+        if (source.count(MARKER) != 1 or source.count(SOURCE) != 1
+                or source.count(WIDGET_ORIGINAL) != 0
+                or source.count(LEGACY_MARKER) != 0):
             raise ValueError("editor gap patch changed, duplicated or incomplete")
         return dict(sources)
-    if source.count(EDIT[0]) != 1 or source.count(SOURCE) != 0:
-        raise ValueError("editor gap anchor changed or partially applied")
-    return {**sources, HOST: replace_counted(source, [EDIT], "editor gap anchor")}
+    if LEGACY_MARKER in source:
+        if source.count(LEGACY_SOURCE) != 1 or source.count(SOURCE) != 0:
+            raise ValueError("editor gap legacy patch changed or partially applied")
+        source = replace_counted(source, [(LEGACY_SOURCE, EDITOR_ORIGINAL, 1)], "editor gap legacy migration")
+    elif source.count(EDITOR_ORIGINAL) != 1:
+        raise ValueError("editor gap editor anchor changed or partially applied")
+    if source.count(WIDGET_ORIGINAL) != 1 or source.count(SOURCE) != 0:
+        raise ValueError("editor gap widget anchor changed or partially applied")
+    return {**sources, HOST: replace_counted(source, [(WIDGET_ORIGINAL, SOURCE, 1)], "editor gap widget anchor")}
 
 
 def main() -> None:

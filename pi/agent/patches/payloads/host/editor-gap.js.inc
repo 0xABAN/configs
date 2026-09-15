@@ -1,13 +1,15 @@
-        this.editor = this.defaultEditor;
-        this.editorContainer = new Container();
-        const originalEditorContainerRender = this.editorContainer.render.bind(this.editorContainer);
-        this.editorContainer.render = (width) => {
-            const lines = originalEditorContainerRender(width);
-            const editorIsOnlyChild = this.editorContainer.children.length === 1
-                && this.editorContainer.children[0] === this.editor;
-            const hasAboveWidget = this.extensionWidgetsAbove.size > 0;
-            // Keep whimsical and compaction loaders flush to the editor.
-            if (!editorIsOnlyChild || hasAboveWidget || this.session.isCompacting) return lines;
-            return ["", ...lines];
-        }; // configs:editor-gap-v1
-        this.editorContainer.addChild(this.editor);
+    renderWidgetContainer(container, widgets, spacerWhenEmpty, leadingSpacer) {
+        container.clear();
+        if (widgets.size === 0) {
+            if (spacerWhenEmpty && !this.session.isCompacting) { // configs:editor-gap-v2
+                container.addChild(new CompactWidgetSpacer(this.ui));
+            }
+            return;
+        }
+        if (leadingSpacer) {
+            container.addChild(new CompactWidgetSpacer(this.ui));
+        }
+        for (const component of widgets.values()) {
+            container.addChild(component);
+        }
+    }
