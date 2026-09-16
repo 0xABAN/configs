@@ -28,6 +28,7 @@ PRE_NATIVE_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-n
 PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-inline-metrics.js.inc')
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
 PRE_SEPARATOR_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-separator-padding.js.inc')
+PRE_SOURCE_READ_MODULE_SOURCE = read_payload('host/legacy/transcript-before-source-read.js.inc')
 PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
 PRE_DASH_REMOVAL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action-dash-removal.js.inc')
 # Derive the exact older background helpers from the frozen separator revision,
@@ -194,6 +195,18 @@ EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, previous_lookup.replace(
     ' && (owner === "npm:pi-intercom" || owner === "npm:pi-intercom@0.13.0")) };',
 ))
 
+# Source reads use the existing generic Tool row, not a second package card.
+PRE_SOURCE_READ_LOOKUP = EDITS[BASE + "interactive-mode.js"][2]
+old_lookup, previous_lookup = PRE_SOURCE_READ_LOOKUP
+EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, previous_lookup.replace(
+    '        // Only native, installed pretty and the supported Intercom tool opt in.',
+    '        // Only native and explicitly supported package formatters opt in.',
+).replace(
+    ' };',
+    '\n            || (toolName === "get_search_content"'
+    ' && (owner === "npm:pi-web-access" || owner === "npm:pi-web-access@0.27.0")) };',
+))
+
 # Keep the supported layout/helper migrations, but require 0.85.1's renderer
 # lookup in every revision. An old host method must not drop built-in renderers.
 for previous_edits in (PRE_METRICS_EDITS, LEGACY_EDITS):
@@ -229,21 +242,23 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
-                     PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+            (EDITS, (MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
+                     PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
                      PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
                      PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
         ]
-        # Accept earlier layouts with either known lookup, but still validate the
+        # Accept earlier layouts with known lookups, but still validate the
         # entire matching source set and helper before changing anything.
         variants = []
         for revision, helpers in revisions:
-            previous = {name: list(edits) for name, edits in revision.items()}
-            previous[BASE + "interactive-mode.js"][2] = PRE_INTERCOM_LOOKUP
-            variants.extend(((revision, helpers), (previous, helpers)))
+            variants.append((revision, helpers))
+            for lookup in (PRE_SOURCE_READ_LOOKUP, PRE_INTERCOM_LOOKUP):
+                previous = {name: list(edits) for name, edits in revision.items()}
+                previous[BASE + "interactive-mode.js"][2] = lookup
+                variants.append((previous, helpers))
         for previous_edits, helpers in variants:
             if sources.get(MODULE) not in helpers:
                 continue
@@ -263,6 +278,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise current_error
     if state == "patched":
         if sources.get(MODULE) in (
+            PRE_SOURCE_READ_MODULE_SOURCE,
             PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,

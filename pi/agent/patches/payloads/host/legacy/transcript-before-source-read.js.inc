@@ -77,8 +77,6 @@ export function speakerHeader(name, timestamp, padding, width) {
 
 function canCompact(component, nativeLines) {
     if (component.transcriptRole !== "tool" || component.expanded || component.hideComponent) return false;
-    // pi-web-access reports lookup failures in details.error without isError.
-    if (component.toolName === "get_search_content" && component.result?.details?.error) return false;
     // Custom interactive renderers and image output keep their native presentation.
     if (component.result?.content?.some(part => part.type === "image")) return false;
     if ((component.toolDefinition?.renderCall || component.toolDefinition?.renderResult)

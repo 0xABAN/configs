@@ -44,7 +44,10 @@ and `intercom` tool name opt into collapsed invocation-only output. Its native
 expanded renderers, error summaries and images remain available. Incoming
 messages use a sender heading and message preview; expansion retains the full
 body, metadata, reply hint and attachments. No delivery or stored/model content
-is changed. Do not add a second outer margin to individual renderers.
+is changed. `pi-web-access` 0.27.0's `get_search_content` also uses only the
+standard Tool row when collapsed. Expansion retains its native card; lookup
+errors reported through `details.error` stay visible. Other web tools keep their
+own cards. Do not add a second outer margin to individual renderers.
 
 The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
 Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
@@ -58,8 +61,9 @@ the allocation.
 
 Keep theme reads live and preserve native components, cursor markers, image
 payloads, selection, expansion, and session ordering. The transcript's explicit
-pi-pretty and Intercom owner allowances protect other custom renderers; do not
-replace them with tool-name heuristics. The terminal owns the base background.
+pi-pretty, Intercom and source-read owner allowances protect other custom
+renderers; do not replace them with tool-name heuristics. The terminal owns the
+base background.
 
 Plan-mode status formatting is pure; the entrypoint owns status publication,
 tool restoration, and persistence. Whimsical's compaction adapter contains the

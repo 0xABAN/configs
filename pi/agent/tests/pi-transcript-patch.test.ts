@@ -9,6 +9,7 @@ const patcher = fileURLToPath(new URL("../patches/pi-transcript.py", import.meta
 const { edits, module: modulePath } = describePatch<{ edits: Record<string, [string, string][]>; module: string }>(
   patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
 const previousLookup = describePatch<[string, string]>(patcher, "m['PRE_INTERCOM_LOOKUP']");
+const previousSourceReadLookup = describePatch<[string, string]>(patcher, "m['PRE_SOURCE_READ_LOOKUP']");
 const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_MODULE_SOURCE']");
 const previousBackgroundReset = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
 const temp = temporaryDirectory("pi-transcript-");
@@ -92,6 +93,7 @@ for (const helper of [
   "transcript-before-inline-metrics.js.inc",
   "transcript-before-user-separator.js.inc",
   "transcript-before-separator-padding.js.inc",
+  "transcript-before-source-read.js.inc",
   "transcript-before-single-action.js.inc",
   "transcript-before-single-action-dash-removal.js.inc",
 ]) {
@@ -132,30 +134,36 @@ for (const helper of [
   });
 }
 
-test("the installed pre-Intercom lookup migrates with exact helper guards and backups", () => {
-  const root = sandbox("pre-intercom");
-  expect(run(root).exitCode).toBe(0);
-  const current = contents(root);
-  const file = "dist/modes/interactive/interactive-mode.js";
-  const previous = current[file]!.replace(edits[file][2][1], previousLookup[1]);
-  writeFileSync(join(root, file), previous);
-  const backupRoot = join(root, ".config/theme-backups");
-  const beforeBackups = readdirSync(backupRoot);
-  const helper = current[modulePath]!;
-  writeFileSync(join(root, modulePath), helper + "\n// changed helper");
-  const invalid = contents(root);
-  expect(run(root).exitCode).not.toBe(0);
-  expect(contents(root)).toEqual(invalid);
-  expect(readdirSync(backupRoot)).toEqual(beforeBackups);
-  writeFileSync(join(root, modulePath), helper);
-  expect(run(root).exitCode).toBe(0);
-  expect(contents(root)).toEqual(current);
-  const backup = readdirSync(backupRoot).find(name => !beforeBackups.includes(name))!;
-  expect(readFileSync(join(backupRoot, backup, file), "utf8")).toBe(previous);
-  expect(readFileSync(join(backupRoot, backup, modulePath), "utf8")).toBe(helper);
-  expect(run(root).exitCode).toBe(0);
-  expect(readdirSync(backupRoot)).toHaveLength(2);
-});
+for (const [name, lookup, previousHelper] of [
+  ["pre-Intercom", previousLookup, undefined],
+  ["pre-source-read", previousSourceReadLookup, readFileSync(new URL(
+    "../patches/payloads/host/legacy/transcript-before-source-read.js.inc", import.meta.url), "utf8")],
+] as const) {
+  test(`the installed ${name} lookup migrates with exact helper guards and backups`, () => {
+    const root = sandbox(name);
+    expect(run(root).exitCode).toBe(0);
+    const current = contents(root);
+    const file = "dist/modes/interactive/interactive-mode.js";
+    const previous = current[file]!.replace(edits[file][2][1], lookup[1]);
+    writeFileSync(join(root, file), previous);
+    const backupRoot = join(root, ".config/theme-backups");
+    const beforeBackups = readdirSync(backupRoot);
+    const helper = previousHelper ?? current[modulePath]!;
+    writeFileSync(join(root, modulePath), helper + "\n// changed helper");
+    const invalid = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(invalid);
+    expect(readdirSync(backupRoot)).toEqual(beforeBackups);
+    writeFileSync(join(root, modulePath), helper);
+    expect(run(root).exitCode).toBe(0);
+    expect(contents(root)).toEqual(current);
+    const backup = readdirSync(backupRoot).find(name => !beforeBackups.includes(name))!;
+    expect(readFileSync(join(backupRoot, backup, file), "utf8")).toBe(previous);
+    expect(readFileSync(join(backupRoot, backup, modulePath), "utf8")).toBe(helper);
+    expect(run(root).exitCode).toBe(0);
+    expect(readdirSync(backupRoot)).toHaveLength(2);
+  });
+}
 
 for (const [name, previous] of [["simple-background", previousBackground], ["reset-background", previousBackgroundReset]] as const) {
   test(`installed ${name} migrates to native user styling`, () => {
@@ -737,6 +745,63 @@ realTest("host renderer lookup retains built-in fallbacks without authorizing un
   }
   app.runtimeHost.session.getToolDefinition = () => undefined;
   expect(m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "unknown")).toBeUndefined();
+});
+
+realTest("owned source reads use one Tool row while expansion, errors and other cards stay native", async () => {
+  const m = await real();
+  const app = host(m);
+  const definition = {
+    renderCall: () => new m.tui.Text("get_content urlIndex=0", 0, 0),
+    renderResult: (output: any, { expanded }: { expanded: boolean }) => new m.tui.Text(
+      output.details?.error ?? "Hello world example · Express.js (1611 chars, showing 0-1611)"
+        + (expanded ? `\n${output.content[0].text}` : ""), 0, 0),
+  };
+  for (const [name, owner, compact] of [
+    ["get_search_content", "npm:pi-web-access", true],
+    ["get_search_content", "npm:pi-web-access@0.27.0", true],
+    ["get_search_content", "npm:pi-web-access@0.28.0", false],
+    ["get_search_content", "npm:pi-web-access-spoof", false],
+    ["get_search_content", "project-extension", false],
+    ["web_search", "npm:pi-web-access", false],
+    ["fetch_content", "npm:pi-web-access", false],
+    ["source_check", "npm:pi-web-access", false],
+  ] as const) {
+    app.runtimeHost.session.getToolDefinition = () => definition;
+    app.runtimeHost.session.getAllTools = () => [{ name, sourceInfo: { source: owner } }];
+    const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, name);
+    expect(registered.configsTranscriptCompact).toBe(compact);
+    const tool = new m.ToolExecutionComponent(name, "source-read", { urlIndex: 0 }, {}, registered, app.ui, temp);
+    app.chatContainer.clear();
+    app.chatContainer.addChild(tool);
+    expect(transcript(m, app)).toContain("Tool");
+    expect(transcript(m, app).includes("get_content urlIndex=0")).toBe(!compact);
+
+    const output = result("source-read", name, "FULL SOURCE CONTENT");
+    tool.updateResult(output);
+    tool.transcriptDurationMs = 10;
+    const collapsed = transcript(m, app);
+    expect(collapsed).toMatch(new RegExp(`✓ ⌇ Tool\\s+${name} <0.1s`));
+    expect(collapsed.includes("get_content urlIndex=0")).toBe(!compact);
+    expect(collapsed.includes("1611 chars")).toBe(!compact);
+    expect(tool.result).toBe(output);
+
+    tool.setExpanded(true);
+    expect(transcript(m, app)).toContain("get_content urlIndex=0");
+    expect(transcript(m, app)).toContain("1611 chars");
+    expect(transcript(m, app)).toContain("FULL SOURCE CONTENT");
+    tool.setExpanded(false);
+
+    // pi-web-access reports lookup failures in details.error without isError.
+    const failed = { ...output, details: { error: "Stored response not found" } };
+    tool.updateResult(failed);
+    expect(transcript(m, app)).toContain("Stored response not found");
+    expect(tool.result).toBe(failed);
+
+    tool.updateResult(result("source-read", name, "Execution failed", true));
+    expect(transcript(m, app)).toContain("× ⌇ Tool");
+    expect(transcript(m, app)).toContain("Execution failed");
+  }
+  expect((definition as any).configsTranscriptCompact).toBeUndefined();
 });
 
 realTest("builtin-name overrides keep native cards beneath their invocation unless their formatter opts in", async () => {
