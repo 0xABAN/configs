@@ -95,6 +95,32 @@ EDITS = {
 }
 
 
+WHITE_OUTLINE_EDITS = [
+    (
+        '''      const originalRender = editor.render.bind(editor);
+      editor.render = (width: number): string[] => {''',
+        '''      const whiteOutline = (s: string) => ansi.getFgAnsi(255, 255, 255) + s + ansi.reset;
+      const nativeRender = editor.render.bind(editor);
+      const originalRender = (width: number): string[] => {
+        const borderColor = editor.borderColor;
+        // Working indicators and scroll labels share this callback; recolor only rules.
+        editor.borderColor = (s: string) => s.split(/(─+)/)
+          .map((part) => part.startsWith("─") ? whiteOutline(part) : borderColor(part)).join("");
+        try {
+          return nativeRender(width);
+        } finally {
+          editor.borderColor = borderColor;
+        }
+      };
+      editor.render = (width: number): string[] => {''',
+    ),
+    (
+        '        const bc = (s: string) => editor.borderColor(s);',
+        '        const bc = whiteOutline;',
+    ),
+]
+
+
 PRE_VISIBLE_ROWS = '''        const visibleRows = Math.min(inputLineCount, Math.max(5, Math.floor(tui.terminal.rows * 0.3)));
         const bottomBorderIndex = 1 + visibleRows;'''
 
@@ -384,6 +410,17 @@ def canonicalize_bottom_border(index: str) -> str:
     return index.replace(new, old, 1) if new_count else index
 
 
+def canonicalize_white_outline(index: str) -> str:
+    """Rebase only a complete white outline; keep legacy frame validation intact."""
+    if not any(new in index for _, new in WHITE_OUTLINE_EDITS):
+        return index
+    if any(index.count(new) != 1 or old in index for old, new in WHITE_OUTLINE_EDITS):
+        raise ValueError("editor white outline changed, partial or duplicated")
+    for old, new in WHITE_OUTLINE_EDITS:
+        index = index.replace(new, old, 1)
+    return index
+
+
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Validate the entire set before changing any file; reject partial patches."""
     sources = dict(sources)
@@ -391,7 +428,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     # Canonicalize the optional border upgrade before validating the base frame.
     # The final result restores it below, so replay leaves installed bytes intact.
     old_border, new_border = BORDER_EDIT
-    index = sources["index.ts"]
+    index = canonicalize_white_outline(sources["index.ts"])
     index = canonicalize_badge_budget(index)
     index = canonicalize_badge_fit(index)
     index = canonicalize_git_label(index)
@@ -495,6 +532,10 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     result["index.ts"] = upgrade_git_label(result["index.ts"])
     result["index.ts"] = upgrade_badge_budget(result["index.ts"])
     result["index.ts"] = upgrade_badge_fit(result["index.ts"])
+    for old, new in WHITE_OUTLINE_EDITS:
+        if result["index.ts"].count(old) != 1 or new in result["index.ts"]:
+            raise ValueError("editor white outline anchor missing or duplicated")
+        result["index.ts"] = result["index.ts"].replace(old, new, 1)
     return result
 
 

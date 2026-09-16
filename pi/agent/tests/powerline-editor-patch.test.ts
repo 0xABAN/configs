@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const patcher = fileURLToPath(new URL("../patches/powerline-editor.py", import.meta.url));
-const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, gitLabel, badgeBudget, renderHeight, previousDouble, previousPadded } = describePatch<{
+const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, gitLabel, badgeBudget, renderHeight, previousDouble, previousPadded, whiteOutline } = describePatch<{
   edits: Record<string, [string, string][]>;
   border: [string, string];
   legacyBorder: [string, string];
@@ -19,7 +19,8 @@ const { edits, border, legacyBorder, badgeImport, legacyPrompt, preVisibleRows, 
   renderHeight: [string, string];
   previousDouble: string;
   previousPadded: string;
-}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS'],'gitLabel':m['GIT_LABEL_EDIT'],'badgeBudget':m['BADGE_BUDGET_EDIT'],'renderHeight':m['RENDER_HEIGHT_EDIT'],'previousDouble':m['PREVIOUS_DOUBLE_PADDING_RENDER_HEIGHT'],'previousPadded':m['PREVIOUS_PADDED_INPUT_ROW']}",
+  whiteOutline: [string, string][];
+}>(patcher, "{'edits':m['EDITS'],'border':m['BORDER_EDIT'],'legacyBorder':m['LEGACY_BORDER_EDIT'],'badgeImport':m['BADGE_IMPORT'],'legacyPrompt':m['LEGACY_PROMPT'],'preVisibleRows':m['PRE_VISIBLE_ROWS'],'gitLabel':m['GIT_LABEL_EDIT'],'badgeBudget':m['BADGE_BUDGET_EDIT'],'renderHeight':m['RENDER_HEIGHT_EDIT'],'previousDouble':m['PREVIOUS_DOUBLE_PADDING_RENDER_HEIGHT'],'previousPadded':m['PREVIOUS_PADDED_INPUT_ROW'],'whiteOutline':m['WHITE_OUTLINE_EDITS']}",
   "m['EDITS']['index.ts'].append(m['PROMPT_EDIT'])");
 const root = temporaryDirectory("powerline-editor-");
 const sdk = process.env.PI_SDK_ROOT;
@@ -66,6 +67,30 @@ test("editor patch is idempotent and preserves unrelated changes", () => {
   expect(patched["index.ts"]).toContain("// preserve footer layout");
   expect(app.run().exitCode).toBe(0);
   expect(app.contents()).toEqual(patched);
+});
+
+test("legacy outline migrates exactly and incomplete white outlines refuse writes", () => {
+  const app = sandbox("white-outline");
+  expect(app.run().exitCode).toBe(0);
+  const current = app.contents();
+  const previous = whiteOutline.reduce((text, [old, replacement]) => text.replace(replacement, old), current["index.ts"]);
+  writeFileSync(join(app.dir, "index.ts"), previous);
+  expect(app.run().exitCode).toBe(0);
+  expect(app.contents()).toEqual(current);
+
+  const [[oldRender, whiteRender], [oldBorder, whiteBorder]] = whiteOutline;
+  for (const broken of [
+    current["index.ts"].replace(whiteRender, oldRender),
+    current["index.ts"].replace(whiteBorder, oldBorder),
+    current["index.ts"].replace("ansi.getFgAnsi(255, 255, 255)", "ansi.getFgAnsi(254, 255, 255)"),
+    current["index.ts"] + whiteRender,
+    current["index.ts"] + oldRender,
+  ]) {
+    writeFileSync(join(app.dir, "index.ts"), broken);
+    const before = app.contents();
+    expect(app.run().exitCode).not.toBe(0);
+    expect(app.contents()).toEqual(before);
+  }
 });
 
 test("existing editor height migrates from 30% to 40%", () => {
@@ -216,6 +241,18 @@ const transpiler = new Bun.Transpiler({ loader: "ts" });
 const marker = "\x1b_pi:c\x07";
 const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").replaceAll(marker, "");
 
+function expectWhiteOutline(rows: string[]) {
+  let borderCells = 0;
+  for (const row of rows) {
+    const cells = plain(row).match(/[─│╭╮╰╯]/g)?.length ?? 0;
+    const whiteCells = [...row.matchAll(/\x1b\[38;2;255;255;255m([─│╭╮╰╯]+)/g)]
+      .reduce((count, match) => count + match[1].length, 0);
+    expect(whiteCells).toBe(cells);
+    borderCells += cells;
+  }
+  expect(borderCells).toBeGreaterThan(0);
+}
+
 async function host() {
   return import(pathToFileURL(join(sdk!, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
 }
@@ -265,7 +302,8 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     : { visible: false, content: "" };
   const buildSegmentContext = () => ({});
   const tui = { terminal: { rows: 30 }, requestRender() {} };
-  const editor = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }, { paddingX: 1 }),
+  const hostBorder = (s: string) => `\x1b[38;2;67;145;135m${s}\x1b[0m`;
+  const editor = wrap(new Editor(tui, { borderColor: hostBorder, selectList: {} }, { paddingX: 1 }),
     tui, () => "\x1b[38;2;95;168;118m",
     {
       reset: "\x1b[0m",
@@ -275,6 +313,16 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     false, () => false, () => "+", footer, currentCtx, { ui: { theme: {} } }, visibleWidth, truncateToWidth, sliceByColumn,
     renderSegment, buildSegmentContext);
   editor.focused = true;
+  const nativeTopBorder = editor.renderTopBorder.bind(editor);
+  editor.renderTopBorder = (width: number, hidden: number) => {
+    // Embedded working indicators also read borderColor during render.
+    expect(editor.borderColor("Working")).toBe(hostBorder("Working"));
+    return nativeTopBorder(width, hidden);
+  };
+  for (const width of [9, 16, 80]) {
+    expectWhiteOutline(editor.render(width));
+    expect(editor.borderColor).toBe(hostBorder);
+  }
   expect(editor.render(80)[1]).toContain("\x1b[38;2;67;145;135m◆\x1b[0m");
   for (const [bashMode, captureMode, glyph] of [[true, false, "$"], [false, true, "+"]] as const) {
     const special = wrap(new Editor(tui, { borderColor: (s: string) => s, selectList: {} }),
@@ -283,7 +331,9 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
       bashMode, () => captureMode, () => "+",
       undefined, undefined, undefined, visibleWidth, truncateToWidth, sliceByColumn,
       renderSegment, buildSegmentContext);
-    const row = special.render(80)[1];
+    const specialRows = special.render(80);
+    expectWhiteOutline(specialRows);
+    const row = specialRows[1];
     expect(plain(row)).toStartWith(`│ ${glyph} `);
     expect(row).toContain(`\x1b[38;2;${bashMode ? "200;200;200" : "95;168;118"}m${glyph}\x1b[0m`);
   }
@@ -317,6 +367,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     for (const width of [40, 55, 70, 100, 40]) {
       editor.setText("界🙂".repeat(1000));
       const rows = editor.render(width);
+      expectWhiteOutline(rows);
       expect(rows.every((row: string) => visibleWidth(row) <= width)).toBe(true);
       expect(rows.join("").split(marker)).toHaveLength(2);
       // Preserve the complete native count, not just an arrow left after clipping.
@@ -344,6 +395,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     const row = rows[0];
     expect(plain(row)).toEndWith(" build mode ❯  main *4 ──╮");
     const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
+    expectWhiteOutline(rows);
     expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);
     expect(plain(rows.at(-1))).not.toContain("gpt-5.4 ❯ think:xhigh");
@@ -356,6 +408,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.setText("界🙂".repeat(1000));
   for (const width of [40, 55, 80]) {
     const rows = editor.render(width);
+    expectWhiteOutline(rows);
     const row = plain(rows[0]);
     expect(row).toContain("\uF121  build mode");
     expect(row.includes("main")).toBe(width > 40);
@@ -373,6 +426,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   const plan = formatPlanStatus(true, "high");
   statuses.set("agent-mode", plan.mode);
   statuses.set("agent-thinking", plan.thinking);
+  expectWhiteOutline(editor.render(80));
   expect(plain(editor.render(80)[0])).toEndWith(" plan mode ❯  main *4 ──╮");
   expect(plain(editor.render(80).at(-1))).not.toContain("gpt-5.4 ❯ think:high");
   tui.terminal.rows = 12;
@@ -402,6 +456,14 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
   editor.handleInput("\x1b[200~hello\nworld\x1b[201~");
   expect(editor.getExpandedText()).toBe("hello\nworld");
   expect(editor.render(40).join("")).toContain(marker);
+
+  const layoutText = editor.layoutText;
+  editor.layoutText = () => { throw new Error("render failed"); };
+  for (const width of [9, 80]) {
+    expect(() => editor.render(width)).toThrow("render failed");
+    expect(editor.borderColor).toBe(hostBorder);
+  }
+  editor.layoutText = layoutText;
 });
 
 realTest("bash ghost text preserves padded cursor and avoids overwriting wrapped input", async () => {
