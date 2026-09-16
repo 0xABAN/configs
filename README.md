@@ -39,9 +39,10 @@ The terminal owns the charcoal base background and its opacity. Neovim's
 base highlights use `NONE`; Pi's base background variable uses `""` (terminal
 default). Neither paints another charcoal layer over the terminal. Panels
 (`#181a20`) and colored selections retain their explicit backgrounds. Terminal text
-selections (including Pi), Neovim Visual mode, and completion selections
-use the core teal (`#439187`) with white text (`#ffffff`). Search/diff backgrounds
-remain neutral (`#282c30`). Prose uses soft white (`#D8DAD8`), with
+selections (including Pi) and Neovim Visual mode use light lime (`#a8d86e`) with
+white text (`#ffffff`), matching the bracket highlights. Completion selections
+keep the core teal (`#439187`); search/diff backgrounds remain neutral (`#282c30`).
+Prose uses soft white (`#D8DAD8`), with
 near-white (`#F2F3F0`) for emphasis. Variables, strings, headings, editor
 status text, and Pi tool output use cream (`#dedec5`). Numeric literals retain
 the warning yellow (`#c7b777`) as a rare syntax accent; types and status warnings use sage (`#5fa876`).
