@@ -57,8 +57,9 @@ Pi follows its existing token classes: literals such as booleans share the
 number role, built-ins share the type role, and some C++ types such as `int`
 remain keywords (teal). Pi's active highlights, success states, and additions
 use the core teal, as do terminal ANSI green/cyan, Pi's diamond,
-and its context ball/meter. Neovim separators and floating-window borders,
-and Pi's muted/Markdown borders, use the darker companion. Mode/thinking
+and its context ball/meter. Neovim window dividers and dashboard entries use
+white (`#ffffff`). Neovim floating-window borders and Pi's muted/Markdown
+borders use the darker companion. Mode/thinking
 label gradients and error colors retain their existing palettes.
 Outside selections, large surfaces never use green fills.
 Supporting neutrals and subdued warning/error colors are chosen to fit;

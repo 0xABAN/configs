@@ -47,7 +47,7 @@ hi("SignColumn", { bg = "NONE" })
 hi("EndOfBuffer", { fg = c.dim })
 hi("NonText", { fg = c.dim })
 hi("Whitespace", { fg = c.dim })
-hi("WinSeparator", { fg = c.accentDark })
+hi("WinSeparator", { fg = c.white })
 hi("StatusLine", { fg = c.cream, bg = "NONE" })
 hi("StatusLineNC", { fg = c.muted, bg = "NONE" })
 hi("TabLine", { fg = c.muted, bg = "NONE" })
@@ -130,9 +130,6 @@ local links = {
   GitSignsAdd = "Added",
   GitSignsChange = "Changed",
   GitSignsDelete = "Removed",
-  SnacksDashboardDesc = "Directory",
-  SnacksDashboardIcon = "Directory",
-  SnacksDashboardKey = "Keyword",
   NeoTreeRootName = "Title",
   NeoTreeDirectoryName = "Directory",
   NeoTreeDirectoryIcon = "Directory",
@@ -140,6 +137,11 @@ local links = {
 for group, target in pairs(links) do
   hi(group, { link = target })
 end
+
+-- Dashboard rows are white without recoloring shared syntax or directory roles.
+hi("SnacksDashboardDesc", { fg = c.white })
+hi("SnacksDashboardIcon", { fg = c.white })
+hi("SnacksDashboardKey", { fg = c.white, bold = true })
 
 hi("DiagnosticError", { fg = c.red })
 hi("DiagnosticWarn", { fg = c.sage })
