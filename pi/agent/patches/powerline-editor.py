@@ -166,6 +166,7 @@ PRE_LEADING_TPS_BORDER = read_payload("powerline/legacy/editor-badges-before-lea
 PRE_FULL_MODE_BORDER = read_payload("powerline/legacy/editor-badges-before-full-mode.ts.inc").rstrip("\n")
 PRE_RESPONSE_TIME_BORDER = read_payload("powerline/legacy/editor-badges-before-response-time.ts.inc").rstrip("\n")
 PRE_MODEL_BRANCH_BORDER = read_payload("powerline/legacy/editor-badges-before-model-branch.ts.inc").rstrip("\n")
+PRE_SAGE_TIMER_BORDER = read_payload("powerline/legacy/editor-badges-before-sage-timer.ts.inc").rstrip("\n")
 BOTTOM_BORDER_EDIT = (
     '''        result.push(inset + bc("╰───") + lines[bottomBorderIndex] + bc("╯"));''',
     read_payload("powerline/bottom-badges.ts.inc").rstrip("\n"),
@@ -440,6 +441,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         PRE_CENTERED_SCROLL_BORDER, PRE_TPS_BORDER,
         PRE_LEADING_TPS_BORDER, PRE_FULL_MODE_BORDER, PRE_RESPONSE_TIME_BORDER,
         PRE_MODEL_BRANCH_BORDER,
+        PRE_SAGE_TIMER_BORDER.replace(BADGE_BUDGET_EDIT[1], BADGE_BUDGET_EDIT[0])
+          .replace(BADGE_FIT_EDIT[1], BADGE_FIT_EDIT[0]),
     )
     compact_count = sum(index.count(border) for border in compact_borders)
     if compact_count > 1 or (compact_count == 1) != (BADGE_IMPORT[1] in index):

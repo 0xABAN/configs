@@ -170,6 +170,7 @@ for (const helper of [
   "editor-badges-before-full-mode.ts.inc",
   "editor-badges-before-response-time.ts.inc",
   "editor-badges-before-model-branch.ts.inc",
+  "editor-badges-before-sage-timer.ts.inc",
 ]) {
   test(`${helper} migrates exactly; partial or modified predecessors refuse writes`, () => {
     const app = sandbox(helper);
@@ -218,6 +219,8 @@ test("partial or modified editor badges refuse writes", () => {
     canonical.replace(badgeImport[1], badgeImport[0]),
     canonical.replace(border[1], legacyBorder[1]),
     canonical.replace(badgeBudget[1], badgeBudget[0].replace("- 9", "- 10")),
+    canonical.replace("ansi.getBgAnsi(95, 168, 118)", "ansi.getBgAnsi(50, 109, 101)"),
+    canonical.replace("ansi.getFgAnsi(18, 19, 25)", "ansi.getFgAnsi(243, 238, 223)"),
   ]) {
     writeFileSync(join(app.dir, "index.ts"), index);
     const before = app.contents();
@@ -394,7 +397,7 @@ realTest("real editor fills the shared viewport through wrapping, scrolling, com
     const rows = editor.render(width);
     const row = rows[0];
     expect(plain(row)).toEndWith(" build mode ❯  main *4 ──╮");
-    const paintedResponse = "\x1b[48;2;50;109;101m\x1b[38;2;243;238;223m 1m 05s \x1b[0m";
+    const paintedResponse = "\x1b[48;2;95;168;118m\x1b[38;2;18;19;25m 1m 05s \x1b[0m";
     expectWhiteOutline(rows);
     expect(row).toContain(paintedResponse + "   " + statuses.get("agent-mode"));
     expect(plain(row).match(/❯/g)).toHaveLength(1);

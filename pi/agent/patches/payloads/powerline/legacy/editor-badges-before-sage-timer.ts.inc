@@ -17,9 +17,9 @@
 
         const primary = [mode, branch].filter(Boolean).join(" ❯ ");
         const responseTime = statuses?.get("agent-response-time") ?? "";
-        // Charcoal on palette sage keeps the timer readable (6.49:1 contrast).
+        // Warm beige on deep jade keeps the filled badge readable (5.16:1 contrast).
         const responseBadge = responseTime
-          ? ansi.getBgAnsi(95, 168, 118) + ansi.getFgAnsi(18, 19, 25) + ` ${responseTime} ` + ansi.reset
+          ? ansi.getBgAnsi(50, 109, 101) + ansi.getFgAnsi(243, 238, 223) + ` ${responseTime} ` + ansi.reset
           : "";
         let badges = [responseBadge, primary].filter(Boolean).join("   ");
         if (visibleWidth(badges) > badgeBudget && responseBadge && branch) {

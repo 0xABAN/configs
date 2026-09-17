@@ -207,7 +207,7 @@ The editor patch adds the rounded `╭╮╰╯` frame without a second outer in
 It reserves space before text wrapping and keeps scroll indicators,
 completion rows, paste handling, and hardware cursor markers. Tiny terminals
 fall back to the host editor. Mode/effort labels interrupt the top border near
-the right corner. A warm-beige-on-deep-teal response-time badge comes first,
+the right corner. A charcoal-on-sage (`#121319` on `#5FA876`) response-time badge comes first,
 with three spaces before `  build mode ❯ think:xhigh` and no chevron beside
 it. Response time yields first when space is tight, then thinking. If the
 complete mode label still cannot fit, the border keeps the scroll hint without
