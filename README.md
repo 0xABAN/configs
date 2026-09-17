@@ -1,4 +1,4 @@
-# configs
+# dotfiles
 
 Neovim + Pi coding-agent configs. Clone on a new machine and run `./install.sh`.
 
@@ -20,11 +20,13 @@ pi/rpiv-todo/config.json → ~/.config/rpiv-todo/config.json
 Requires Git and [Bun](https://bun.sh) for the Pi extension dependencies.
 
 ```bash
-git clone git@github.com:0xABAN/configs.git ~/dev/configs
-cd ~/dev/configs
+git clone git@github.com:0xABAN/dotfiles.git ~/dev/dotfiles
+cd ~/dev/dotfiles
 chmod +x install.sh
 ./install.sh
 ```
+
+Existing checkouts can stay at `~/dev/configs` to preserve installed symlinks; use that path instead of `~/dev/dotfiles` in the commands below.
 
 Existing files are renamed `*.bak.<timestamp>` before linking. The installer also removes `~/AGENTS.md` (backing up a regular file first) so Pi loads only the shared global file and repository instructions.
 
@@ -363,15 +365,15 @@ before upgrading the packages; do not force patches through changed anchors.
 
 ## Sync workflow
 
-Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `configs` update so new installs can find the referenced paths.
+Commit and push changes in the repository that owns them. For extension folder moves, push `pi-extensions` before the corresponding `dotfiles` update so new installs can find the referenced paths.
 
 ```bash
 # on machine A after edits
-cd ~/dev/configs && git add -A && git commit -m "..." && git push
+cd ~/dev/dotfiles && git add -A && git commit -m "..." && git push
 
 # on machine B
-cd ~/dev/configs && git pull --ff-only
+cd ~/dev/dotfiles && git pull --ff-only
 cd ~/dev/pi-extensions && git pull --ff-only
-# re-run ~/dev/configs/install.sh if paths or extension dependencies changed
+# re-run ~/dev/dotfiles/install.sh if paths or extension dependencies changed
 # then run /reload in Pi
 ```
