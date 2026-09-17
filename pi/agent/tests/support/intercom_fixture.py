@@ -37,7 +37,7 @@ def write_fixture(package: Path, destination: Path) -> None:
 export default function (pi) {
   pi.registerTool({
     name: "intercom", label: "Intercom fixture", description: "Offline UI fixture only",
-    parameters: Type.Object({ action: Type.String() }),
+    parameters: Type.Object({ action: Type.String(), to: Type.Optional(Type.String()), message: Type.Optional(Type.String()) }),
     async execute() {
       return { content: [{ type: "text", text: "INTERCOM_EXPANDED_DETAIL" }], details: { messageId: "synthetic-outgoing-id" } };
     },

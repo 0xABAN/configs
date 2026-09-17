@@ -11,6 +11,7 @@ const generator = fileURLToPath(new URL("./support/intercom_fixture.py", import.
 const description = describePatch<{ edits: Record<string, [string, string, number][]>; original: string; module: string; previous: string }>(
   patcher, "{'edits': m['EDITS'], 'original': m['ORIGINAL_MODULE'], 'module': m['MODULE'], 'previous': m['_PREVIOUS_MODULE_SOURCE']}");
 const previousHeading = readFileSync(new URL("../patches/payloads/intercom/legacy/inline-message-before-tool-row.ts.inc", import.meta.url), "utf8");
+const previousToolRow = readFileSync(new URL("../patches/payloads/intercom/legacy/inline-message-before-chat-icon.ts.inc", import.meta.url), "utf8");
 const source = process.env.PI_INTERCOM_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/pi-intercom");
 const sdk = process.env.PI_SDK_ROOT;
 const temp = temporaryDirectory("intercom-ui-");
@@ -49,7 +50,7 @@ test("Intercom validates both files before writing, backs up exact bytes and is 
   expect(readdirSync(backupRoot)).toEqual(backups);
 });
 
-for (const [name, previous] of [["expanded-body", description.previous], ["sender-heading", previousHeading]]) {
+for (const [name, previous] of [["expanded-body", description.previous], ["sender-heading", previousHeading], ["intercom-label", previousToolRow]]) {
   test(`the previous ${name} renderer migrates exactly and rejects local edits`, () => {
     const root = sandbox(`previous-${name}`);
     checkProcess(run(root));
@@ -165,7 +166,7 @@ realTest("real Intercom renderers use shared rows for every owner; expansion, pa
     expect(text()).toContain("CALL_PREVIEW"); // Actual invocation arguments, not a duplicate package card.
     const rows = text().split("\n").filter((line: string) => line.trim());
     expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
-    const heading = name === "intercom" ? "◇ Intercom" : "⌇ Tool";
+    const heading = name === "intercom" ? "⇄ Chat" : "⌇ Tool";
     expect(rows[1]).toMatch(new RegExp(`^ {6}✓ ${heading}\\s+${name}`));
     tool.setExpanded(true);
     expect(text()).toContain("FULL_OUTGOING_DETAIL");
@@ -186,6 +187,34 @@ realTest("real Intercom renderers use shared rows for every owner; expansion, pa
     expect(tool.toolCallId).toBe("call-id");
   }
   expect(JSON.stringify(result)).toBe(before);
+});
+
+realTest("outgoing chats use ordinary grouped tool rows, not incoming message cards", async () => {
+  const m = await real();
+  const container = new m.TranscriptContainer();
+  const calls = ["peer-a", "peer-b"].map(to => {
+    const tool = new m.ToolExecutionComponent("intercom", to, { action: "send", to, message: "hello" },
+      {}, m.renderers, { requestRender() {} }, temp);
+    tool.markExecutionStarted();
+    tool.updateResult({ content: [{ type: "text", text: "NATIVE_EXPANDED_RESULT" }], isError: false });
+    tool.transcriptDurationMs = 10;
+    container.addChild(tool);
+    return tool;
+  });
+  for (const width of [120, 80, 40, 12, 4, 1]) {
+    const lines = container.render(width);
+    expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+    if (width >= 80) {
+      const text = lines.map(m.tui.stripTerminalSequences).join("\n");
+      expect(text).toContain("2 actions");
+      expect(text).toMatch(/├─ ✓ ⇄ Chat\s+intercom\(action="send", to="peer-a".*<0\.1s/);
+      expect(text).toMatch(/╰─ ✓ ⇄ Chat\s+intercom\(action="send", to="peer-b".*<0\.1s/);
+      expect(text).not.toContain("From ");
+      expect(text).not.toContain("NATIVE_EXPANDED_RESULT");
+    }
+  }
+  for (const tool of calls) tool.setExpanded(true);
+  expect(container.render(120).map(m.tui.stripTerminalSequences).join("\n")).toContain("NATIVE_EXPANDED_RESULT");
 });
 
 realTest("incoming messages use shared gutters, live themes and full expansion without altering data", async () => {
@@ -222,11 +251,11 @@ realTest("incoming messages use shared gutters, live themes and full expansion w
       const incomingRow = tui.stripTerminalSequences(incomingHeader);
       expect(incomingRow.indexOf("✓")).toBe(runRow.indexOf("✓"));
       if (width > 40) {
-        expect(plain).toContain("✓ ◇ Intercom From Peer 界");
+        expect(plain).toMatch(/✓ ⇄ Chat\s+From Peer 界/);
         const bodyPad = runRow.indexOf("✓") + 2;
         expect(plain.split("\n").find((line: string) => line.includes("MESSAGE_PREVIEW"))).toStartWith(" ".repeat(bodyPad) + "MESSAGE_PREVIEW");
-        expect(incomingHeader).toContain(colors.theme.fg("accent", "◇"));
-        expect(incomingHeader).toContain(colors.theme.bold(colors.theme.fg("muted", "Intercom")));
+        expect(incomingHeader).toContain(colors.theme.fg("accent", "⇄"));
+        expect(incomingHeader).toContain(colors.theme.bold(colors.theme.fg("muted", "Chat  ")));
         expect(incomingHeader).toContain(colors.theme.fg("text", "From Peer 界"));
       }
       component.setExpanded(true);

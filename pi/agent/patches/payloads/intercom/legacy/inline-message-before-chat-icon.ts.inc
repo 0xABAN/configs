@@ -47,10 +47,9 @@ export class InlineMessageComponent implements Component {
     const indent = " ".repeat(bodyPad);
     const clean = (text: string) => stripTerminalSequences(text).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "");
     const senderName = clean(this.from.name || this.from.id.slice(0, 8)).replace(/\s+/g, " ");
+    const heading = this.theme.fg("muted", "✓") + " " + this.theme.fg("accent", "◇") + " "
+      + this.theme.bold(this.theme.fg("muted", "Intercom")) + " " + this.theme.fg("text", `From ${senderName}`);
     const titleWidth = width - headerPad;
-    const label = titleWidth < 60 ? "Chat" : "Chat".padEnd(6);
-    const heading = this.theme.fg("muted", "✓") + " " + this.theme.fg("accent", "⇄") + " "
-      + this.theme.bold(this.theme.fg("muted", label)) + " " + this.theme.fg("text", `From ${senderName}`);
     const lines = [" ".repeat(headerPad) + truncateToWidth(heading, titleWidth, titleWidth < 4 ? "" : "...")];
     if (this.collapsed) {
       lines.push(indent + this.theme.fg("text", truncateToWidth(clean(this.message.content.text).replace(/\s+/g, " ").trim(), bodyWidth)));

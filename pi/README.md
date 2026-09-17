@@ -36,7 +36,7 @@ The transcript owns speaker headers and tool invocation rows. Every call keeps a
 row, even when its renderer is silent. Collapsed text cards never bypass it;
 native images stay inline and expansion restores the original detailed bodies.
 Built-in names retain their action labels. Explicit families cover Web, Agent,
-Batch, Flow, Ask, Tasks, Goal, Intercom and MCP; unknown operations use Tool.
+Batch, Flow, Ask, Tasks, Goal, Chat and MCP; unknown operations use Tool.
 Registered owner metadata identifies MCP forwarding/direct registrations and
 known package error contracts, not exemptions from the shared layout.
 
@@ -49,9 +49,10 @@ and browser approval waits keep an expansion hint.
 
 Package renderers still own Todos, Agents and incoming Intercom messages, while
 the host owns invocation rows, notification wrapping and native dialogs. Incoming
-Intercom messages use `✓ ◇ Intercom From <sender>` at the standalone tool
+Intercom messages use `✓ ⇄ Chat From <sender>` at the standalone tool
 indent, with an indented preview and expanded metadata, reply hint and
-attachments. Outgoing rows use the same bold Intercom label. No execution,
+attachments. Outgoing calls use the same bold Chat label and ⇄ icon, but stay
+ordinary tools: adjacent sends group in the native action tree. No execution,
 delivery or stored/model content is changed. Do not add a second outer margin
 to individual renderers.
 
@@ -226,7 +227,7 @@ to the candidate. It runs the full `pi/agent/tests` native suite and the copied
 clean-launcher/auth tests, using synthetic credentials. It then replays host and
 Powerline patches inside the stage, selects the candidate npm symlink with the
 same launcher helper used at activation, and launches **that executable** in
-120×36 tmux terminals in regular and fullscreen modes. The rendered faux-provider
+120×44 tmux terminals in regular and fullscreen modes. The rendered faux-provider
 response must show `◆ You`, `● Pi`, the cream separator, a two-column outer inset
 and the configured Powerline footer. Intercom must show only its invocation row
 when collapsed, a borderless incoming sender/preview, and full details/attachments

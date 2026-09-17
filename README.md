@@ -264,7 +264,7 @@ The existing input/footer are unchanged.
 Every collapsed tool uses the same row, including custom and silent renderers.
 Native path/command labels remain; web tools use **Web**, MCP scripts **Batch**,
 agent workflows **Flow**, questions **Ask**, and todos **Tasks**. Both incoming
-and outgoing Intercom messages use **Intercom**.
+and outgoing Intercom messages use **⇄ Chat**.
 Unknown operations use **Tool**; MCP management/discovery uses **MCP**. Web/MCP
 rows show the underlying invocation and named arguments, not a second text card:
 
@@ -325,12 +325,13 @@ Restart Pi to apply host changes; `/reload` alone is not enough.
 
 ### Intercom
 
-Incoming messages use `✓ ◇ Intercom From <sender>`, aligned with standalone tool
-rows, with a one-line preview indented beneath it. Only the **Intercom** label is
+Incoming messages use `✓ ⇄ Chat From <sender>`, aligned with standalone tool
+rows, with a one-line preview indented beneath it. Only the **Chat** label is
 bold, matching outgoing calls' label and the other action rows. Tool-output
 expansion reveals the full body, sender/message metadata, reply hint and
-attachments. Outgoing calls collapse to the existing host invocation row;
-expanding restores Intercom's native call/result renderers. Delivery, reply
+attachments. Outgoing calls stay ordinary tool rows, so consecutive sends share
+an action tree and show `⇄ Chat intercom(action="send", to=…)` plus timing.
+Expanding restores Intercom's native call/result renderers. Delivery, reply
 tracking, stored messages and model-visible content are unchanged.
 
 The guarded package patch targets **pi-intercom 0.13.0**, alongside the Pi 0.85.1

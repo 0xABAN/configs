@@ -15,6 +15,7 @@ MODULE = "ui/inline-message.ts"
 ORIGINAL_MODULE = read_payload("intercom/inline-message-original.ts.inc")
 MODULE_SOURCE = read_payload("intercom/inline-message.ts.inc")
 PRE_TOOL_ROW_MODULE = read_payload("intercom/legacy/inline-message-before-tool-row.ts.inc")
+PRE_CHAT_ICON_MODULE = read_payload("intercom/legacy/inline-message-before-chat-icon.ts.inc")
 _BODY_DECLARATION = '    const body = clean(this.bodyText || this.message.content.text);'
 _PREVIOUS_MODULE_SOURCE = PRE_TOOL_ROW_MODULE.replace(
     '    if (this.collapsed) {',
@@ -35,7 +36,7 @@ EDITS = {
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """The exact renderer and registration must agree; never repair half a patch."""
     original = sources[MODULE] == ORIGINAL_MODULE
-    previous = sources[MODULE] in (_PREVIOUS_MODULE_SOURCE, PRE_TOOL_ROW_MODULE)
+    previous = sources[MODULE] in (_PREVIOUS_MODULE_SOURCE, PRE_TOOL_ROW_MODULE, PRE_CHAT_ICON_MODULE)
     current = sources[MODULE] == MODULE_SOURCE
     if not original and not previous and not current:
         raise ValueError("Intercom incoming renderer changed; review upstream first")
