@@ -72,7 +72,7 @@ grain shader; activate them in `~/.config/ghostty/config` (also used by cmux):
 
 ```ini
 theme = osaka-jade
-background-opacity = 0.95
+background-opacity = 0.90
 background-blur = 30
 background-opacity-cells = true
 custom-shader = ~/.config/ghostty/shaders/grain.glsl
@@ -102,8 +102,8 @@ outline stays disabled, and split dividers keep their default color:
 }
 ```
 
-Opacity 0.95 leaves a faint backdrop beneath the grain; blur 30 keeps
-visible detail soft. The glass effect is subtle and depends on the wallpaper
+Opacity 0.90 lets more of the backdrop show beneath the grain; blur 30
+keeps visible detail soft. The glass effect is subtle and depends on the wallpaper
 and windows behind cmux; a flat dark backdrop will still look dark.
 Base surfaces inherit one translucent background consistently across the shell,
 Pi, and Neovim. Adjust opacity and blur here, not separately per app.
@@ -112,8 +112,8 @@ up locally in `~/.config/theme-backups/cmux-glass-20260913-091911/ghostty-config
 
 The static shader draws faint monochrome grain below terminal content, leaving
 opaque text unchanged. Its `GRAIN_OPACITY = 0.006` adds only 0.6% coverage above
-the host backdrop: at 95% background opacity, the combined opacity is about
-95.03%. Animation is disabled. It affects terminal panes, not cmux's sidebar.
+the host backdrop: at 90% background opacity, the combined opacity is about
+90.06%. Animation is disabled. It affects terminal panes, not cmux's sidebar.
 
 Replace the previous `custom-shader` entry and remove the old `background-image*`
 settings. Do not use the PNG grain tile: cmux 0.64.22 already paints a translucent
