@@ -10,6 +10,7 @@ const patcher = fileURLToPath(new URL("../patches/intercom-ui.py", import.meta.u
 const generator = fileURLToPath(new URL("./support/intercom_fixture.py", import.meta.url));
 const description = describePatch<{ edits: Record<string, [string, string, number][]>; original: string; module: string; previous: string }>(
   patcher, "{'edits': m['EDITS'], 'original': m['ORIGINAL_MODULE'], 'module': m['MODULE'], 'previous': m['_PREVIOUS_MODULE_SOURCE']}");
+const previousHeading = readFileSync(new URL("../patches/payloads/intercom/legacy/inline-message-before-tool-row.ts.inc", import.meta.url), "utf8");
 const source = process.env.PI_INTERCOM_ROOT ?? join(homedir(), ".pi/agent/npm/node_modules/pi-intercom");
 const sdk = process.env.PI_SDK_ROOT;
 const temp = temporaryDirectory("intercom-ui-");
@@ -48,22 +49,31 @@ test("Intercom validates both files before writing, backs up exact bytes and is 
   expect(readdirSync(backupRoot)).toEqual(backups);
 });
 
-test("the previous expanded-body renderer migrates exactly", () => {
-  const root = sandbox("previous-renderer");
-  checkProcess(run(root));
-  const current = contents(root);
-  writeFileSync(join(root, description.module), description.previous);
-  const backupRoot = join(root, ".config/theme-backups");
-  const beforeBackups = readdirSync(backupRoot);
+for (const [name, previous] of [["expanded-body", description.previous], ["sender-heading", previousHeading]]) {
+  test(`the previous ${name} renderer migrates exactly and rejects local edits`, () => {
+    const root = sandbox(`previous-${name}`);
+    checkProcess(run(root));
+    const current = contents(root);
+    writeFileSync(join(root, description.module), previous);
+    const backupRoot = join(root, ".config/theme-backups");
+    const beforeBackups = readdirSync(backupRoot);
 
-  checkProcess(run(root));
-  expect(contents(root)).toEqual(current);
-  const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
-  expect(added).toHaveLength(1);
-  expect(readFileSync(join(backupRoot, added[0], description.module), "utf8")).toBe(description.previous);
-  checkProcess(run(root));
-  expect(contents(root)).toEqual(current);
-});
+    checkProcess(run(root));
+    expect(contents(root)).toEqual(current);
+    const added = readdirSync(backupRoot).filter(name => !beforeBackups.includes(name));
+    expect(added).toHaveLength(1);
+    expect(readFileSync(join(backupRoot, added[0], description.module), "utf8")).toBe(previous);
+    checkProcess(run(root));
+    expect(contents(root)).toEqual(current);
+
+    writeFileSync(join(root, description.module), previous + "\n// locally modified");
+    const edited = contents(root);
+    const backups = readdirSync(backupRoot);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(edited);
+    expect(readdirSync(backupRoot)).toEqual(backups);
+  });
+}
 
 test("Intercom rejects changed versions, owners, modules and partial/duplicate registrations without writes", () => {
   const [old, patched] = description.edits["index.ts"][0];
@@ -155,7 +165,7 @@ realTest("real Intercom renderers use shared rows for every owner; expansion, pa
     expect(text()).toContain("CALL_PREVIEW"); // Actual invocation arguments, not a duplicate package card.
     const rows = text().split("\n").filter((line: string) => line.trim());
     expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
-    const heading = name === "intercom" ? "◇ Chat" : "⌇ Tool";
+    const heading = name === "intercom" ? "◇ Intercom" : "⌇ Tool";
     expect(rows[1]).toMatch(new RegExp(`^ {6}✓ ${heading}\\s+${name}`));
     tool.setExpanded(true);
     expect(text()).toContain("FULL_OUTGOING_DETAIL");
@@ -191,6 +201,10 @@ realTest("incoming messages use shared gutters, live themes and full expansion w
   const message = { role: "custom", customType: "intercom_message", content: "UNCHANGED_MODEL_CONTENT", details, timestamp: 1750000000010 };
   const original = JSON.stringify(message);
   const component = new CustomMessageComponent(message, renderer.incomingRenderer);
+  const standalone = new renderer.TranscriptContainer(() => 2);
+  const run = new renderer.ToolExecutionComponent("bash", "run", { command: "printf example" }, {}, undefined, { requestRender() {} }, temp);
+  run.updateResult({ content: [], isError: false });
+  standalone.addChild(run);
   for (const themeName of ["osaka-jade", "woody"]) {
     colors.setThemeInstance(colors.loadThemeFromPath(fileURLToPath(new URL(`../themes/${themeName}.json`, import.meta.url)), "truecolor"));
     component.invalidate();
@@ -203,11 +217,17 @@ realTest("incoming messages use shared gutters, live themes and full expansion w
       expect(plain).not.toContain("ATTACHMENT_CONTENT");
       expect(plain).not.toContain("REPLY_COMMAND");
       expect(lines.every((line: string) => tui.visibleWidth(line) <= width)).toBe(true);
+      const runRow = standalone.render(width).map(tui.stripTerminalSequences).find((line: string) => line.includes("✓"));
+      const incomingHeader = lines.find((line: string) => tui.stripTerminalSequences(line).includes("✓")) ?? "";
+      const incomingRow = tui.stripTerminalSequences(incomingHeader);
+      expect(incomingRow.indexOf("✓")).toBe(runRow.indexOf("✓"));
       if (width > 40) {
-        expect(plain).toContain("  ◇ From Peer 界");
-        const bodyPad = width < 80 ? 1 : 4;
+        expect(plain).toContain("✓ ◇ Intercom From Peer 界");
+        const bodyPad = runRow.indexOf("✓") + 2;
         expect(plain.split("\n").find((line: string) => line.includes("MESSAGE_PREVIEW"))).toStartWith(" ".repeat(bodyPad) + "MESSAGE_PREVIEW");
-        expect(lines.join("\n")).toContain(colors.theme.fg("accent", "◇ "));
+        expect(incomingHeader).toContain(colors.theme.fg("accent", "◇"));
+        expect(incomingHeader).toContain(colors.theme.bold(colors.theme.fg("muted", "Intercom")));
+        expect(incomingHeader).toContain(colors.theme.fg("text", "From Peer 界"));
       }
       component.setExpanded(true);
       const expanded = component.render(width);

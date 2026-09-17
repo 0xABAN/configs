@@ -36,7 +36,7 @@ The transcript owns speaker headers and tool invocation rows. Every call keeps a
 row, even when its renderer is silent. Collapsed text cards never bypass it;
 native images stay inline and expansion restores the original detailed bodies.
 Built-in names retain their action labels. Explicit families cover Web, Agent,
-Batch, Flow, Ask, Tasks, Goal, Chat and MCP; unknown operations use Tool.
+Batch, Flow, Ask, Tasks, Goal, Intercom and MCP; unknown operations use Tool.
 Registered owner metadata identifies MCP forwarding/direct registrations and
 known package error contracts, not exemptions from the shared layout.
 
@@ -49,9 +49,11 @@ and browser approval waits keep an expansion hint.
 
 Package renderers still own Todos, Agents and incoming Intercom messages, while
 the host owns invocation rows, notification wrapping and native dialogs. Incoming
-Intercom messages retain the sender heading/preview and expanded metadata,
-reply hint and attachments. No execution, delivery or stored/model content is
-changed. Do not add a second outer margin to individual renderers.
+Intercom messages use `✓ ◇ Intercom From <sender>` at the standalone tool
+indent, with an indented preview and expanded metadata, reply hint and
+attachments. Outgoing rows use the same bold Intercom label. No execution,
+delivery or stored/model content is changed. Do not add a second outer margin
+to individual renderers.
 
 The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
 Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`

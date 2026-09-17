@@ -37,20 +37,15 @@ export class InlineMessageComponent implements Component {
 
   render(width: number): string[] {
     if (width <= 0) return [];
-    // Match the host's standalone action gutter, including its reserved tree columns.
-    const transcriptPad = width < 80
-      ? Math.min(1, Math.max(0, Math.floor((width - 2) / 2)))
-      : Math.min(Math.max(0, this.outputPad) + 2, width - 1);
-    const headerPad = transcriptPad + (width - transcriptPad >= 6 ? 3 : 0);
-    const bodyPad = Math.min(headerPad + 2, width - 1);
-    const bodyWidth = Math.max(1, width - bodyPad);
+    const headerPad = Math.min(Math.max(0, this.outputPad), width - 1);
+    // Match the host transcript body, inside its already-inset viewport.
+    const bodyPad = Math.min(width < 80 ? 1 : Math.max(0, this.outputPad + 2), Math.max(0, Math.floor((width - 2) / 2)));
+    const bodyWidth = Math.max(1, width - 2 * bodyPad);
     const indent = " ".repeat(bodyPad);
     const clean = (text: string) => stripTerminalSequences(text).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "");
     const senderName = clean(this.from.name || this.from.id.slice(0, 8)).replace(/\s+/g, " ");
-    const heading = this.theme.fg("muted", "✓") + " " + this.theme.fg("accent", "◇") + " "
-      + this.theme.bold(this.theme.fg("muted", "Intercom")) + " " + this.theme.fg("text", `From ${senderName}`);
-    const titleWidth = width - headerPad;
-    const lines = [" ".repeat(headerPad) + truncateToWidth(heading, titleWidth, titleWidth < 4 ? "" : "...")];
+    const lines = [truncateToWidth(" ".repeat(headerPad) + this.theme.fg("accent", "◇ ")
+      + this.theme.bold(this.theme.fg("text", `From ${senderName}`)), width)];
     if (this.collapsed) {
       lines.push(indent + this.theme.fg("text", truncateToWidth(clean(this.message.content.text).replace(/\s+/g, " ").trim(), bodyWidth)));
       lines.push(indent + truncateToWidth(keyHint("app.tools.expand", "to expand"), bodyWidth));

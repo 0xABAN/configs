@@ -31,7 +31,7 @@ const ACTIONS = {
     ask_user_question: ["◇", "Ask"],
     todo: ["☷", "Tasks"],
     create_goal: ["◇", "Goal"],
-    intercom: ["◇", "Intercom"],
+    intercom: ["◇", "Chat"],
 };
 
 // Exact operation names, never a fuzzy "search" match (which could be a database).

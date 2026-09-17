@@ -30,6 +30,7 @@ PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-u
 PRE_SEPARATOR_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-separator-padding.js.inc')
 PRE_SOURCE_READ_MODULE_SOURCE = read_payload('host/legacy/transcript-before-source-read.js.inc')
 PRE_UNIVERSAL_TOOLS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-universal-tools.js.inc')
+PRE_INTERCOM_LABEL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-intercom-label.js.inc')
 PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
 PRE_DASH_REMOVAL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action-dash-removal.js.inc')
 # Derive the exact older background helpers from the frozen separator revision,
@@ -252,7 +253,8 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
+            (EDITS, (MODULE_SOURCE, PRE_INTERCOM_LABEL_MODULE_SOURCE,
+                     PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
                      PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
                      PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
@@ -288,7 +290,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise current_error
     if state == "patched":
         if sources.get(MODULE) in (
-            PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE,
+            PRE_INTERCOM_LABEL_MODULE_SOURCE, PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE,
             PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,

@@ -173,7 +173,7 @@ export default function (pi) {
                 "cream_separator": bool(re.search(r"\x1b\[38;2;222;222;197m[^\n]*─{110}", screen)),
                 "powerline_footer": "Faux Model" in plain and "context" in plain and "↳ CUSTOM_HOST_PROMPT" in plain,
                 "offline_response": "OFFLINE_CUSTOM_HOST_RESPONSE" in (run / "response.json").read_text(),
-                "intercom_invocation": bool(re.search(r'✓ ◇ Chat +intercom\(action="status"\)', plain)),
+                "intercom_invocation": bool(re.search(r'✓ ◇ Intercom +intercom\(action="status"\)', plain)),
                 "web_invocations": all(re.search(r"✓ ◎ Web +" + name + r"\(", plain) for name in (
                     "web_search", "fetch_content", "source_check", "get_search_content", "exa_web_search_exa",
                 )),
@@ -184,8 +184,8 @@ export default function (pi) {
                 "arguments_redacted": 'apiKey="[redacted]"' in plain and "DO_NOT_DISPLAY" not in plain,
                 "no_custom_cards": "CUSTOM_CALL_CARD" not in plain and "CUSTOM_RESULT_CARD" not in plain,
                 "intercom_no_duplicate_body": "INTERCOM_EXPANDED_DETAIL" not in plain and "intercom status" not in plain,
-                "intercom_sender": "◇ From Fixture peer" in plain,
-                "intercom_preview": "INTERCOM_PREVIEW" in plain and "INTERCOM_ATTACHMENT" not in plain,
+                "intercom_sender": bool(re.search(r"(?m)^ {8}✓ ◇ Intercom From Fixture peer$", plain)),
+                "intercom_preview": bool(re.search(r"(?m)^ {10}INTERCOM_PREVIEW$", plain)) and "INTERCOM_ATTACHMENT" not in plain,
                 "intercom_no_card": "From:" not in plain and "╭ From" not in plain,
                 "intercom_model_content_hidden": "INTERCOM_MODEL_CONTENT" not in plain,
             }

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Align pi-intercom 0.13.0 incoming messages with the transcript; no delivery edits.
 
-Outgoing renderers stay native. The host's owner-checked compact-row allowance
-hides them only while collapsed. Validate both incoming source anchors together
+Outgoing renderers stay native. The host's shared invocation row hides their
+bodies only while collapsed. Validate both incoming source anchors together
 before backing up or writing; unknown/partial installations refuse.
 """
 import json
@@ -14,14 +14,15 @@ from patch_support import read_payload, backup_sources, write_sources, replace_c
 MODULE = "ui/inline-message.ts"
 ORIGINAL_MODULE = read_payload("intercom/inline-message-original.ts.inc")
 MODULE_SOURCE = read_payload("intercom/inline-message.ts.inc")
+PRE_TOOL_ROW_MODULE = read_payload("intercom/legacy/inline-message-before-tool-row.ts.inc")
 _BODY_DECLARATION = '    const body = clean(this.bodyText || this.message.content.text);'
-_PREVIOUS_MODULE_SOURCE = MODULE_SOURCE.replace(
+_PREVIOUS_MODULE_SOURCE = PRE_TOOL_ROW_MODULE.replace(
     '    if (this.collapsed) {',
     _BODY_DECLARATION + "\n\n    if (this.collapsed) {", 1,
 ).replace(
     _BODY_DECLARATION + "\n    const add =", "    const add =", 1,
 )
-if _PREVIOUS_MODULE_SOURCE == MODULE_SOURCE:
+if _PREVIOUS_MODULE_SOURCE == PRE_TOOL_ROW_MODULE:
     raise ValueError("Intercom cleanup migration anchor changed")
 EDITS = {
     "index.ts": [
@@ -34,7 +35,7 @@ EDITS = {
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """The exact renderer and registration must agree; never repair half a patch."""
     original = sources[MODULE] == ORIGINAL_MODULE
-    previous = sources[MODULE] == _PREVIOUS_MODULE_SOURCE
+    previous = sources[MODULE] in (_PREVIOUS_MODULE_SOURCE, PRE_TOOL_ROW_MODULE)
     current = sources[MODULE] == MODULE_SOURCE
     if not original and not previous and not current:
         raise ValueError("Intercom incoming renderer changed; review upstream first")

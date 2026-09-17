@@ -98,6 +98,7 @@ for (const helper of [
   "transcript-before-single-action.js.inc",
   "transcript-before-single-action-dash-removal.js.inc",
   "transcript-before-universal-tools.js.inc",
+  "transcript-before-intercom-label.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -1053,7 +1054,7 @@ realTest("tool families and all MCP entrypoints receive explicit names without f
     ["SubagentWorkflow", {}, "project-extension", "Workflow", "Flow"],
     ["ask_user_question", {}, "project-extension", "Ask", "Ask"],
     ["todo", {}, "project-extension", "Todo", "Tasks"],
-    ["intercom", {}, "npm:pi-intercom", "Intercom", "Chat"],
+    ["intercom", {}, "npm:pi-intercom", "Intercom", "Intercom"],
     ["create_goal", {}, "project-extension", "Goal", "Goal"],
     ["powershell", { command: "Get-Date" }, "builtin", "PowerShell", "Run"],
     ["constructor", {}, "project-extension", "Web", "Tool"],

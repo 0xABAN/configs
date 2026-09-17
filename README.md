@@ -263,7 +263,8 @@ The existing input/footer are unchanged.
 
 Every collapsed tool uses the same row, including custom and silent renderers.
 Native path/command labels remain; web tools use **Web**, MCP scripts **Batch**,
-agent workflows **Flow**, questions **Ask**, todos **Tasks**, and Intercom **Chat**.
+agent workflows **Flow**, questions **Ask**, and todos **Tasks**. Both incoming
+and outgoing Intercom messages use **Intercom**.
 Unknown operations use **Tool**; MCP management/discovery uses **MCP**. Web/MCP
 rows show the underlying invocation and named arguments, not a second text card:
 
@@ -324,10 +325,11 @@ Restart Pi to apply host changes; `/reload` alone is not enough.
 
 ### Intercom
 
-Incoming messages use a `◇ From <sender>` heading and a one-line message preview,
-with the transcript's gutters and live theme colors rather than a rounded card.
-Tool-output expansion reveals the full body, sender/message metadata, reply hint
-and attachments. Outgoing calls collapse to the existing host invocation row;
+Incoming messages use `✓ ◇ Intercom From <sender>`, aligned with standalone tool
+rows, with a one-line preview indented beneath it. Only the **Intercom** label is
+bold, matching outgoing calls' label and the other action rows. Tool-output
+expansion reveals the full body, sender/message metadata, reply hint and
+attachments. Outgoing calls collapse to the existing host invocation row;
 expanding restores Intercom's native call/result renderers. Delivery, reply
 tracking, stored messages and model-visible content are unchanged.
 
