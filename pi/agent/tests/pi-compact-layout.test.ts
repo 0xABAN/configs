@@ -102,6 +102,7 @@ realTest("native widget stack shares live short-window budgets without wrapping 
   const { installActivityBudget } = await import(pathToFileURL(join(root, MODULE)).href);
   const { Container } = await import(pathToFileURL(join(root, "node_modules/@earendil-works/pi-tui/dist/index.js")).href);
   const app = Object.create(InteractiveMode.prototype);
+  app.runtimeHost = { session: { isCompacting: false } };
   app.ui = { terminal: { rows: 40 }, requestRender() {} };
   app.extensionWidgetsAbove = new Map();
   app.extensionWidgetsBelow = new Map();
