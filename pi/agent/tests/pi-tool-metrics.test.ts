@@ -111,7 +111,7 @@ test("metrics follow short statements with one space rather than filling the row
     ["write", { path: "out.txt" }, "out.txt", { lines: 0 }, "0 lines · 1.2s"],
     ["edit", { path: "app.ts" }, "app.ts", { edits: 2 }, "2 edits · 1.2s"],
     ["bash", { command: "git status" }, "git status", undefined, "1.2s"],
-    ["intercom", {}, "intercom", undefined, "1.2s"],
+    ["intercom", {}, "intercom()", undefined, "1.2s"],
   ] as const) {
     const call = component({ toolName, args, transcriptDurationMs: 1200,
       result: { isError: false, content: [], details: { configsTranscript: stats } } });

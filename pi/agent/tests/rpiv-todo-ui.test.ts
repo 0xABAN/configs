@@ -258,7 +258,7 @@ realTest("actual status formatters use distinct geometry, muted completion, live
   }
 });
 
-realTest("Todo uses the native Tool action row without a custom body", async () => {
+realTest("Todo uses the shared Tasks action row without a custom body", async () => {
   const m = await real();
   let definition: any;
   m.registerTodoTool({ registerTool(value: any) { definition = value; } });
@@ -278,14 +278,14 @@ realTest("Todo uses the native Tool action row without a custom body", async () 
   for (const width of [40, 80]) expect(row.render(width)).toEqual([]);
   const { actionLines, TranscriptContainer } = await import(pathToFileURL(join(sdk!, "dist/modes/interactive/components/transcript.js")).href);
   const action = text(m, { render: () => actionLines(row, 80), invalidate() {} });
-  expect(action).toMatch(/Tool\s+todo/);
-  expect(action).not.toContain("漢字 full label");
+  expect(action).toMatch(/Tasks\s+todo\(/);
+  expect(action).toContain("漢字 full label");
   const transcript = new TranscriptContainer(() => 1, () => Infinity);
   transcript.addChild(row);
   const transcriptOutput = text(m, transcript, 80);
-  expect(transcriptOutput).toMatch(/Tool\s+todo/);
+  expect(transcriptOutput).toMatch(/Tasks\s+todo\(/);
   expect(transcriptOutput).not.toContain("▧ Todo");
-  expect(transcriptOutput).not.toContain("漢字 full label");
+  expect(transcriptOutput).toContain("漢字 full label");
 });
 
 realTest("TodoOverlay retains alignment, theme refresh, overflow, expansion, hiding, collapse and registration", async () => {

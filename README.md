@@ -258,19 +258,33 @@ names aligned to the single-tool row. Action names such as **Search** and **Read
 are bold; arguments and timing keep their existing weight. Narration and custom
 messages remain in place. Normal user messages inherit the terminal
 background rather than using a filled box. Each ends with a thin cream separator
-(`#dedec5`, the theme's `toolOutput` tone), spanning the same shared viewport as
-the textarea without another gutter. The existing input/footer are unchanged.
+(`#dedec5`, the theme's `toolOutput` tone), aligned with the editor body's gutter.
+The existing input/footer are unchanged.
 
-Native tools and the installed pi-pretty formatters use compact rows, with error
-summaries kept visible. The existing tool-output expansion action restores their
-original detailed renderers. The `intercom` tool from the installed pi-intercom
-package also collapses to its invocation row; errors retain a visible summary.
-Unknown same-name tools, other custom renderers and image output keep their
-native presentation. Default-shell tool cards share the transcript body's
-horizontal gutters and wrap inside that width.
-Narrow panes reclaim the extra gutter. Self-framed renderers and image bodies
-keep their own geometry. There are no per-row click controls. Component order
-is preserved; mixed text/tool/text blocks inside one assistant message are not split.
+Every collapsed tool uses the same row, including custom and silent renderers.
+Native path/command labels remain; web tools use **Web**, MCP scripts **Batch**,
+agent workflows **Flow**, questions **Ask**, todos **Tasks**, and Intercom **Chat**.
+Unknown operations use **Tool**; MCP management/discovery uses **MCP**. Web/MCP
+rows show the underlying invocation and named arguments, not a second text card:
+
+```text
+✓ ◎ Web   exa/web_search_exa(query="…", numResults=5) 1.2s
+✓ ⌇ Tool  server/unknown_operation(id="…") 0.3s
+```
+
+Terminal controls and credential fields/URL credentials are removed from argument
+previews; originals remain unchanged. Long previews truncate, and expansion wraps
+arguments (up to 50K characters/20 levels) and restores native detailed renderers.
+This is not a general secret scanner for free-form scripts, commands or result
+bodies. Native images stay inline even when custom text cards are hidden.
+Errors retain summaries; known web/MCP partial failures or actionable feedback
+use `!`. Browser approval waits retain an expansion hint. Native approval and
+question interfaces are unchanged.
+
+Expanded default-shell cards share the transcript's horizontal gutters. Narrow
+panes reclaim the extra gutter; self-framed renderers and images keep their own
+geometry. There are no per-row click controls. Component order is preserved;
+mixed text/tool/text blocks inside one assistant message are not split.
 
 Completed compact rows append result counts and elapsed call time directly after
 the statement, separated by one space, for example `README.md 152 lines · 1.2s`.

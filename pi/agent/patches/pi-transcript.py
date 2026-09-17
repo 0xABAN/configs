@@ -29,6 +29,7 @@ PRE_INLINE_METRICS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-i
 PRE_USER_SEPARATOR_MODULE_SOURCE = read_payload('host/legacy/transcript-before-user-separator.js.inc')
 PRE_SEPARATOR_PADDING_MODULE_SOURCE = read_payload('host/legacy/transcript-before-separator-padding.js.inc')
 PRE_SOURCE_READ_MODULE_SOURCE = read_payload('host/legacy/transcript-before-source-read.js.inc')
+PRE_UNIVERSAL_TOOLS_MODULE_SOURCE = read_payload('host/legacy/transcript-before-universal-tools.js.inc')
 PRE_SINGLE_ACTION_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action.js.inc')
 PRE_DASH_REMOVAL_MODULE_SOURCE = read_payload('host/legacy/transcript-before-single-action-dash-removal.js.inc')
 # Derive the exact older background helpers from the frozen separator revision,
@@ -207,6 +208,15 @@ EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, previous_lookup.replace(
     ' && (owner === "npm:pi-web-access" || owner === "npm:pi-web-access@0.27.0")) };',
 ))
 
+# Universal rows need provenance for protocol-specific names/errors, not a card allowlist.
+PRE_UNIVERSAL_TOOLS_LOOKUP = EDITS[BASE + "interactive-mode.js"][2]
+EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, '''    getRegisteredToolDefinition(toolName) {
+        const definition = withBuiltInRenderers(toolName, this.session.getToolDefinition(toolName));
+        if (!definition) return definition;
+        const source = this.session.getAllTools().find(tool => tool.name === toolName)?.sourceInfo?.source;
+        return { ...definition, configsTranscriptSource: source };
+    }''')
+
 # Keep the supported layout/helper migrations, but require 0.85.1's renderer
 # lookup in every revision. An old host method must not drop built-in renderers.
 for previous_edits in (PRE_METRICS_EDITS, LEGACY_EDITS):
@@ -242,7 +252,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
+            (EDITS, (MODULE_SOURCE, PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
                      PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
                      PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
                      PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
@@ -255,7 +265,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         variants = []
         for revision, helpers in revisions:
             variants.append((revision, helpers))
-            for lookup in (PRE_SOURCE_READ_LOOKUP, PRE_INTERCOM_LOOKUP):
+            for lookup in (PRE_UNIVERSAL_TOOLS_LOOKUP, PRE_SOURCE_READ_LOOKUP, PRE_INTERCOM_LOOKUP):
                 previous = {name: list(edits) for name, edits in revision.items()}
                 previous[BASE + "interactive-mode.js"][2] = lookup
                 variants.append((previous, helpers))
@@ -278,7 +288,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
         raise current_error
     if state == "patched":
         if sources.get(MODULE) in (
-            PRE_SOURCE_READ_MODULE_SOURCE,
+            PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE,
             PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
             PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
             PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,

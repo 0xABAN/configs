@@ -33,21 +33,25 @@ installed packages, and runtime locks out of commits.
 
 The host inset patch owns the outer viewport in regular and fullscreen modes.
 The transcript owns speaker headers and tool invocation rows. Every call keeps a
-row, even when its renderer is silent. Built-in names retain their action labels;
-other names use `⌇ Tool <name>` without exposing arbitrary extension arguments.
-Custom cards, images, and expanded output stay intact below their invocation row.
-Package renderers own Todos, Agents and incoming Intercom messages; Todo keeps
-its schema, state and execution while its silent hooks leave the native Tool
-action row as the only Todo invocation body. The host owns notification
-wrapping and native dialogs. Intercom's installed npm owner
-and `intercom` tool name opt into collapsed invocation-only output. Its native
-expanded renderers, error summaries and images remain available. Incoming
-messages use a sender heading and message preview; expansion retains the full
-body, metadata, reply hint and attachments. No delivery or stored/model content
-is changed. `pi-web-access` 0.27.0's `get_search_content` also uses only the
-standard Tool row when collapsed. Expansion retains its native card; lookup
-errors reported through `details.error` stay visible. Other web tools keep their
-own cards. Do not add a second outer margin to individual renderers.
+row, even when its renderer is silent. Collapsed text cards never bypass it;
+native images stay inline and expansion restores the original detailed bodies.
+Built-in names retain their action labels. Explicit families cover Web, Agent,
+Batch, Flow, Ask, Tasks, Goal, Chat and MCP; unknown operations use Tool.
+Registered owner metadata identifies MCP forwarding/direct registrations and
+known package error contracts, not exemptions from the shared layout.
+
+Generic rows show actual named arguments, with terminal controls and credential
+fields/URL credentials removed from the preview. Expansion wraps up to 50K
+characters and 20 levels; free-form scripts and native result bodies are not
+secret-scanned. The original arguments/results are never rewritten. Known web
+and MCP errors retain summaries, partial failures/actionable feedback use `!`,
+and browser approval waits keep an expansion hint.
+
+Package renderers still own Todos, Agents and incoming Intercom messages, while
+the host owns invocation rows, notification wrapping and native dialogs. Incoming
+Intercom messages retain the sender heading/preview and expanded metadata,
+reply hint and attachments. No execution, delivery or stored/model content is
+changed. Do not add a second outer margin to individual renderers.
 
 The compact-layout host patch exposes `tui.configsActivityRows()` to our Todo and
 Agent factories. Below 24 terminal rows, registered `rpiv-todos` and `agents`
@@ -60,10 +64,10 @@ rendering, not registration, so resizing and widget removal immediately update
 the allocation.
 
 Keep theme reads live and preserve native components, cursor markers, image
-payloads, selection, expansion, and session ordering. The transcript's explicit
-pi-pretty, Intercom and source-read owner allowances protect other custom
-renderers; do not replace them with tool-name heuristics. The terminal owns the
-base background.
+payloads, selection, expansion, and session ordering. Use exact MCP operation
+names for Web classification, never fuzzy matches such as any tool containing
+"search". Only known package metadata may override display status; an arbitrary
+extension's `details.error` can be domain data. The terminal owns the base background.
 
 Plan-mode status formatting is pure; the entrypoint owns status publication,
 tool restoration, and persistence. Whimsical's compaction adapter contains the
@@ -224,8 +228,11 @@ same launcher helper used at activation, and launches **that executable** in
 response must show `◆ You`, `● Pi`, the cream separator, a two-column outer inset
 and the configured Powerline footer. Intercom must show only its invocation row
 when collapsed, a borderless incoming sender/preview, and full details/attachments
-after expansion. Captured ANSI/plain screens, executed
-commands and individual assertions are retained under `cli-smoke/`.
+after expansion. Synthetic web/MCP registrations cover shared labels, actual
+invocations, unknown-operation fallback, credential redaction and expanded custom
+cards. Native confirmation and selection dialogs are exercised independently.
+Captured ANSI/plain screens, executed commands and individual assertions are
+retained under `cli-smoke/`.
 
 The terminal checks load copied pi-pretty and Powerline sources in configured
 order, with the configured theme and Powerline options. They do not load all
@@ -233,8 +240,9 @@ personal extensions: Intercom's entrypoint, MCP and subagents can contact live
 peers/services. Intercom's exact renderer callbacks and pure formatting helpers
 are extracted into a synthetic npm package with its normal owner metadata;
 synthetic tool execution and incoming messages exercise the real host pipeline.
-No Intercom broker, bus or session hooks are loaded. These checks prove renderer
-integration, not delivery. Personal auth, remaining settings,
+No Intercom broker, bus or session hooks are loaded. Web/MCP fixtures load no real
+package entrypoints or network clients. These checks prove renderer integration,
+not delivery or remote execution. Personal auth, remaining settings,
 Node overrides and API-key environment variables are not inherited by commands;
 PATH is retained to locate tools. This is isolation for testing, not a sandbox.
 Only npm installation needs network access; no model calls or lifecycle scripts

@@ -127,21 +127,20 @@ async function loadReal() {
   };
 }
 
-realTest("real Intercom renderers compact only the authorized tool; expansion, partials, errors and images survive", async () => {
+realTest("real Intercom renderers use shared rows for every owner; expansion, partials, errors and images survive", async () => {
   const m = await real();
   const definition = { name: "intercom", ...m.renderers };
   const result = { content: [{ type: "text", text: "FULL_OUTGOING_DETAIL\nsecond line" }], details: { messageId: "message-identifier", reason: "REASON" }, isError: false };
   const before = JSON.stringify(result);
-  for (const [name, owner, compact] of [
-    ["intercom", "npm:pi-intercom", true], ["intercom", "npm:pi-intercom@0.13.0", true],
-    ["intercom", "project-extension", false], ["intercom", "npm:pi-intercom-spoof", false],
-    ["intercom", "npm:pi-intercom@0.14.0", false], ["contact_supervisor", "npm:pi-intercom", false],
+  for (const [name, owner] of [
+    ["intercom", "npm:pi-intercom"], ["intercom", "npm:pi-intercom@0.13.0"],
+    ["intercom", "project-extension"], ["intercom", "npm:pi-intercom-spoof"],
+    ["intercom", "npm:pi-intercom@0.14.0"], ["contact_supervisor", "npm:pi-intercom"],
   ] as const) {
     const app = Object.create(m.InteractiveMode.prototype);
-    app.runtimeHost = { session: { getToolDefinition: () => ({ ...definition, configsTranscriptCompact: true }),
+    app.runtimeHost = { session: { getToolDefinition: () => definition,
       getAllTools: () => [{ name, sourceInfo: { source: owner } }] } };
     const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, name);
-    expect(registered.configsTranscriptCompact).toBe(compact);
     const tool = new m.ToolExecutionComponent(name, "call-id", { action: "send", to: "peer", message: "CALL_PREVIEW" },
       { showImages: false }, registered, { requestRender() {} }, temp);
     const container = new m.TranscriptContainer();
@@ -149,16 +148,15 @@ realTest("real Intercom renderers compact only the authorized tool; expansion, p
     const text = (width = 100) => container.render(width).map(m.tui.stripTerminalSequences).join("\n");
     tool.markExecutionStarted();
     tool.updateResult(result, true);
-    expect(text().includes("Intercom working...")).toBe(!compact);
+    expect(text()).not.toContain("Intercom working...");
     tool.updateResult(result);
     expect(text()).toContain(name);
-    expect(text().includes("FULL_OUTGOING_DETAIL")).toBe(!compact);
-    expect(text().includes("CALL_PREVIEW")).toBe(!compact);
-    if (compact) {
-      const rows = text().split("\n").filter((line: string) => line.trim());
-      expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
-      expect(rows[1]).toMatch(/^ {6}✓ ⌇ Tool\s+intercom/);
-    }
+    expect(text()).not.toContain("FULL_OUTGOING_DETAIL");
+    expect(text()).toContain("CALL_PREVIEW"); // Actual invocation arguments, not a duplicate package card.
+    const rows = text().split("\n").filter((line: string) => line.trim());
+    expect(rows).toHaveLength(2); // Pi header and the standalone invocation row.
+    const heading = name === "intercom" ? "◇ Chat" : "⌇ Tool";
+    expect(rows[1]).toMatch(new RegExp(`^ {6}✓ ${heading}\\s+${name}`));
     tool.setExpanded(true);
     expect(text()).toContain("FULL_OUTGOING_DETAIL");
     expect(text()).toContain("CALL_PREVIEW");
@@ -166,11 +164,13 @@ realTest("real Intercom renderers compact only the authorized tool; expansion, p
     tool.setExpanded(false);
     tool.updateResult({ ...result, isError: true });
     expect(text()).toContain("FULL_OUTGOING_DETAIL"); // Host's error summary stays visible.
-    expect(text().includes("second line")).toBe(!compact);
+    expect(text()).not.toContain("second line");
     for (const width of [100, 40, 12, 4]) {
       expect(container.render(width).every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
     }
     tool.updateResult({ ...result, content: [...result.content, { type: "image", data: "AA==", mimeType: "image/png" }] });
+    expect(text()).not.toContain("FULL_OUTGOING_DETAIL");
+    tool.setExpanded(true);
     const native = tool.render(100);
     expect(container.render(100).slice(-native.length)).toEqual(native);
     expect(tool.toolCallId).toBe("call-id");

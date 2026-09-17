@@ -10,6 +10,7 @@ const { edits, module: modulePath } = describePatch<{ edits: Record<string, [str
   patcher, "{'edits':m['EDITS'],'module':m['MODULE']}");
 const previousLookup = describePatch<[string, string]>(patcher, "m['PRE_INTERCOM_LOOKUP']");
 const previousSourceReadLookup = describePatch<[string, string]>(patcher, "m['PRE_SOURCE_READ_LOOKUP']");
+const previousUniversalLookup = describePatch<[string, string]>(patcher, "m['PRE_UNIVERSAL_TOOLS_LOOKUP']");
 const previousBackground = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_MODULE_SOURCE']");
 const previousBackgroundReset = describePatch<string>(patcher, "m['PRE_USER_BACKGROUND_RESET_MODULE_SOURCE']");
 const temp = temporaryDirectory("pi-transcript-");
@@ -96,6 +97,7 @@ for (const helper of [
   "transcript-before-source-read.js.inc",
   "transcript-before-single-action.js.inc",
   "transcript-before-single-action-dash-removal.js.inc",
+  "transcript-before-universal-tools.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -138,6 +140,8 @@ for (const [name, lookup, previousHelper] of [
   ["pre-Intercom", previousLookup, undefined],
   ["pre-source-read", previousSourceReadLookup, readFileSync(new URL(
     "../patches/payloads/host/legacy/transcript-before-source-read.js.inc", import.meta.url), "utf8")],
+  ["pre-universal-tools", previousUniversalLookup, readFileSync(new URL(
+    "../patches/payloads/host/legacy/transcript-before-universal-tools.js.inc", import.meta.url), "utf8")],
 ] as const) {
   test(`the installed ${name} lookup migrates with exact helper guards and backups`, () => {
     const root = sandbox(name);
@@ -674,7 +678,7 @@ realTest("default tool bodies share transcript gutters without clipping wrapped 
   // The generic fallback uses the host's Text instead; both share the same gutter.
   for (const definition of [intercom, undefined]) {
     const tool = new m.ToolExecutionComponent("intercom", "padding", {}, {}, definition, app.ui, temp);
-    if (!definition) tool.setExpanded(true); // Generic fallback bodies are otherwise compacted.
+    tool.setExpanded(true); // Every collapsed body uses the shared row.
     const output = result("padding", "intercom", "Current session:\n" + "界🙂 long session description ".repeat(20));
     tool.updateResult(output);
     app.chatContainer.clear();
@@ -713,6 +717,7 @@ realTest("native gutter changes leave self-framed and image bodies unchanged", a
     const create = () => new m.ToolExecutionComponent("custom", "native-padding", {}, { showImages: false },
       { ...definition, renderShell }, app.ui, temp);
     const tool = create();
+    tool.setExpanded(true);
     app.chatContainer.clear();
     app.chatContainer.addChild(tool);
     tool.updateResult(result("native-padding", "custom", "text first"));
@@ -722,6 +727,7 @@ realTest("native gutter changes leave self-framed and image bodies unchanged", a
     const output = { content: [{ type: "image", data: "AA==", mimeType: "image/png" }], isError: false };
     tool.updateResult(output);
     const untouched = create();
+    untouched.setExpanded(true);
     untouched.updateResult(output);
     const lines = app.chatContainer.render(90);
     const native = untouched.render(90);
@@ -730,7 +736,89 @@ realTest("native gutter changes leave self-framed and image bodies unchanged", a
   }
 });
 
-realTest("host renderer lookup retains built-in fallbacks without authorizing unknown formatters", async () => {
+realTest("native images remain inline without custom cards across protocols, streaming and expansion", async () => {
+  const m = await real();
+  const previous = m.tui.getCapabilities();
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=";
+  try {
+    for (const images of ["kitty", "iterm2", null]) {
+      m.tui.setCapabilities({ ...previous, images });
+      for (const renderShell of ["default", "self"]) {
+        const app = host(m);
+        const tool = new m.ToolExecutionComponent("fetch_content", "image-preview", { url: "https://example.com/a.png" }, {}, {
+          renderShell,
+          renderCall: () => new m.tui.Text("CUSTOM CALL CARD", 0, 0),
+          renderResult: () => new m.tui.Text("CUSTOM RESULT CARD", 0, 0),
+        }, app.ui, temp);
+        app.chatContainer.addChild(tool);
+        const result = { content: [{ type: "text", text: "IMAGE CONTENT" }, { type: "image", data: png, mimeType: "image/png" }], isError: false };
+        for (const partial of [true, false]) {
+          tool.updateResult(result, partial);
+          for (const width of [100, 40, 12, 100]) {
+            const imageRows = tool.imageComponents.flatMap((image: any, i: number) => [
+              ...tool.imageSpacers[i].render(width), ...image.render(width),
+            ]);
+            expect(imageRows.length > 0).toBe(images !== null);
+            const collapsed = app.chatContainer.render(width);
+            expect(collapsed.join("\n")).not.toContain("CUSTOM");
+            if (imageRows.length) expect(collapsed.slice(-imageRows.length)).toEqual(imageRows);
+            tool.setExpanded(true);
+            const expanded = app.chatContainer.render(width);
+            if (width >= 40) expect(expanded.join("\n")).toContain("CUSTOM CALL CARD");
+            // Native expansion rebuilds image instances (and Kitty IDs); compare current components.
+            const expandedImages = tool.imageComponents.flatMap((image: any, i: number) => [
+              ...tool.imageSpacers[i].render(width), ...image.render(width),
+            ]);
+            if (expandedImages.length) expect(expanded.slice(-expandedImages.length)).toEqual(expandedImages);
+            tool.setExpanded(false);
+          }
+        }
+        tool.setShowImages(false);
+        expect(tool.imageComponents).toHaveLength(0);
+        expect(transcript(m, app)).not.toContain("CUSTOM");
+        expect(tool.result).toBe(result);
+        tool.updateResult({ content: [{ type: "text", text: "TEXT ONLY" }] }, true);
+        expect(tool.imageComponents).toHaveLength(0);
+        expect(transcript(m, app)).not.toContain("TEXT ONLY");
+      }
+    }
+  } finally {
+    m.tui.setCapabilities(previous);
+  }
+});
+
+realTest("mouse events reach visible native bodies, never collapsed custom cards", async () => {
+  const m = await real();
+  const app = host(m);
+  const events: any[] = [];
+  const clickable = { render: () => ["CLICK_CARD"], invalidate() {}, handleMouse(event: any) {
+    events.push(event); return { handled: true };
+  } };
+  const tool = new m.ToolExecutionComponent("custom", "clickable", {}, {}, {
+    renderShell: "self", renderCall: () => clickable,
+  }, app.ui, temp);
+  app.chatContainer.addChild(tool);
+  for (const width of [80, 40]) {
+    tool.setExpanded(true);
+    const rows = app.chatContainer.render(width);
+    const y = rows.findIndex((line: string) => line.includes("CLICK_CARD"));
+    expect(y).toBeGreaterThan(0);
+    events.length = 0;
+    app.chatContainer.handleMouse({ x: 0, y, width, height: rows.length, type: "press", button: "left" });
+    expect(events).toHaveLength(1);
+    expect(events[0].y).toBe(0);
+    tool.setExpanded(false);
+    const collapsed = app.chatContainer.render(width);
+    events.length = 0;
+    for (let y = 0; y < collapsed.length; y++) {
+      app.chatContainer.handleMouse({ x: 0, y, width, height: collapsed.length, type: "press", button: "left" });
+    }
+    expect(events).toHaveLength(0);
+    expect(collapsed.join("\n")).not.toContain("CLICK_CARD");
+  }
+});
+
+realTest("host renderer lookup retains built-in fallbacks and canonical source metadata", async () => {
   const m = await real();
   const { readRenderers } = await import(pathToFileURL(join(fixture, "dist/core/tools/renderers/index.js")).href);
   const app = host(m);
@@ -741,13 +829,14 @@ realTest("host renderer lookup retains built-in fallbacks without authorizing un
     const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "read");
     expect(registered.renderCall).toBe(definition?.renderCall ?? readRenderers.renderCall);
     expect(registered.renderResult).toBe(readRenderers.renderResult);
-    expect(registered.configsTranscriptCompact).toBe(true);
+    expect(registered.configsTranscriptSource).toBe("builtin");
+    expect(registered.configsTranscriptCompact).toBeUndefined();
   }
   app.runtimeHost.session.getToolDefinition = () => undefined;
   expect(m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "unknown")).toBeUndefined();
 });
 
-realTest("owned source reads use one Tool row while expansion, errors and other cards stay native", async () => {
+realTest("all web and MCP tools use one row while expansion retains native cards", async () => {
   const m = await real();
   const app = host(m);
   const definition = {
@@ -756,33 +845,37 @@ realTest("owned source reads use one Tool row while expansion, errors and other 
       output.details?.error ?? "Hello world example · Express.js (1611 chars, showing 0-1611)"
         + (expanded ? `\n${output.content[0].text}` : ""), 0, 0),
   };
-  for (const [name, owner, compact] of [
-    ["get_search_content", "npm:pi-web-access", true],
-    ["get_search_content", "npm:pi-web-access@0.27.0", true],
-    ["get_search_content", "npm:pi-web-access@0.28.0", false],
-    ["get_search_content", "npm:pi-web-access-spoof", false],
-    ["get_search_content", "project-extension", false],
-    ["web_search", "npm:pi-web-access", false],
-    ["fetch_content", "npm:pi-web-access", false],
-    ["source_check", "npm:pi-web-access", false],
+  for (const [name, owner] of [
+    ["get_search_content", "npm:pi-web-access"],
+    ["get_search_content", "npm:pi-web-access@0.27.0"],
+    ["get_search_content", "npm:pi-web-access@0.28.0"],
+    ["get_search_content", "npm:pi-web-access-spoof"],
+    ["get_search_content", "project-extension"],
+    ["web_search", "npm:pi-web-access"],
+    ["fetch_content", "npm:pi-web-access"],
+    ["source_check", "npm:pi-web-access"],
+    ["mcp", "npm:pi-mcp-adapter"],
+    ["mcp__exa", "npm:pi-mcp-adapter"],
+    ["mcpScript", "npm:pi-mcp-adapter"],
+    ["exa_web_search_exa", "npm:pi-mcp-adapter"],
   ] as const) {
     app.runtimeHost.session.getToolDefinition = () => definition;
     app.runtimeHost.session.getAllTools = () => [{ name, sourceInfo: { source: owner } }];
     const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, name);
-    expect(registered.configsTranscriptCompact).toBe(compact);
     const tool = new m.ToolExecutionComponent(name, "source-read", { urlIndex: 0 }, {}, registered, app.ui, temp);
     app.chatContainer.clear();
     app.chatContainer.addChild(tool);
-    expect(transcript(m, app)).toContain("Tool");
-    expect(transcript(m, app).includes("get_content urlIndex=0")).toBe(!compact);
+    expect(transcript(m, app)).toContain(name);
+    expect(transcript(m, app)).not.toContain("get_content urlIndex=0");
 
     const output = result("source-read", name, "FULL SOURCE CONTENT");
     tool.updateResult(output);
     tool.transcriptDurationMs = 10;
     const collapsed = transcript(m, app);
-    expect(collapsed).toMatch(new RegExp(`✓ ⌇ Tool\\s+${name} <0.1s`));
-    expect(collapsed.includes("get_content urlIndex=0")).toBe(!compact);
-    expect(collapsed.includes("1611 chars")).toBe(!compact);
+    expect(collapsed).toContain(`${name}(urlIndex=0) <0.1s`);
+    expect(collapsed).toContain("✓");
+    expect(collapsed).not.toContain("get_content urlIndex=0");
+    expect(collapsed).not.toContain("1611 chars");
     expect(tool.result).toBe(output);
 
     tool.setExpanded(true);
@@ -792,19 +885,21 @@ realTest("owned source reads use one Tool row while expansion, errors and other 
     tool.setExpanded(false);
 
     // pi-web-access reports lookup failures in details.error without isError.
-    const failed = { ...output, details: { error: "Stored response not found" } };
-    tool.updateResult(failed);
-    expect(transcript(m, app)).toContain("Stored response not found");
-    expect(tool.result).toBe(failed);
+    if (name === "get_search_content" && (owner === "npm:pi-web-access" || owner.startsWith("npm:pi-web-access@"))) {
+      const failed = { ...output, details: { error: "Stored response not found" } };
+      tool.updateResult(failed);
+      expect(transcript(m, app)).toContain("Stored response not found");
+      expect(tool.result).toBe(failed);
+    }
 
     tool.updateResult(result("source-read", name, "Execution failed", true));
-    expect(transcript(m, app)).toContain("× ⌇ Tool");
+    expect(transcript(m, app)).toContain("×");
     expect(transcript(m, app)).toContain("Execution failed");
   }
-  expect((definition as any).configsTranscriptCompact).toBeUndefined();
+  expect((definition as any).configsTranscriptSource).toBeUndefined();
 });
 
-realTest("builtin-name overrides keep native cards beneath their invocation unless their formatter opts in", async () => {
+realTest("builtin-name overrides keep custom cards only when expanded regardless of owner", async () => {
   const m = await real();
   const app = host(m);
   const renderCall = () => new m.tui.Text("CUSTOM CALL CARD", 0, 0);
@@ -815,24 +910,19 @@ realTest("builtin-name overrides keep native cards beneath their invocation unle
       app.runtimeHost.session.getToolDefinition = () => definition;
       app.runtimeHost.session.getAllTools = () => [{ name: "read", sourceInfo: { source: owner } }];
       const registered = m.InteractiveMode.prototype.getRegisteredToolDefinition.call(app, "read");
-      expect(registered.configsTranscriptCompact).toBe(owner !== "project-extension");
-      expect((definition as any).configsTranscriptCompact).toBeUndefined();
+      expect(registered.configsTranscriptSource).toBe(owner);
+      expect((definition as any).configsTranscriptSource).toBeUndefined();
       const component = new m.ToolExecutionComponent("read", "override", { path: "a.ts" }, {}, registered, app.ui, temp);
       component.updateResult(result("override", "read", "result body"));
       app.chatContainer.clear();
       app.chatContainer.addChild(component);
-      if (owner === "project-extension") {
-        expect(transcript(m, app)).not.toContain("1 action");
-        expect(transcript(m, app)).toContain("\n      ✓ □ Read");
-        expect(transcript(m, app)).toContain("CUSTOM");
-        const native = component.render(90);
-        expect(app.chatContainer.render(90).slice(-native.length)).toEqual(native);
-      } else {
-        expect(transcript(m, app)).not.toContain("1 action");
-        expect(transcript(m, app)).toContain("\n      ✓ □ Read");
-        component.setExpanded(true);
-        expect(transcript(m, app)).toContain("CUSTOM");
-      }
+      expect(transcript(m, app)).not.toContain("1 action");
+      expect(transcript(m, app)).toContain("\n      ✓ □ Read");
+      expect(transcript(m, app)).not.toContain("CUSTOM");
+      component.setExpanded(true);
+      expect(transcript(m, app)).toContain("CUSTOM");
+      const native = component.render(90);
+      expect(app.chatContainer.render(90).slice(-native.length)).toEqual(native);
     }
   }
 });
@@ -846,6 +936,8 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   app.chatContainer.addChild(Object.freeze({ render: () => ["CUSTOM NOTICE"], invalidate() {} }));
   app.chatContainer.addChild(card);
   expect(transcript(m, app)).toContain("CUSTOM NOTICE");
+  expect(transcript(m, app)).not.toContain("CUSTOM INTERACTIVE CARD");
+  card.setExpanded(true);
   expect(transcript(m, app)).toContain("CUSTOM INTERACTIVE CARD");
   expect(transcript(m, app)).not.toContain("1 action");
   expect(transcript(m, app)).toMatch(/^ {6}○ ⌇ Tool\s+workflow/m);
@@ -859,7 +951,7 @@ realTest("custom renderers, hidden tools, image output and Markdown transformati
   const image = new m.ToolExecutionComponent("read", "image", { path: "test.png" }, { showImages: false }, undefined, app.ui, temp);
   image.updateResult({ content: [{ type: "image", data: "AA==", mimeType: "image/png" }], isError: false });
   app.chatContainer.addChild(image);
-  expect(app.chatContainer.render(90).join("\n")).toContain(image.render(90).join("\n"));
+  expect(app.chatContainer.render(90).join("\n")).not.toContain(image.render(90).join("\n"));
   expect(transcript(m, app)).toContain("2 actions");
 
   const contexts: any[] = [];
@@ -882,28 +974,29 @@ realTest("silent tools retain named invocation rows through execution, expansion
   const app = host(m);
   app.getRegisteredToolDefinition = () => definition;
   const call = assistant([
-    toolCall("s", "mcpScript", { query: "DO_NOT_ECHO_ARGUMENTS" }),
+    toolCall("s", "mcpScript", { code: 'emit("PUBLIC_ARGUMENTS")', apiKey: "DO_NOT_ECHO_ARGUMENTS" }),
     toolCall("f", "quiet_tool", {}),
   ]);
   app.sessionManager.appendMessage(call);
   await app.handleEvent({ type: "message_start", message: call });
   await app.handleEvent({ type: "message_update", message: call });
   await app.handleEvent({ type: "message_end", message: call });
-  expect(transcript(m, app)).toMatch(/○ ⌇ Tool\s+mcpScript/);
+  expect(transcript(m, app)).toMatch(/○ ⋈ Batch\s+mcpScript/);
   expect(transcript(m, app)).toContain("2 actions");
 
   const results = [result("s", "mcpScript", "HIDDEN_RESULT"), result("f", "quiet_tool", "Permission denied", true)];
   for (const item of results) {
     const event = { toolCallId: item.toolCallId, toolName: item.toolName };
     await app.handleEvent({ type: "tool_execution_start", ...event, args: {} });
-    expect(transcript(m, app)).toMatch(new RegExp(`◌ ⌇ Tool\\s+${item.toolName}`));
+    const heading = item.toolName === "mcpScript" ? "⋈ Batch" : "⌇ Tool";
+    expect(transcript(m, app)).toMatch(new RegExp(`◌ ${heading}\\s+${item.toolName}`));
     await app.handleEvent({ type: "tool_execution_update", ...event, partialResult: { content: [{ type: "text", text: "PARTIAL_RESULT" }] } });
-    expect(transcript(m, app)).toMatch(new RegExp(`◌ ⌇ Tool\\s+${item.toolName}`));
+    expect(transcript(m, app)).toMatch(new RegExp(`◌ ${heading}\\s+${item.toolName}`));
     await app.handleEvent({ type: "tool_execution_end", ...event, result: item, isError: item.isError });
     app.sessionManager.appendMessage(item);
   }
   const finished = transcript(m, app);
-  expect(finished).toMatch(/✓ ⌇ Tool\s+mcpScript/);
+  expect(finished).toMatch(/✓ ⋈ Batch\s+mcpScript/);
   expect(finished).toMatch(/× ⌇ Tool\s+quiet_tool/);
   expect(finished).toContain("Permission denied");
   expect(finished).not.toContain("HIDDEN_RESULT");
@@ -915,7 +1008,7 @@ realTest("silent tools retain named invocation rows through execution, expansion
     for (const width of [40, 70, 120, 70, 40, 90]) {
       const rendered = app.chatContainer.render(width);
       const text = rendered.map(m.tui.stripTerminalSequences).join("\n");
-      expect(text).toMatch(/⌇ Tool\s+mcpScript/);
+      expect(text).toMatch(/⋈ Batch\s+mcpScript/);
       expect(text).toMatch(/⌇ Tool\s+quiet_tool/);
       expect(text).toContain("2 actions");
       expect(rendered.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
@@ -928,10 +1021,168 @@ realTest("silent tools retain named invocation rows through execution, expansion
   replay.renderSessionItems([call, ...results]);
   expect(transcript(m, replay)).toBe(finished);
 
-  // Generic rows identify the registered tool, never infer labels from arbitrary arguments.
-  const line = m.actionLines({ toolName: "constructor", args: { path: "DO_NOT_ECHO_ARGUMENTS" } }, 90)[0];
+  // Arbitrary arguments cannot spoof a label; credentials never enter the shared row.
+  const line = m.actionLines({ toolName: "constructor", args: { apiKey: "DO_NOT_ECHO_ARGUMENTS" } }, 90)[0];
   expect(m.tui.stripTerminalSequences(line)).toMatch(/⌇ Tool\s+constructor/);
   expect(line).not.toContain("DO_NOT_ECHO_ARGUMENTS");
+});
+
+realTest("tool families and all MCP entrypoints receive explicit names without fuzzy guesses", async () => {
+  const m = await real();
+  for (const [toolName, args, source, label, expected] of [
+    ["web_search", { query: "hello" }, "npm:pi-web-access", "Web Search", "Web"],
+    ["fetch_content", {}, "npm:pi-web-access@0.27.0", "Fetch", "Web"],
+    ["source_check", {}, "npm:pi-web-access", "Check", "Web"],
+    ["get_search_content", {}, "npm:pi-web-access", "Content", "Web"],
+    ["renamed_fetch", {}, "npm:pi-web-access", "Fetch", "Web"],
+    ["renamed_fetch", {}, "npm:pi-web-access-spoof", "Fetch", "Tool"],
+    ["mcp", { tool: "exa/web_search_exa" }, "npm:pi-mcp-adapter", "MCP", "Web"],
+    ["mcp", { tool: "exa_web_fetch_exa" }, "npm:pi-mcp-adapter@2.32.1", "MCP", "Web"],
+    ["mcp__exa", { tool: "web_search_exa" }, "npm:pi-mcp-adapter", "MCP: exa", "Web"],
+    ["exa_web_search_exa", {}, "npm:pi-mcp-adapter", "MCP: web_search_exa", "Web"],
+    ["custom_prefix_fetch", {}, "npm:pi-mcp-adapter", "MCP: web_fetch_exa", "Web"],
+    ["mcp", { search: "web search tools" }, "npm:pi-mcp-adapter", "MCP", "MCP"],
+    ["mcp", { describe: "exa/web_search_exa" }, "npm:pi-mcp-adapter", "MCP", "MCP"],
+    ["mcp", { action: "auth-start", tool: "exa/web_search_exa" }, "npm:pi-mcp-adapter", "MCP", "MCP"],
+    ["mcp", { tool: "railway/search_projects" }, "npm:pi-mcp-adapter", "MCP", "Tool"],
+    ["mcp__railway", { tool: "search_projects" }, "npm:pi-mcp-adapter", "MCP: railway", "Tool"],
+    ["mcpScript", { code: 'await tools.web_search_exa({query: "test"})' }, "npm:pi-mcp-adapter", "MCP Script", "Batch"],
+    ["database_search", {}, "npm:pi-mcp-adapter", "MCP: search", "Tool"],
+    ["Agent", {}, "project-extension", "Agent", "Agent"],
+    ["get_subagent_result", {}, "project-extension", "Agent result", "Agent"],
+    ["SubagentWorkflow", {}, "project-extension", "Workflow", "Flow"],
+    ["ask_user_question", {}, "project-extension", "Ask", "Ask"],
+    ["todo", {}, "project-extension", "Todo", "Tasks"],
+    ["intercom", {}, "npm:pi-intercom", "Intercom", "Chat"],
+    ["create_goal", {}, "project-extension", "Goal", "Goal"],
+    ["powershell", { command: "Get-Date" }, "builtin", "PowerShell", "Run"],
+    ["constructor", {}, "project-extension", "Web", "Tool"],
+  ] as const) {
+    const component = { toolName, args, toolDefinition: { label, configsTranscriptSource: source } };
+    const line = m.tui.stripTerminalSequences(m.actionLines(component, 120)[0]);
+    expect(line, toolName).toMatch(new RegExp(`^○ \\S+ ${expected}\\s+`));
+  }
+});
+
+realTest("invocation rows unwrap MCP arguments, redact credentials and expand beyond the preview", async () => {
+  const m = await real();
+  const definition = { configsTranscriptSource: "npm:pi-mcp-adapter", label: "MCP" };
+  const render = (component: any, width = 180) => m.actionLines(component, width).map(m.tui.stripTerminalSequences).join("\n");
+  const call = { toolName: "mcp", toolDefinition: definition,
+    args: { tool: "exa/web_search_exa", args: { query: "界 hello", numResults: 5 } } };
+  const objectCall = render(call);
+  expect(objectCall).toContain('Web    exa/web_search_exa(query="界 hello", numResults=5)');
+  expect(render({ ...call, args: { ...call.args, args: JSON.stringify(call.args.args) } })).toBe(objectCall);
+  expect(render({ ...call, toolName: "mcp__exa", toolDefinition: { ...definition, label: "MCP: exa" },
+    args: { tool: "web_search_exa", args: call.args.args } })).toBe(objectCall);
+  expect(render({ ...call, args: { tool: "unknown/operation", args: { id: 7 } } }))
+    .toContain("Tool   unknown/operation(id=7)");
+  expect(render({ ...call, args: { tool: "unknown/operation", args: '{"apiKey":"SECRET"' } }))
+    .toContain("[invalid JSON arguments]");
+
+  const secrets = {
+    apiKey: "SECRET_API", nested: { password: "SECRET_PASSWORD", access_token: "SECRET_TOKEN" },
+    headers: { Authorization: "SECRET_HEADER" }, env: { OPENAI_API_KEY: "SECRET_ENV" },
+    url: "https://user:SECRET_PASS@example.com/page?query=visible&api_key=SECRET_QUERY#access_token=SECRET_FRAGMENT",
+    redirectUrl: "https://localhost/callback?code=SECRET_CODE&state=SECRET_STATE",
+    query: "visible\n\x1b[31mvalue\x1b[0m\x1b]0;injected-title\x07",
+    count: 0, flag: false, nothing: null, max_tokens: 42,
+  };
+  const secretCall = { ...call, args: { tool: "unknown/operation", args: secrets }, expanded: true };
+  const before = JSON.stringify(secretCall);
+  const sanitized = render(secretCall);
+  expect(sanitized).not.toContain("SECRET");
+  expect(sanitized).not.toContain("injected-title");
+  expect(sanitized).toContain("[redacted]");
+  expect(sanitized).toContain("max_tokens=42");
+  expect(sanitized).toContain("count=0");
+  expect(sanitized).toContain("flag=false");
+  expect(sanitized).toContain("nothing=null");
+  expect(JSON.stringify(secretCall)).toBe(before);
+
+  const longCall = { toolName: "fetch_content", args: { url: "https://example.com/", prompt: "界 long ".repeat(80) + "TAIL_ARGUMENT" } };
+  expect(render(longCall, 80)).not.toContain("TAIL_ARGUMENT");
+  expect(render({ ...longCall, expanded: true }, 80)).toContain("TAIL_ARGUMENT");
+  for (const expanded of [false, true]) {
+    for (const width of [120, 80, 40, 12, 4, 1]) {
+      expect(m.actionLines({ ...longCall, expanded }, width).every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+    }
+  }
+  const longUser = "PRIVATE_URL_USER".repeat(100);
+  expect(render({ toolName: "fetch_content", args: { url: `https://${longUser}@example.com/path` } }, 40))
+    .not.toContain("PRIVATE_URL_USER");
+  const cyclic: any = { value: "hello" };
+  cyclic.self = cyclic;
+  expect(render({ toolName: "custom", args: cyclic })).toContain("[circular]");
+  expect(render({ toolName: "custom", args: { data: "x".repeat(100_000) }, expanded: true }))
+    .toMatch(/arguments\s+truncated/);
+  const deep: any = {};
+  let tip = deep;
+  for (let i = 0; i < 30; i++) tip = tip.next = {};
+  expect(render({ toolName: "custom", args: deep, expanded: true })).toMatch(/arguments\s+truncated/);
+});
+
+realTest("web and MCP states preserve pending, partial, failures, approval hints and history", async () => {
+  const m = await real();
+  const cases = [
+    { name: "fetch_content", details: { error: "Fetch failed" }, status: "×", notice: "Fetch failed" },
+    { name: "fetch_content", details: { urlCount: 2, successful: 0 }, status: "×", notice: "2 of 2 URLs failed" },
+    { name: "fetch_content", details: { urlCount: 2, successful: 1 }, status: "!", notice: "1 of 2 URLs failed" },
+    { name: "web_search", details: { queryCount: 2, successfulQueries: 0 }, status: "×", notice: "2 of 2 queries failed" },
+    { name: "web_search", details: { queryCount: 2, successfulQueries: 1 }, status: "!", notice: "1 of 2 queries failed" },
+    { name: "web_search", details: { queryCount: 1, successfulQueries: 1, totalResults: 0 }, status: "✓" },
+    { name: "source_check", details: { artifact: { errors: [{ query: "a", error: "timeout" }] } }, status: "!", notice: "search errors" },
+    { name: "get_search_content", details: { error: "Not found" }, status: "×", notice: "Not found" },
+    { name: "mcp", details: { error: "tool_error", message: "Remote failure" }, status: "×", notice: "Remote failure" },
+    { name: "mcp__exa", details: { error: "call_failed" }, status: "×", notice: "DETAIL_BODY" },
+    { name: "exa_web_search_exa", details: { error: "input_required_needs_ui", message: "Open a UI" }, status: "×", notice: "Open a UI" },
+    { name: "mcp", details: { error: "auth_required", message: "Log in first" }, status: "!", notice: "Log in first" },
+    { name: "mcp", details: { error: "unknown_tool", message: "Find the correct tool" }, status: "!", notice: "Find the correct tool" },
+    { name: "mcpScript", details: { mode: "script", error: "timeout", message: "Script timed out" }, status: "×", notice: "Script timed out" },
+    { name: "mcpScript", details: { mode: "script", calls: [{ ok: true }, { ok: false, error: "call_failed" }] }, status: "!", notice: "1 of 2 MCP operations failed" },
+    { name: "mcpScript", details: { mode: "script", calls: [{ ok: true }] }, status: "✓" },
+    { name: "custom", details: { error: "domain data, not a tool failure" }, status: "✓" },
+    { name: "custom", details: {}, isError: true, status: "×", notice: "DETAIL_BODY" },
+  ];
+  const definition = (name: string) => ({
+    configsTranscriptSource: name === "custom" ? "npm:unrelated"
+      : name.startsWith("mcp") || name.startsWith("exa_") ? "npm:pi-mcp-adapter@2.32.1" : "npm:pi-web-access@0.27.0",
+    ...(name === "mcp__exa" ? { label: "MCP: exa" } : name === "exa_web_search_exa" ? { label: "MCP: web_search_exa" } : {}),
+  });
+  const app = host(m);
+  app.getRegisteredToolDefinition = definition;
+  const message = assistant(cases.map((item, i) => toolCall(`state-${i}`, item.name, { tool: "web_search_exa", args: { query: `q-${i}` } })));
+  const results = cases.map((item, i) => ({ ...result(`state-${i}`, item.name, "DETAIL_BODY", item.isError), details: item.details }));
+  const original = JSON.stringify([message, results]);
+  await app.handleEvent({ type: "message_start", message });
+  await app.handleEvent({ type: "message_update", message });
+  await app.handleEvent({ type: "message_end", message });
+  for (const [i, item] of [...cases.entries()].reverse()) {
+    const id = `state-${i}`;
+    const tool = app.pendingTools.get(id);
+    expect(m.tui.stripTerminalSequences(m.actionLines(tool, 140)[0])).toStartWith("○");
+    await app.handleEvent({ type: "tool_execution_start", toolCallId: id, toolName: item.name, args: {} });
+    await app.handleEvent({ type: "tool_execution_update", toolCallId: id, toolName: item.name, partialResult: results[i] });
+    expect(m.tui.stripTerminalSequences(m.actionLines(tool, 140)[0])).toStartWith("◌");
+    await app.handleEvent({ type: "tool_execution_end", toolCallId: id, result: results[i], isError: results[i].isError });
+    app.sessionManager.appendMessage(results[i]);
+    const rows = m.actionLines(tool, 140).map(m.tui.stripTerminalSequences);
+    expect(rows[0]).toStartWith(item.status);
+    if (item.notice) expect(rows.join("\n")).toContain(item.notice);
+  }
+  const replay = host(m, app.sessionManager);
+  replay.getRegisteredToolDefinition = definition;
+  replay.renderSessionItems([message, ...results]);
+  expect(transcript(m, app, 140)).toBe(transcript(m, replay, 140));
+  expect(transcript(m, app, 140)).toContain(`${cases.length} actions`);
+  expect(JSON.stringify([message, results])).toBe(original);
+
+  const waiting = new m.ToolExecutionComponent("web_search", "approval", {}, {}, definition("web_search"), app.ui, temp);
+  waiting.updateResult({ content: [{ type: "text", text: "Open http://localhost:1234 for approval" }], details: { phase: "curator-fallback" } }, true);
+  expect(m.actionLines(waiting, 100).map(m.tui.stripTerminalSequences).join("\n"))
+    .toContain("Waiting for browser approval; expand for details.");
+  waiting.setExpanded(true);
+  expect(waiting.render(100).map(m.tui.stripTerminalSequences).join("\n")).toContain("http://localhost:1234");
 });
 
 realTest("action labels alone are bold at wide and narrow widths", async () => {
@@ -946,7 +1197,8 @@ realTest("action labels alone are bold at wide and narrow widths", async () => {
       const labelText = width < 60 ? label : label.padEnd(6);
       expect(line).toContain("\x1b[1m");
       expect(line).toContain(theme.bold(theme.fg("muted", labelText)));
-      expect(line).toContain(" " + theme.fg("text", toolName === "custom" ? "custom" : "target.ts"));
+      const textAnsi = theme.fg("text", "TARGET").split("TARGET")[0];
+      expect(line).toContain(" " + textAnsi + (toolName === "custom" ? "custom(" : "target.ts"));
       expect(m.tui.visibleWidth(line)).toBeLessThanOrEqual(width);
     }
   }
