@@ -66,6 +66,12 @@ overflow summaries. Unknown widgets do not participate. Read the callback during
 rendering, not registration, so resizing and widget removal immediately update
 the allocation.
 
+Tool invocation rows cache one rendered width per native tool component in a
+WeakMap. The native `updateDisplay()` revision invalidates changed arguments,
+results, expansion and theme updates (via `invalidate()`); width and elapsed
+metrics are checked separately. Native bodies and images remain uncached here,
+and components without the revision contract use the pure formatter.
+
 Keep theme reads live and preserve native components, cursor markers, image
 payloads, selection, expansion, and session ordering. Use exact MCP operation
 names for Web classification, never fuzzy matches such as any tool containing

@@ -19,6 +19,7 @@ from patch_support import (
 BASE = "dist/modes/interactive/"
 MODULE = BASE + "components/transcript.js"
 MODULE_SOURCE = read_payload('host/transcript.js.inc')
+PRE_ROW_CACHE_MODULE_SOURCE = read_payload('host/legacy/transcript-before-row-cache.js.inc')
 LEGACY_MODULE_SOURCE = read_payload('host/legacy/transcript.js.inc')
 PRE_COMPACT_MODULE_SOURCE = read_payload('host/legacy/transcript-before-compact.js.inc')
 PRE_YELLOW_ICON_MODULE_SOURCE = read_payload('host/legacy/transcript-before-yellow-icon.js.inc')
@@ -224,6 +225,14 @@ EDITS[BASE + "interactive-mode.js"][2] = (old_lookup, '''    getRegisteredToolDe
 for previous_edits in (PRE_METRICS_EDITS, LEGACY_EDITS):
     previous_edits[BASE + "interactive-mode.js"][2] = EDITS[BASE + "interactive-mode.js"][2]
 
+# All tool state setters and renderer invalidations converge on updateDisplay().
+# Preserve the exact pre-cache host edits so the hook and helper migrate together.
+PRE_ROW_CACHE_EDITS = {name: list(edits) for name, edits in EDITS.items()}
+EDITS[BASE + "components/tool-execution.js"].append((
+    "    updateDisplay() {",
+    "    updateDisplay() {\n        this.transcriptRevision = (this.transcriptRevision ?? 0) + 1;",
+))
+
 
 def source_state(sources: dict[str, str], replacements: dict) -> str:
     """Classify a whole known source revision, including overlapping setters."""
@@ -250,16 +259,21 @@ def source_state(sources: dict[str, str], replacements: dict) -> str:
 
 def patch_sources(sources: dict[str, str]) -> dict[str, str]:
     """Accept complete current/original sources or an exact supported revision."""
+    previous_helpers = (
+        PRE_ROW_CACHE_MODULE_SOURCE, PRE_CHAT_ICON_MODULE_SOURCE, PRE_INTERCOM_LABEL_MODULE_SOURCE,
+        PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE,
+        PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
+        PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
+        PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
+        PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
+        PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
+    )
     try:
         state = source_state(sources, EDITS)
     except ValueError as current_error:
         revisions = [
-            (EDITS, (MODULE_SOURCE, PRE_CHAT_ICON_MODULE_SOURCE, PRE_INTERCOM_LABEL_MODULE_SOURCE,
-                     PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE, PRE_DASH_REMOVAL_MODULE_SOURCE,
-                     PRE_SINGLE_ACTION_MODULE_SOURCE, PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
-                     PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-                     PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
-                     PRE_USER_BACKGROUND_RESET_MODULE_SOURCE)),
+            (EDITS, (MODULE_SOURCE, *previous_helpers)),
+            (PRE_ROW_CACHE_EDITS, previous_helpers),
             (PRE_METRICS_EDITS, (PRE_METRICS_MODULE_SOURCE, PRE_YELLOW_ICON_MODULE_SOURCE)),
             (LEGACY_EDITS, (LEGACY_MODULE_SOURCE, PRE_COMPACT_MODULE_SOURCE)),
         ]
@@ -290,15 +304,7 @@ def patch_sources(sources: dict[str, str]) -> dict[str, str]:
             return patch_sources(original)
         raise current_error
     if state == "patched":
-        if sources.get(MODULE) in (
-            PRE_CHAT_ICON_MODULE_SOURCE, PRE_INTERCOM_LABEL_MODULE_SOURCE,
-            PRE_UNIVERSAL_TOOLS_MODULE_SOURCE, PRE_SOURCE_READ_MODULE_SOURCE,
-            PRE_DASH_REMOVAL_MODULE_SOURCE, PRE_SINGLE_ACTION_MODULE_SOURCE,
-            PRE_TOOL_ROWS_MODULE_SOURCE, PRE_NATIVE_PADDING_MODULE_SOURCE,
-            PRE_INLINE_METRICS_MODULE_SOURCE, PRE_USER_SEPARATOR_MODULE_SOURCE,
-            PRE_SEPARATOR_PADDING_MODULE_SOURCE, PRE_USER_BACKGROUND_MODULE_SOURCE,
-            PRE_USER_BACKGROUND_RESET_MODULE_SOURCE,
-        ):
+        if sources.get(MODULE) in previous_helpers:
             return {**sources, MODULE: MODULE_SOURCE}
         if sources.get(MODULE) != MODULE_SOURCE:
             raise ValueError("transcript module changed or missing; inspect before reapplying")

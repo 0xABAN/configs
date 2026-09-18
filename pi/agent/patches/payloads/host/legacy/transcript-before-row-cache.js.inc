@@ -360,28 +360,6 @@ export function actionLines(component, width) {
     return lines;
 }
 
-// One width per component; removing a tool must not retain its cached row.
-const actionRows = new WeakMap();
-
-/**
- * Native updateDisplay() advances the revision, including same-object mutations.
- * Theme changes reach it via invalidate(); the exported theme proxy has stable identity.
- */
-function cachedActionLines(component, width) {
-    const revision = component.transcriptRevision;
-    // Synthetic/foreign components have no invalidation contract; keep them uncached.
-    if (revision === undefined) return actionLines(component, width);
-
-    const duration = component.transcriptDurationMs;
-    const cached = actionRows.get(component);
-    if (cached && cached.revision === revision && cached.width === width
-        && Object.is(cached.duration, duration)) return cached.lines;
-
-    const lines = actionLines(component, width);
-    actionRows.set(component, { revision, width, duration, lines });
-    return lines;
-}
-
 /**
  * Keep the native flat child list: expansion, theme invalidation and history replay
  * continue to reach the exact same components. Group only adjacent visible tools;
@@ -433,7 +411,7 @@ export class TranscriptContainer extends Container {
                     branch = !grouped ? "   " : isLast ? "╰─ " : "├─ ";
                     continuation = isLast ? "   " : "│  ";
                 }
-                const rows = cachedActionLines(actions[i], Math.max(1, width - bodyPadding - branch.length));
+                const rows = actionLines(actions[i], Math.max(1, width - bodyPadding - branch.length));
                 for (let row = 0; row < rows.length; row++) {
                     const connector = row === 0 ? branch : continuation;
                     lines.push(indent + theme.fg("borderMuted", connector) + rows[row]);

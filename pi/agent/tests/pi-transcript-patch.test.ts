@@ -100,6 +100,7 @@ for (const helper of [
   "transcript-before-universal-tools.js.inc",
   "transcript-before-intercom-label.js.inc",
   "transcript-before-chat-icon.js.inc",
+  "transcript-before-row-cache.js.inc",
 ]) {
   test(`${helper} upgrades alone and refuses mixed or modified sources`, () => {
     const previous = readFileSync(new URL(`../patches/payloads/host/legacy/${helper}`, import.meta.url), "utf8");
@@ -137,6 +138,42 @@ for (const helper of [
     }
   });
 }
+
+test("the pre-cache host and helper migrate together with exact backups", () => {
+  const previousEdits = describePatch<typeof edits>(patcher, "m['PRE_ROW_CACHE_EDITS']");
+  const root = sandbox("pre-row-cache");
+  for (const [file, changes] of Object.entries(previousEdits)) {
+    let source = readFileSync(join(root, file), "utf8");
+    for (const [old, patched] of changes) source = source.replace(old, patched);
+    writeFileSync(join(root, file), source);
+  }
+  const previousHelper = readFileSync(new URL("../patches/payloads/host/legacy/transcript-before-row-cache.js.inc", import.meta.url), "utf8");
+  const currentHelper = readFileSync(new URL("../patches/payloads/host/transcript.js.inc", import.meta.url), "utf8");
+  // The new helper must not silently run without the native invalidation hook.
+  for (const invalidHelper of [currentHelper, previousHelper + "\n// local edit"]) {
+    writeFileSync(join(root, modulePath), invalidHelper);
+    const before = contents(root);
+    expect(run(root).exitCode).not.toBe(0);
+    expect(contents(root)).toEqual(before);
+    expect(existsSync(join(root, ".config/theme-backups"))).toBe(false);
+  }
+  writeFileSync(join(root, modulePath), previousHelper);
+  const before = contents(root);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)[modulePath]).toBe(currentHelper);
+  const toolFile = "dist/modes/interactive/components/tool-execution.js";
+  expect(contents(root)[toolFile]).toContain(edits[toolFile][1][1]);
+  const backupRoot = join(root, ".config/theme-backups");
+  const backups = readdirSync(backupRoot);
+  expect(backups).toHaveLength(1);
+  for (const [file, source] of Object.entries(before)) {
+    expect(readFileSync(join(backupRoot, backups[0], file), "utf8")).toBe(source!);
+  }
+  const after = contents(root);
+  expect(run(root).exitCode).toBe(0);
+  expect(contents(root)).toEqual(after);
+  expect(readdirSync(backupRoot)).toEqual(backups);
+});
 
 for (const [name, lookup, previousHelper] of [
   ["pre-Intercom", previousLookup, undefined],
@@ -1185,6 +1222,113 @@ realTest("web and MCP states preserve pending, partial, failures, approval hints
     .toContain("Waiting for browser approval; expand for details.");
   waiting.setExpanded(true);
   expect(waiting.render(100).map(m.tui.stripTerminalSequences).join("\n")).toContain("http://localhost:1234");
+});
+
+realTest("unchanged tool rows reuse formatting and only changed calls rebuild", async () => {
+  const m = await real();
+  const app = host(m);
+  const reads = Array(20).fill(0);
+  const queries = reads.map((_, i) => `query-${i}`);
+  const tools = reads.map((_, i) => {
+    // Count actual argument formatting rather than asserting machine-dependent timing.
+    const args = { get query() { reads[i]++; return queries[i]; } };
+    const tool = new m.ToolExecutionComponent("custom", `cache-${i}`, args, {}, undefined, app.ui, temp);
+    tool.setArgsComplete();
+    tool.updateResult(result(`cache-${i}`, "custom", "done"));
+    app.chatContainer.addChild(tool);
+    return tool;
+  });
+  reads.fill(0);
+  const first = app.chatContainer.render(120);
+  const formatted = [...reads];
+  expect(formatted.every(count => count > 0)).toBe(true);
+  for (let i = 0; i < 10; i++) expect(app.chatContainer.render(120)).toEqual(first);
+  expect(reads).toEqual(formatted);
+
+  // Updates can reuse the same arguments object; reference equality is insufficient.
+  queries[0] = "updated-query";
+  tools[0].updateArgs(tools[0].args);
+  const beforeUpdateRender = [...reads];
+  expect(transcript(m, app, 120)).toContain("updated-query");
+  expect(reads[0]).toBeGreaterThan(beforeUpdateRender[0]);
+  expect(reads.slice(1)).toEqual(formatted.slice(1));
+
+  const beforeInvalidation = reads[1];
+  tools[1].getRenderContext(undefined).invalidate();
+  app.chatContainer.render(120);
+  expect(reads[1]).toBeGreaterThan(beforeInvalidation);
+  const afterInvalidation = [...reads];
+  app.chatContainer.render(120);
+  expect(reads).toEqual(afterInvalidation);
+
+  app.chatContainer.clear();
+  const replay = new m.ToolExecutionComponent("custom", "cache-0", { query: "replayed-query" }, {}, undefined, app.ui, temp);
+  app.chatContainer.addChild(replay);
+  expect(transcript(m, app, 120)).toContain("replayed-query");
+  expect(transcript(m, app, 120)).not.toContain("updated-query");
+});
+
+realTest("cached tool rows preserve updates, timing, expansion, resizing and theme invalidation", async () => {
+  const m = await real();
+  const app = host(m);
+  const tool = new m.ToolExecutionComponent("web_search", "cache-state", { query: "before" }, {},
+    { configsTranscriptSource: "npm:pi-web-access" }, app.ui, temp);
+  app.chatContainer.addChild(tool);
+  // Compare cached rows with the pure formatter at the container's inner width.
+  const frame = (width = 120) => {
+    const lines = app.chatContainer.render(width);
+    const padding = width < 80 ? m.transcriptPadding(1, width) : 3;
+    const rows = m.actionLines(tool, width - padding - 3);
+    for (const row of rows) expect(lines.some((line: string) => line.endsWith(row))).toBe(true);
+    expect(lines.every((line: string) => m.tui.visibleWidth(line) <= width)).toBe(true);
+    expect(app.chatContainer.render(width)).toEqual(lines);
+    return lines.map(m.tui.stripTerminalSequences).join("\n");
+  };
+  expect(frame()).toContain("○");
+  tool.args.query = "after";
+  tool.updateArgs(tool.args);
+  expect(frame()).toContain('query="after"');
+  tool.setArgsComplete();
+  frame();
+  tool.markExecutionStarted();
+  expect(frame()).toContain("◌");
+  const output = { content: [{ type: "text", text: "NATIVE_DETAILS" }], details: { phase: "curating", error: "" } };
+  tool.updateResult(output, true);
+  expect(frame()).toContain("Waiting for browser approval");
+  output.details.phase = "complete";
+  tool.updateResult(output);
+  expect(frame()).toContain("✓");
+  expect(frame()).not.toContain("Waiting for browser approval");
+  tool.transcriptDurationMs = 1200; // Timing may be assigned outside updateDisplay().
+  expect(frame()).toContain("1.2s");
+  output.details.error = "Fetch failed";
+  tool.updateResult(output); // In-place metadata changes must invalidate too.
+  expect(frame()).toContain("×");
+  expect(frame()).toContain("Fetch failed");
+
+  tool.updateArgs({ query: "long query ".repeat(30) + "TAIL_ARGUMENT" });
+  expect(frame()).not.toContain("TAIL_ARGUMENT");
+  tool.setExpanded(true);
+  expect(frame()).toContain("TAIL_ARGUMENT");
+  expect(frame()).toContain("NATIVE_DETAILS");
+  tool.setExpanded(false);
+  const wide = frame();
+  frame(40);
+  expect(frame()).toBe(wide);
+
+  const beforeTheme = app.chatContainer.render(120);
+  try {
+    m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/woody.json", import.meta.url)), "truecolor"));
+    // Match InteractiveMode's onThemeChange callback: invalidate before rendering.
+    // Pi's exported theme is a stable proxy, not the replaced Theme instance.
+    app.chatContainer.invalidate();
+    frame();
+    expect(app.chatContainer.render(120)).not.toEqual(beforeTheme);
+  } finally {
+    m.colors.setThemeInstance(m.colors.loadThemeFromPath(fileURLToPath(new URL("../themes/osaka-jade.json", import.meta.url)), "truecolor"));
+    app.chatContainer.invalidate();
+  }
+  expect(app.chatContainer.render(120)).toEqual(beforeTheme);
 });
 
 realTest("action labels alone are bold at wide and narrow widths", async () => {
